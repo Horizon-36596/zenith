@@ -1,0 +1,241 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "all-step-kinds",
+  "title": "Every step kind",
+  "description": "One auto that uses every step kind: path, command, wait for a time, wait until a condition, sequence, the three parallel modes (all, race and deadline) and a branch. It uses only waypoints and from current, so it plays the same for either alliance when the field is mirrored.",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "alliance": "RED",
+  "authors": [
+    "Horizon (FTC 36596)"
+  ],
+  "created": "2026-09-23",
+  "start": {
+    "pose": {
+      "ref": "start"
+    },
+    "holds": {
+      "pollen": 4
+    }
+  },
+  "steps": [
+    {
+      "id": "driveOut",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "ref": "start"
+          },
+          "to": {
+            "ref": "scoreSouth"
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "notes": "path: drive from one pose to another."
+    },
+    {
+      "id": "scorePreload",
+      "kind": "command",
+      "name": "score",
+      "args": {
+        "count": 4
+      },
+      "notes": "command: run one of the robot's named commands."
+    },
+    {
+      "id": "pause",
+      "kind": "wait",
+      "seconds": 0.25,
+      "notes": "wait with seconds: stand still for a fixed time."
+    },
+    {
+      "id": "toGarden",
+      "kind": "parallel",
+      "mode": "all",
+      "steps": [
+        {
+          "id": "driveToGarden",
+          "kind": "path",
+          "segments": [
+            {
+              "kind": "bezier",
+              "from": "current",
+              "control": [
+                {
+                  "xIn": -12,
+                  "yIn": -28,
+                  "provenance": "PLACEHOLDER: starter example, a curve control point"
+                },
+                {
+                  "xIn": -61,
+                  "yIn": -24,
+                  "provenance": "PLACEHOLDER: starter example, a curve control point"
+                }
+              ],
+              "to": {
+                "ref": "gardenApproach"
+              }
+            }
+          ],
+          "heading": {
+            "mode": "tangent"
+          },
+          "speedFraction": 0.4
+        },
+        {
+          "id": "startIntake",
+          "kind": "command",
+          "name": "intakeOn"
+        }
+      ],
+      "notes": "parallel all: every member runs at once, and the group ends when the last one ends."
+    },
+    {
+      "id": "sweepGarden",
+      "kind": "parallel",
+      "mode": "race",
+      "steps": [
+        {
+          "id": "sweep",
+          "kind": "path",
+          "segments": [
+            {
+              "kind": "line",
+              "from": "current",
+              "to": {
+                "ref": "gardenPickup"
+              }
+            }
+          ],
+          "heading": {
+            "mode": "constant",
+            "headingRad": -1.5708
+          },
+          "speedFraction": 0.3,
+          "expect": {
+            "collectFrom": "gardenRed",
+            "count": 4
+          }
+        },
+        {
+          "id": "untilFull",
+          "kind": "wait",
+          "until": "hopperFull",
+          "timeoutS": 3
+        }
+      ],
+      "notes": "parallel race: the group ends when the first member ends, here the drive or the robot reporting full."
+    },
+    {
+      "id": "checkPollen",
+      "kind": "branch",
+      "condition": "holdingPiece",
+      "then": [
+        {
+          "id": "stopIntake",
+          "kind": "command",
+          "name": "intakeOff"
+        },
+        {
+          "id": "returnToScore",
+          "kind": "parallel",
+          "mode": "deadline",
+          "deadline": "driveBack",
+          "steps": [
+            {
+              "id": "driveBack",
+              "kind": "path",
+              "segments": [
+                {
+                  "kind": "bezier",
+                  "from": "current",
+                  "control": [
+                    {
+                      "xIn": -61,
+                      "yIn": -24,
+                      "provenance": "PLACEHOLDER: starter example, a curve control point"
+                    },
+                    {
+                      "xIn": -12,
+                      "yIn": -28,
+                      "provenance": "PLACEHOLDER: starter example, a curve control point"
+                    }
+                  ],
+                  "to": {
+                    "ref": "scoreSouth"
+                  }
+                }
+              ],
+              "heading": {
+                "mode": "tangentReversed"
+              }
+            },
+            {
+              "id": "clearThenSpinUp",
+              "kind": "sequence",
+              "steps": [
+                {
+                  "id": "clearGarden",
+                  "kind": "wait",
+                  "seconds": 0.5
+                },
+                {
+                  "id": "readyLauncher",
+                  "kind": "command",
+                  "name": "spinUp"
+                }
+              ],
+              "notes": "sequence: run steps one after another, as one member of the group."
+            }
+          ],
+          "notes": "parallel deadline: the group ends when its deadline member, the drive, ends."
+        },
+        {
+          "id": "scoreCollected",
+          "kind": "command",
+          "name": "score",
+          "args": {
+            "count": 4
+          }
+        }
+      ],
+      "else": [
+        {
+          "id": "giveUp",
+          "kind": "command",
+          "name": "intakeOff"
+        },
+        {
+          "id": "parkEmpty",
+          "kind": "path",
+          "segments": [
+            {
+              "kind": "bezier",
+              "from": "current",
+              "control": [
+                {
+                  "xIn": -61,
+                  "yIn": -40,
+                  "provenance": "PLACEHOLDER: starter example, a curve control point"
+                }
+              ],
+              "to": {
+                "ref": "park"
+              }
+            }
+          ],
+          "heading": {
+            "mode": "tangentReversed"
+          }
+        }
+      ],
+      "notes": "branch: when the robot holds pollen, go back and score it; when it does not, stop the intake and park."
+    }
+  ]
+}

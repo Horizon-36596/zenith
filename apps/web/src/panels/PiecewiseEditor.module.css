@@ -1,0 +1,120 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1) 0 var(--space-2);
+}
+
+/* The path from t 0 to 1, one block per range. */
+.track {
+  position: relative;
+  height: 22px;
+  margin: 0 var(--pad-row-x);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-canvas);
+  cursor: copy;
+  overflow: hidden;
+}
+
+.block {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--handle-heading) 10%, transparent);
+  overflow: hidden;
+}
+
+.block:last-child {
+  border-right: 0;
+}
+
+.block:hover {
+  background: color-mix(in srgb, var(--handle-heading) 24%, transparent);
+}
+
+/* The modes the path decides read fainter than the ones set by hand. */
+.block[data-mode="tangent"],
+.block[data-mode="tangentReversed"] {
+  background: transparent;
+}
+
+.blockLabel {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.boundary {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 9px;
+  margin-left: -4px;
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 1;
+}
+
+.boundary::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 3px;
+  border-radius: 1px;
+  background: var(--handle-heading);
+}
+
+.boundary:hover::after {
+  left: 2px;
+  width: 5px;
+}
+
+.scale {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 var(--pad-row-x);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.range {
+  margin: var(--space-1) var(--pad-row-x) 0;
+  padding-bottom: var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.range:hover {
+  border-color: var(--border-strong);
+}
+
+.rangeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--row-h-compact);
+  padding-inline: var(--pad-row-x);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.rangeTitle {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+  letter-spacing: var(--tracking-wide);
+}
+
+.rangeActions {
+  display: flex;
+  gap: 2px;
+}

@@ -1,0 +1,176 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/robot.json",
+  "formatVersion": 1,
+  "name": "Starter robot",
+  "frame": {
+    "forward": "+x",
+    "left": "+y",
+    "headingZero": "+x",
+    "headingPositive": "ccw"
+  },
+  "footprint": {
+    "startIn": {
+      "lengthIn": 18,
+      "widthIn": 18,
+      "provenance": "PLACEHOLDER: starter example, measure your own robot"
+    },
+    "expandedIn": {
+      "lengthIn": 18,
+      "widthIn": 18,
+      "provenance": "PLACEHOLDER: starter example, nothing sticks out past the frame"
+    },
+    "centreOfRotationIn": {
+      "xIn": 0,
+      "yIn": 0,
+      "provenance": "PLACEHOLDER: starter example, the middle of the frame"
+    }
+  },
+  "heightIn": {
+    "value": 18,
+    "provenance": "PLACEHOLDER: starter example, measure your own robot"
+  },
+  "kinematics": {
+    "maxForwardVelInPerS": {
+      "value": 60,
+      "provenance": "PLACEHOLDER: starter example, measure your own robot with Pedro's velocity tuner"
+    },
+    "maxStrafeVelInPerS": {
+      "value": 50,
+      "provenance": "PLACEHOLDER: starter example, measure your own robot with Pedro's velocity tuner"
+    },
+    "forwardDecelInPerS2": {
+      "value": 60,
+      "provenance": "PLACEHOLDER: starter example, measure your own robot with Pedro's deceleration tuner"
+    },
+    "strafeDecelInPerS2": {
+      "value": 40,
+      "provenance": "PLACEHOLDER: starter example, measure your own robot with Pedro's deceleration tuner"
+    },
+    "accelInPerS2": {
+      "value": 60,
+      "provenance": "PLACEHOLDER: starter example, the same as the forward deceleration until you calibrate it"
+    },
+    "maxAngularVelRadPerS": {
+      "value": 6,
+      "provenance": "PLACEHOLDER: starter example, measure your own robot"
+    },
+    "defaultPathSpeedFraction": {
+      "value": 0.8,
+      "provenance": "SET BY HAND: starter example, 80 percent of full speed on every path"
+    },
+    "follower": {
+      "library": "pedro",
+      "version": "3.0.0-20260828.185437-17",
+      "holdEnd": true
+    }
+  },
+  "mouths": [
+    {
+      "id": "front",
+      "side": "FRONT",
+      "offsetIn": {
+        "xIn": 7,
+        "yIn": 0
+      },
+      "widthIn": 16,
+      "depthIn": 4,
+      "provenance": "PLACEHOLDER: starter example, one intake across the front of the frame, flush with the front edge"
+    }
+  ],
+  "capacity": {
+    "elementKind": "pollen",
+    "max": 4,
+    "provenance": "SPEC (G407): the most pollen a robot may hold in BIOBUZZ"
+  },
+  "shooter": {
+    "kind": "fixed",
+    "settleS": {
+      "value": 0.25,
+      "provenance": "PLACEHOLDER: starter example, time for the robot to settle before it launches"
+    }
+  },
+  "commands": [
+    {
+      "name": "intakeOn",
+      "summary": "Runs the front intake inward and keeps it running. The state parameter has one value and a default, so an auto calls intakeOn with no arguments; it tells Zenith's intake checks that this command runs the intake.",
+      "params": {
+        "state": {
+          "type": "enum",
+          "values": [
+            "ON"
+          ],
+          "default": "ON"
+        }
+      },
+      "estimateS": "0",
+      "requires": [
+        "intake"
+      ],
+      "stationary": false
+    },
+    {
+      "name": "intakeOff",
+      "summary": "Stops the front intake. Like intakeOn, it takes no arguments in an auto.",
+      "params": {
+        "state": {
+          "type": "enum",
+          "values": [
+            "OFF"
+          ],
+          "default": "OFF"
+        }
+      },
+      "estimateS": "0",
+      "requires": [
+        "intake"
+      ],
+      "stationary": false
+    },
+    {
+      "name": "spinUp",
+      "summary": "Brings the launcher up to speed so the next score starts sooner. Ends once the launcher is at speed.",
+      "estimateS": "0.5",
+      "requires": [
+        "launcher"
+      ],
+      "stationary": false
+    },
+    {
+      "name": "score",
+      "summary": "Launches count pollen into the alliance's up hive cell, then waits for the launcher to settle. The robot must stand still while it runs.",
+      "params": {
+        "count": {
+          "type": "integer",
+          "min": 1,
+          "max": 4,
+          "default": 1
+        }
+      },
+      "estimateS": "0.5 + count * 0.5",
+      "requires": [
+        "launcher",
+        "intake"
+      ],
+      "stationary": true,
+      "ledger": {
+        "launches": "count"
+      }
+    }
+  ],
+  "conditions": [
+    {
+      "name": "holdingPiece",
+      "summary": "At least one pollen is aboard. A sensor in the intake reads it."
+    },
+    {
+      "name": "hopperFull",
+      "summary": "The robot holds as much pollen as it may: four in BIOBUZZ.",
+      "ledger": "full"
+    },
+    {
+      "name": "hopperEmpty",
+      "summary": "The robot holds no pollen.",
+      "ledger": "empty"
+    }
+  ]
+}

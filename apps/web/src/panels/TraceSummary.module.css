@@ -1,0 +1,56 @@
+/* The run summary in the Simulate dialog: label-and-value rows in the panel's row rhythm. */
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-h);
+  padding-inline: var(--pad-row-x);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.row:last-of-type {
+  border-bottom: none;
+}
+
+.row dt {
+  flex: 1 1 auto;
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.row dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+  text-align: right;
+}
+
+.row dd[data-warn="true"] {
+  color: var(--sev-error);
+}
+
+.delta {
+  margin-left: var(--space-2);
+  color: var(--bar-actual);
+}
+
+.inert {
+  margin: 0;
+  padding: var(--space-2) var(--pad-row-x);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}

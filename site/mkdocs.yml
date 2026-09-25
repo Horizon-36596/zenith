@@ -1,0 +1,83 @@
+# The documentation site for Zenith.
+#
+# Build it with:   python -m mkdocs build -f site/mkdocs.yml --strict
+# Read it locally: python -m mkdocs serve -f site/mkdocs.yml
+#
+# One dependency, pinned in site/requirements.txt: mkdocs-material.
+site_name: Zenith
+site_description: >-
+  A PathPlanner-style autonomous path planner for FTC, shared by humans and agents.
+site_author: Horizon (FTC 36596)
+# The domain the site is served at. Another agent wires the build that deploys here; this line is
+# what MkDocs uses for canonical links and the sitemap in the meantime.
+site_url: https://libraries.horizon36596.org/zenith/
+
+repo_url: https://github.com/Horizon-36596/zenith
+repo_name: Horizon-36596/zenith
+edit_uri: ""
+
+docs_dir: docs
+site_dir: build/site
+
+# The version stamp, shown in the footer of every page. `package.json` at the repository root is
+# the authoritative source; scripts/stamp-version.mjs keeps this in sync. Bump this line when that
+# script runs.
+copyright: "Zenith 0.1.0 · Horizon (FTC 36596) · MIT"
+
+theme:
+  name: material
+
+  logo: assets/horizon-mark.svg
+  favicon: assets/horizon-mark.svg
+
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+    - search.suggest
+    - search.highlight
+
+  # Jost and JetBrains Mono are declared through Material's own font slots so it fetches nothing
+  # from Google Fonts; both are self-hosted from assets/fonts/ and loaded by horizon.css instead
+  # (see the @font-face rules there). IBM Plex Sans, the third face, is self-hosted the same way.
+  font: false
+
+  palette:
+    - scheme: slate
+
+extra_css:
+  - assets/stylesheets/horizon.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Autonomous paths, explained: paths-explained.md
+  - The editor: editor.md
+  - Step kinds: step-kinds.md
+  - Checks and findings: checks-and-findings.md
+  - File format reference: file-format.md
+  - Simulation: simulation.md
+  - Robot runtime: robot-runtime.md
+  - Choosing a command library: command-libraries.md
+  - CLI reference: cli-reference.md
+  - Agents and MCP: agents-mcp.md
+  - Working with GitHub: github.md
+  - Seasons: seasons.md
+  - FAQ and troubleshooting: faq.md
+  - Changelog: changelog.md

@@ -1,0 +1,346 @@
+//
+// build.gradle in robot/auto-runtime
+//
+// The Zenith robot runtime (org.horizon36596.zenith, .ivy and .solverslib): reads a *.auto.json file at
+// OpMode init and turns it into one command tree that follows Pedro Pathing v3 paths: an Ivy tree for a
+// team that uses the org.horizon36596.zenith.ivy classes, or a SolversLib one for a team that uses the
+// org.horizon36596.zenith.solverslib classes. It knows nothing about any particular robot; a team
+// supplies its drivetrain, follower, clock and alliance mirror through AutoContext, and its own commands
+// and conditions through NamedCommands.
+//
+// Why an Android library and not a plain Java one: SolversLib is published only as an AAR, and a plain
+// `java-library` cannot put an AAR on javac's classpath. The runtime also reads the APK's assets through
+// android.content.Context. robot/README.md, "Decisions worth knowing", has the short version.
+//
+apply plugin: 'com.android.library'
+apply plugin: 'maven-publish'
+
+// Published coordinates. The release procedure: PUBLISHING.md at the repository root.
+//
+// The group is the team's reverse-DNS, so it is claimable on Maven Central later. JitPack ignores the
+// group, the artifact id and the version below and derives its own from the repository and the tag
+// (`com.github.Horizon-36596:zenith:<tag>`); these values are what `publishToMavenLocal` writes and what
+// a Maven Central release would use.
+//
+// The version is not written here. It is read from the root package.json, which is the one place the
+// Zenith version is set, so the Java runtime and the npm
+// packages cannot drift apart.
+group = 'org.horizon36596'
+version = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).version
+
+android {
+    namespace = 'org.horizon36596.zenith'
+
+    compileSdk 35
+    defaultConfig {
+        // The FTC SDK's own floor.
+        minSdk 24
+    }
+
+    // Three source trees go into the one AAR (robot/README.md has the short version):
+    //   src/main/java    the SolversLib runtime, org.horizon36596.zenith.solverslib
+    //   src/shared/java  what names no command library, org.horizon36596.zenith: the file parser, the
+    //                    path geometry, the marker logic, the trace writer, JSON and the asset reader
+    //   ../ivy-runtime   the Ivy runtime, org.horizon36596.zenith.ivy
+    // :ivy-runtime compiles the last two on their own, without SolversLib, which is what proves the Ivy
+    // side never needs it. Only this module is published, so the JitPack coordinate stays the same.
+    sourceSets {
+        main {
+            java.srcDirs += ['src/shared/java', '../ivy-runtime/src/main/java']
+        }
+    }
+
+    // Publish the release variant only, with sources attached, so a team debugging an auto can step
+    // into AutoBuilder rather than guess at it.
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    testOptions {
+        unitTests.all {
+            useJUnitPlatform()
+        }
+    }
+
+    // A Control Hub runs API 24. Lint's NewApi check reads minSdk above, so a call that needs a newer
+    // Android (Map.of, List.of, String.join, java.time, java.nio.file and so on) fails `build` here
+    // rather than failing with NoSuchMethodError on a team's robot. Both are lint's defaults already;
+    // they are written down so that nobody turns them off by accident.
+    lint {
+        abortOnError true
+        error 'NewApi'
+    }
+}
+
+// Run the JVM unit tests for the debug variant only. Unit tests are variant-independent (both variants
+// compile the same src/test/java against the same dependencies), so the release run would only repeat
+// the debug one in a second JVM.
+androidComponents {
+    beforeVariants(selector().withBuildType('release')) { variantBuilder ->
+        variantBuilder.enableUnitTest = false
+    }
+}
+
+// examples/starter/generated/ holds what `zenith codegen` writes for the starter's cycle-and-park auto,
+// once for each command library. Both classes are called CycleAndParkGenerated in the team's package, so
+// each copy is moved into a package of its own and compiled with the unit tests, where the conformance
+// suite runs it against the routine the runtime builds from the file. They are test sources only: the
+// published AAR, the dex checks and the link check never see them.
+def generatedExamples = tasks.register('copyGeneratedExamples', Sync) {
+    description = 'Copies the generated starter classes into the unit test sources, one package per library.'
+    def libraries = ['solverslib', 'ivy']
+    inputs.property('libraries', libraries)
+    libraries.each { library ->
+        from(rootProject.file("../examples/starter/generated/$library")) {
+            include 'CycleAndParkGenerated.java'
+            into "org/horizon36596/zenith/examples/$library"
+            filter { String line ->
+                line.startsWith('package ') ? "package org.horizon36596.zenith.examples.$library;" : line
+            }
+        }
+    }
+    into layout.buildDirectory.dir('generatedExamples/java')
+}
+android.sourceSets.test.java.srcDirs += [layout.buildDirectory.dir('generatedExamples/java').get().asFile]
+// Everything that reads the unit test sources: javac, and lint's model and analysis of them.
+tasks.matching {
+    it.name ==~ /compile.*UnitTestJavaWithJavac|generate.*UnitTestLintModel|lintAnalyze.*UnitTest/
+}.configureEach {
+    dependsOn generatedExamples
+}
+
+// The versions the runtime is compiled and tested against. A team's TeamCode declares its own copies of
+// both, which is why they are compileOnly here; see the dependencies block.
+def solversLib = 'org.solverslib:core:0.3.6'
+def pedroCore = 'com.pedropathing:core:3.0.0-20260828.185437-17'
+def ftcRobotCore = 'org.firstinspires.ftc:RobotCore:12.0.0'
+def ftcHardware = 'org.firstinspires.ftc:Hardware:12.0.0'
+// Ivy, Pedro Pathing's command library, for the org.horizon36596.zenith.ivy classes. The pedro module
+// brings core with it.
+def ivyPedro = 'com.pedropathing.ivy:pedro:1.1.1'
+
+dependencies {
+    // compileOnly, not api, and deliberately so. Every FTC project that can use this runtime already
+    // declares SolversLib and Pedro Pathing, at the version its robot was tuned against, and some vendor
+    // SolversLib's sources into TeamCode instead of declaring it. A runtime that published either as a
+    // dependency would either move the team's Pedro pin (a tuning session, not a version bump) or put a
+    // second copy of com.seattlesolvers.solverslib on the classpath next to the vendored one, which fails
+    // the APK build with duplicate classes. So the POM lists neither, and robot/README.md tells a team
+    // which versions to declare.
+    compileOnly solversLib
+    compileOnly pedroCore
+    // Ivy for the same reason: a team that uses the Ivy classes declares it, and a team that does not
+    // never loads them.
+    compileOnly ivyPedro
+
+    // The FTC SDK, for the same reason. AutoFromFile extends SolversLib's CommandOpMode, which extends
+    // the SDK's LinearOpMode, and SolversLib's own signatures name SDK types, so javac has to see them.
+    // Every FTC project declares the SDK already, so it is never bundled.
+    compileOnly ftcRobotCore
+    compileOnly ftcHardware
+
+    // The unit tests need real classes to run against, so the same ones go on the test classpath. Ivy is
+    // there for the conformance suite, which runs every fixture through both runtimes.
+    testImplementation solversLib
+    testImplementation pedroCore
+    testImplementation ivyPedro
+    testImplementation ftcRobotCore
+    testImplementation ftcHardware
+
+    testImplementation "org.junit.jupiter:junit-jupiter-api:5.11.3"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.11.3"
+    // Gradle 9 stopped adding the JUnit Platform launcher by itself; declared so the tests run on either.
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.3"
+}
+
+// The published AAR holds both runtimes, so a SolversLib team's APK carries Ivy classes it cannot link
+// and an Ivy team's APK carries SolversLib classes it cannot link. Two checks keep that safe.
+//
+// The dex checks dex the AAR's classes at API 24 the way a team's build does, once with no SolversLib on
+// the classpath and once with no Ivy, and fail if D8 refuses either. D8 does not resolve references, so
+// this proves the dex step accepts the classes, not that they link. D8 is the one the Android Gradle
+// Plugin already brings, so no SDK build-tools version is assumed.
+//
+// The link check is what proves the split: no class in the Ivy package reaches SolversLib, directly or
+// through another runtime class, and no class outside it reaches Ivy. So the classes a team uses never
+// need the library it left out.
+def releaseClasses = tasks.register('unpackReleaseClasses', Sync) {
+    from({ zipTree(tasks.named('bundleReleaseAar').get().archiveFile) }) {
+        include 'classes.jar'
+    }
+    into layout.buildDirectory.dir('dexCheck/aar')
+}
+
+def dexChecks = ['WithoutSolversLib': 'org.solverslib', 'WithoutIvy': 'com.pedropathing.ivy'].collect { name, absent ->
+    tasks.register("dexCheck$name", JavaExec) {
+        description = "Dexes the release AAR's classes at API 24 with no $absent classes on the classpath."
+        dependsOn releaseClasses
+        classpath = rootProject.buildscript.configurations.classpath
+        mainClass = 'com.android.tools.r8.D8'
+        def out = layout.buildDirectory.dir("dexCheck/$name")
+        outputs.dir out
+        doFirst {
+            def groupOf = { artifact ->
+                def id = artifact.id.componentIdentifier
+                id instanceof ModuleComponentIdentifier ? id.group : ''
+            }
+            def all = configurations.releaseCompileClasspath.incoming.artifactView {
+                attributes { attribute(Attribute.of('artifactType', String), 'android-classes-jar') }
+            }.artifacts
+            def present = all.findAll { groupOf(it) != absent }
+            // Both guards keep the check from passing vacuously: the library left out has to have been
+            // there to leave out, and the other one has to still be there.
+            def groups = present.collect(groupOf)
+            def other = absent == 'org.solverslib' ? 'com.pedropathing.ivy' : 'org.solverslib'
+            if (!all.any { groupOf(it) == absent }) {
+                throw new GradleException("dexCheck$name: $absent is not on the compile classpath, so " +
+                        'leaving it out would prove nothing')
+            }
+            if (!groups.contains(other) || !groups.contains('com.pedropathing')) {
+                throw new GradleException("dexCheck$name: expected $other and com.pedropathing on the " +
+                        "classpath and found only ${groups.unique()}, so the check would prove nothing")
+            }
+            logger.lifecycle("dexCheck$name, classpath: " +
+                    present.collect { it.id.componentIdentifier.displayName }.join(', '))
+            def jars = present.collect { it.file }
+            project.delete(out)
+            out.get().asFile.mkdirs()
+            args = ['--min-api', '24', '--release', '--output', out.get().asFile.path] +
+                    android.bootClasspath.collectMany { ['--lib', it.path] } +
+                    jars.collectMany { ['--classpath', it.path] } +
+                    [layout.buildDirectory.file('dexCheck/aar/classes.jar').get().asFile.path]
+        }
+    }
+}
+
+def linkCheck = tasks.register('linkCheck') {
+    description = "Fails if a class in the release AAR reaches SolversLib or Ivy outside that library's own package."
+    dependsOn releaseClasses
+    def jar = layout.buildDirectory.file('dexCheck/aar/classes.jar')
+    inputs.file jar
+    doLast {
+        // Class names as they appear in a class file's constant pool, which holds every class the class
+        // refers to. Read as Latin-1, the ASCII names come through unchanged. Only the slash form is
+        // read: a dotted name in a string constant would be a reflective load, not a link, and the
+        // runtime does not load any class by name.
+        def internal = ~'org/horizon36596/zenith/[A-Za-z0-9_/$]+'
+        def refers = [:]
+        def zip = new java.util.zip.ZipFile(jar.get().asFile)
+        try {
+            zip.entries().each { entry ->
+                if (entry.name.endsWith('.class')) {
+                    def text = new String(zip.getInputStream(entry).bytes, 'ISO-8859-1')
+                    refers[entry.name - '.class'] = [
+                            text: text,
+                            runtime: (text =~ internal).collect { it } as Set,
+                    ]
+                }
+            }
+        } finally {
+            zip.close()
+        }
+        def ivyPackage = { String name -> name.startsWith('org/horizon36596/zenith/ivy/') }
+        def solversLibPackage = { String name -> name.startsWith('org/horizon36596/zenith/solverslib/') }
+        if (!refers.keySet().any(ivyPackage) || !refers.keySet().any(solversLibPackage)) {
+            throw new GradleException('linkCheck: the AAR is missing the Ivy or the SolversLib runtime ' +
+                    'classes, so the check would prove nothing')
+        }
+        // Every class that needs the library: it names one of the library's classes, or a runtime class
+        // that needs it.
+        def needing = { String library ->
+            def found = new HashSet<String>(refers.findAll { it.value.text.contains(library) }.keySet())
+            def grew = true
+            while (grew) {
+                def more = refers.findAll { name, info ->
+                    !found.contains(name) && info.runtime.any { found.contains(it) }
+                }.keySet()
+                grew = found.addAll(more)
+            }
+            found
+        }
+        def needSolversLib = needing('com.seattlesolvers.solverslib.'.replace('.', '/'))
+        def needIvy = needing('com/pedropathing/ivy/')
+        if (needSolversLib.isEmpty() || needIvy.isEmpty()) {
+            throw new GradleException('linkCheck: found no class that needs SolversLib or none that needs ' +
+                    'Ivy, so the scan is not reading the classes')
+        }
+        // The transitive half rests on the runtime-class pattern; a class of each runtime that uses a
+        // shared one shows that it matches.
+        def shared = { String name -> !ivyPackage(name) && !solversLibPackage(name) }
+        [ivyPackage, solversLibPackage].each { inPackage ->
+            if (!refers.any { name, info -> inPackage(name) && info.runtime.any(shared) }) {
+                throw new GradleException('linkCheck: a runtime package has no class that refers to a ' +
+                        'shared class, so the pattern for runtime classes is not matching')
+            }
+        }
+        // Each library is reached only from its own runtime's package: the shared classes reach neither,
+        // and neither runtime reaches the other's library.
+        def wrong = needSolversLib.findAll { !solversLibPackage(it) }.collect { "$it needs SolversLib" } +
+                needIvy.findAll { !ivyPackage(it) }.collect { "$it needs Ivy" }
+        if (!wrong.isEmpty()) {
+            throw new GradleException('linkCheck:\n  ' + wrong.sort().join('\n  '))
+        }
+        logger.lifecycle("linkCheck: ${refers.size()} classes; ${needSolversLib.size()} need SolversLib " +
+                "and ${needIvy.size()} need Ivy, each only from its own package")
+    }
+}
+
+tasks.register('dexCheck') {
+    description = 'Dexes the release AAR at API 24 without SolversLib and without Ivy, and checks the split.'
+    dependsOn dexChecks, linkCheck
+}
+tasks.named('check') { dependsOn 'dexCheck' }
+
+// `afterEvaluate` is required: the Android Gradle Plugin creates the `release` component while it
+// configures the project, so asking for `components.release` any earlier fails with "SoftwareComponent
+// with name 'release' not found".
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+
+                groupId = project.group
+                artifactId = 'zenith-runtime'
+                version = project.version
+
+                pom {
+                    name = 'Zenith robot runtime'
+                    description = 'Runs Zenith *.auto.json autonomous routines on an FTC robot: parses the ' +
+                            'file at OpMode init and builds one SolversLib or Ivy command tree that ' +
+                            'follows Pedro Pathing v3 paths.'
+                    url = 'https://github.com/Horizon-36596/zenith'
+
+                    licenses {
+                        license {
+                            name = 'MIT License'
+                            url = 'https://github.com/Horizon-36596/zenith/blob/main/LICENSE'
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = 'horizon-36596'
+                            name = 'Horizon (FTC 36596)'
+                            url = 'https://github.com/Horizon-36596'
+                        }
+                    }
+                    scm {
+                        connection = 'scm:git:https://github.com/Horizon-36596/zenith.git'
+                        developerConnection = 'scm:git:ssh://git@github.com/Horizon-36596/zenith.git'
+                        url = 'https://github.com/Horizon-36596/zenith'
+                    }
+                }
+            }
+        }
+
+        // No remote repository on purpose: JitPack builds the tag itself and serves what
+        // publishToMavenLocal produces, so it needs no credentials here.
+    }
+}

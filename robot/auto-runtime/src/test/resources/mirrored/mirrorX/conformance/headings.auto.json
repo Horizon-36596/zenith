@@ -1,0 +1,140 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "headings",
+  "title": "Piecewise headings across a segment join and on a curve from the live pose",
+  "alliance": "BLUE",
+  "start": {
+    "pose": {
+      "xIn": -48,
+      "yIn": 48,
+      "headingRad": 0
+    }
+  },
+  "steps": [
+    {
+      "id": "turnAcrossTheJoin",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -48,
+            "yIn": 48,
+            "headingRad": 0
+          },
+          "to": {
+            "xIn": -24,
+            "yIn": 48,
+            "headingRad": 0
+          }
+        },
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -24,
+            "yIn": 48,
+            "headingRad": 0
+          },
+          "to": {
+            "xIn": -24,
+            "yIn": 24,
+            "headingRad": -1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "piecewise",
+        "ranges": [
+          {
+            "startT": 0,
+            "endT": 0.25,
+            "heading": {
+              "mode": "constant",
+              "headingRad": 0
+            }
+          },
+          {
+            "startT": 0.25,
+            "endT": 0.75,
+            "heading": {
+              "mode": "linear",
+              "fromRad": 0,
+              "toRad": -1.5708
+            }
+          },
+          {
+            "startT": 0.75,
+            "endT": 1,
+            "heading": {
+              "mode": "tangent"
+            }
+          }
+        ]
+      },
+      "markers": [
+        {
+          "at": {
+            "t": 0.5
+          },
+          "command": {
+            "name": "instant",
+            "args": {
+              "at": "join"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "curveFromHere",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "bezier",
+          "from": "current",
+          "control": [
+            {
+              "xIn": 0,
+              "yIn": 48
+            }
+          ],
+          "to": {
+            "xIn": 0,
+            "yIn": 24,
+            "headingRad": 0
+          }
+        }
+      ],
+      "heading": {
+        "mode": "piecewise",
+        "ranges": [
+          {
+            "startT": 0,
+            "endT": 0.4,
+            "heading": {
+              "mode": "tangentReversed"
+            }
+          },
+          {
+            "startT": 0.4,
+            "endT": 1,
+            "heading": {
+              "mode": "facePoint",
+              "xIn": 0,
+              "yIn": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "after",
+      "kind": "command",
+      "name": "instant",
+      "args": {
+        "tag": "after"
+      }
+    }
+  ]
+}

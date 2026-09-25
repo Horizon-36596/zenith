@@ -1,0 +1,277 @@
+/* UI_GUIDE section 9.5: 32 px rows, sentence-case labels, values that read as text until hovered. */
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-h);
+  padding-inline: var(--pad-row-x);
+}
+
+/* A label squeezed by a wide value and its chip wraps to a second line rather than being cut. */
+.label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.value {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+}
+
+/* A row with a provenance chip puts the chip on a line of its own under the value (QA-20), so the
+   label keeps the width it needs and every chip lines up down the right edge. */
+.row[data-chip] {
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 2px;
+  padding-block: var(--space-1);
+}
+
+.row[data-chip] .chip {
+  grid-column: 2;
+  justify-self: end;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--pad-row-x) var(--space-2);
+}
+
+.input,
+.inputProse,
+.select,
+.textarea {
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-1);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--text-hi);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    background var(--dur-base) var(--ease-out);
+}
+
+/* The prose box is always a box: it is where people write, not a value to read. */
+.textarea {
+  background: var(--bg-inset);
+  border-color: var(--border-default);
+}
+
+/* A choice is words, not a number, so it reads in the UI face; mono is for values (UI_GUIDE 5). */
+.select {
+  appearance: none;
+  text-align: right;
+  text-align-last: right;
+  font-family: var(--font-ui);
+  text-overflow: ellipsis;
+}
+
+.input {
+  width: 86px;
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  text-align: right;
+  cursor: ew-resize;
+}
+
+.inputProse {
+  width: 160px;
+  font-family: var(--font-mono);
+}
+
+.select {
+  min-width: 108px;
+  max-width: 220px;
+}
+
+/* A choice with a tooltip on every option (ChoiceField): the select's look, drawn by hand. */
+.choice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  cursor: default;
+}
+
+.choiceText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.choiceChevron {
+  flex: none;
+  color: var(--text-lo);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.choice:hover:not(:disabled) .choiceChevron,
+.choice:focus-visible .choiceChevron,
+.choice[aria-expanded="true"] .choiceChevron {
+  opacity: 1;
+}
+
+.choice[aria-expanded="true"] {
+  background: var(--bg-inset);
+  border-color: var(--border-strong);
+}
+
+.choiceList {
+  position: fixed;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: var(--space-1);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover);
+}
+
+.choiceOption {
+  height: var(--row-h);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  color: var(--text-hi);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.choiceOption:hover,
+.choiceOption:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.choiceOption[aria-selected="true"] {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.textarea {
+  height: auto;
+  min-height: calc(var(--row-h) * 2);
+  padding: var(--space-1);
+  font-family: var(--font-ui);
+  resize: vertical;
+}
+
+.input:hover:not(:disabled),
+.inputProse:hover:not(:disabled),
+.select:hover:not(:disabled),
+.input:focus-visible,
+.inputProse:focus-visible,
+.select:focus-visible,
+.textarea:hover {
+  background: var(--bg-inset);
+  border-color: var(--border-strong);
+}
+
+.select:hover:not(:disabled),
+.select:focus-visible {
+  appearance: auto;
+}
+
+.input:focus-visible,
+.inputProse:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+}
+
+.input:disabled,
+.inputProse:disabled,
+.select:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.checkbox {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.slider {
+  width: 110px;
+  accent-color: var(--accent);
+}
+
+.sliderValue {
+  margin-left: var(--space-2);
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+/* ---- Sections ----------------------------------------------------------- */
+
+.section {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.section:first-child {
+  border-top: 0;
+}
+
+.sectionHeadRow {
+  display: flex;
+  align-items: center;
+  padding-right: var(--pad-row-x);
+}
+
+.sectionHead {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  height: var(--row-h);
+  padding-inline: var(--pad-row-x);
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  color: var(--text-mid);
+}
+
+.sectionHead:hover {
+  color: var(--text-hi);
+}
+
+.sectionBody {
+  padding-bottom: var(--space-2);
+}
+
+/* After the select rules on purpose: a button must never take the native look on hover. */
+.choice,
+.choice:hover:not(:disabled),
+.choice:focus-visible {
+  appearance: none;
+}

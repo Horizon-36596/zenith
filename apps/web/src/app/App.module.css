@@ -1,0 +1,321 @@
+/* UI_GUIDE section 3. Panels are separated by a 1 px border with a 10 px invisible drag target. */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-app);
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.left,
+.right {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+
+.left:focus-visible,
+.right:focus-visible,
+.canvas:focus-visible,
+.findings:focus-visible {
+  box-shadow: var(--ring-shadow);
+}
+
+.leftSteps {
+  flex: 1 1 60%;
+  min-height: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.leftLedger {
+  flex: 1 1 40%;
+  min-height: 0;
+  border-top: 1px solid var(--border-default);
+}
+
+.leftLedger[data-folded="true"] {
+  flex: none;
+}
+
+.centre {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  background: var(--bg-canvas);
+}
+
+/* UI_GUIDE section 9.12: the welcome screen, left-aligned 24 px from the well's top-left. */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  max-width: 520px;
+  /* It sits in the field well, which stays dark in the light theme, so it takes the chrome ink. */
+  --text-hi: var(--chrome-text-hi);
+  --text-mid: var(--chrome-text-mid);
+  --text-lo: var(--chrome-text-lo);
+  --bg-hover: var(--chrome-hover);
+  --bg-active: var(--chrome-active);
+  --bg-inset: var(--chrome-inset);
+  --border-subtle: var(--chrome-border);
+  --border-default: var(--chrome-border);
+  --border-strong: var(--chrome-border-strong);
+  --ring: var(--chrome-ring);
+  --ring-shadow: 0 0 0 var(--ring-offset) var(--bg-canvas),
+                 0 0 0 calc(var(--ring-offset) + var(--ring-width)) var(--chrome-ring);
+}
+
+.welcomeIcon {
+  color: var(--text-lo);
+  margin-bottom: var(--space-2);
+}
+
+.welcomeTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-xl);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-display);
+  color: var(--text-hi);
+}
+
+.welcomeLine {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.welcomeHint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}
+
+.welcomeHint code {
+  font-family: var(--font-mono);
+  color: var(--text-mid);
+}
+
+.welcomeMore {
+  display: inline-flex;
+  align-items: baseline;
+  margin-top: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.welcomeMore:hover {
+  color: var(--text-hi);
+}
+
+.welcomeButtons {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.welcomeKey {
+  margin-left: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.findings {
+  flex: none;
+  min-height: var(--row-h-compact);
+  display: flex;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-default);
+  overflow: hidden;
+}
+
+.findings > :global(div) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.findingsChrome {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex: none;
+  width: var(--space-6);
+  padding-top: 1px;
+  order: 2;
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* ---- Resizers ----------------------------------------------------------- */
+
+.resizerX,
+.resizerY {
+  flex: none;
+  position: relative;
+  background: var(--border-default);
+  z-index: var(--z-resizer);
+}
+
+.resizerX {
+  width: 1px;
+  cursor: col-resize;
+}
+
+.resizerY {
+  height: 1px;
+  cursor: row-resize;
+}
+
+.resizerX::after,
+.resizerY::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.resizerX::after {
+  left: -5px;
+  right: -5px;
+}
+
+.resizerY::after {
+  top: -5px;
+  bottom: -5px;
+}
+
+.resizerX:hover,
+.resizerY:hover {
+  background: var(--border-strong);
+}
+
+.resizerX:focus-visible,
+.resizerY:focus-visible {
+  background: var(--accent);
+}
+
+/* ---- Status -------------------------------------------------------------
+ * UI_GUIDE section 9.14: a transient message overlays the window and never reflows it. The layer
+ * is fixed to the bottom of the viewport, out of the layout flow, and lets the pointer through to
+ * the panels under it everywhere but the dismiss button.
+ */
+
+.statusLayer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-popover);
+  pointer-events: none;
+}
+
+.status {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-h-compact);
+  padding-inline: var(--pad-row-x);
+  font-size: var(--fs-sm);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-default);
+  animation: statusIn var(--dur-base) var(--ease-out);
+}
+
+/* The severity tints are translucent; laid over --bg-panel they are the section 4.4 pairs exactly. */
+.status::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.status[data-kind="error"] {
+  color: var(--sev-error);
+}
+
+.status[data-kind="error"]::before {
+  background: var(--sev-error-bg);
+}
+
+.status[data-kind="ok"] {
+  color: var(--ok);
+}
+
+.status[data-kind="ok"]::before {
+  background: var(--ok-bg);
+}
+
+.status[data-kind="info"] {
+  color: var(--text-mid);
+}
+
+.status[data-leaving="true"] {
+  animation: statusOut var(--dur-slow) var(--ease-in) forwards;
+}
+
+.statusText {
+  position: relative;
+  min-width: 0;
+}
+
+.statusClose {
+  position: relative;
+  margin-left: auto;
+  pointer-events: auto;
+  color: inherit;
+  font-size: var(--fs-md);
+  line-height: 1;
+  padding-inline: var(--space-1);
+}
+
+@keyframes statusIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes statusOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* The field's ?, in the well's top-right corner, clear of the canvas's own Play button. */
+.fieldHelp {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--z-canvas-overlay);
+  /* The field well stays dark in the light theme, so its ? takes the chrome ink (QA-19). */
+  --text-hi: var(--chrome-text-hi);
+  --text-lo: var(--chrome-text-lo);
+  --bg-hover: var(--chrome-hover);
+  --border-strong: var(--chrome-border-strong);
+}

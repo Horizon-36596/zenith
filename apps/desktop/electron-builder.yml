@@ -1,0 +1,37 @@
+# electron-builder: a Windows NSIS installer and a portable exe, not code-signed.
+# `pnpm --filter @horizon36596/zenith-desktop dist` runs it through scripts/dist.mjs.
+appId: org.horizon36596.zenith
+productName: Zenith
+copyright: Copyright (c) 2026 Horizon (FTC 36596)
+directories:
+  output: release
+  buildResources: resources
+# Everything the app runs is bundled into dist/ by scripts/build.mjs, so no node_modules ship.
+files:
+  - dist/**/*
+  - "!dist/**/*.map"
+  - package.json
+extraResources: []
+asar: true
+npmRebuild: false
+nodeGypRebuild: false
+electronLanguages:
+  - en-US
+win:
+  icon: resources/icon.ico
+  target:
+    - nsis
+    - portable
+  signAndEditExecutable: true
+  forceCodeSigning: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Zenith
+  artifactName: Zenith-Setup-${version}.${ext}
+  deleteAppDataOnUninstall: false
+portable:
+  artifactName: Zenith-Portable-${version}.${ext}

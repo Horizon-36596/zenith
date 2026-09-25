@@ -1,0 +1,249 @@
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: none;
+  padding: var(--space-2) var(--pad-row-x);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.head {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  padding-right: var(--space-6);
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+
+/* Each chip wraps as a whole: "of 30.00 s" never breaks across two lines in a narrow panel. */
+.head > * {
+  white-space: nowrap;
+}
+
+/* The ? keeps to the top right corner, so it never wraps onto a line of its own. */
+.headHelp {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.total {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-hi);
+}
+
+.total[data-over="true"] {
+  color: var(--sev-error);
+}
+
+.budget {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.bound {
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--prov-unverified);
+  background: var(--prov-unverified-bg);
+}
+
+.tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.track {
+  display: flex;
+  gap: 1px;
+  height: var(--bar-h-timeline);
+  background: var(--bar-track);
+}
+
+.block,
+.blockUnknown,
+.blockActual,
+.blockMissing {
+  position: relative;
+  height: 100%;
+  min-width: 2px;
+  border-radius: var(--radius-0);
+}
+
+.block {
+  background: var(--bar-estimated);
+}
+
+.blockActual {
+  background: var(--bar-actual);
+}
+
+/* A step the run never reached: the track shows the gap rather than closing over it. */
+.blockMissing {
+  background: transparent;
+}
+
+.blockUnknown {
+  background-color: var(--bar-unknown);
+  background-image: var(--bar-unknown-hatch);
+}
+
+/*
+ * The ideal robot turning or driving across a gap before a step: hatched and hollow, so it reads as
+ * time the plan did not draw rather than as a step of its own.
+ */
+.blockTransition {
+  position: relative;
+  height: 100%;
+  min-width: 2px;
+  border-radius: var(--radius-0);
+  background-image: var(--bar-unknown-hatch);
+  box-shadow: inset 0 0 0 1px var(--bar-estimated);
+}
+
+.block[data-selected="true"],
+.blockUnknown[data-selected="true"],
+.blockActual[data-selected="true"] {
+  background-color: var(--accent);
+}
+
+.actualTotal {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  color: var(--bar-actual);
+}
+
+/* The playback level: one labelled row under the scrubber, three segments. */
+.levelRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.levelLabel {
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+}
+
+.levelSwitch {
+  display: inline-flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 1px;
+  gap: 1px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+}
+
+.levelOption {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-0);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+.levelOption[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.levelOption[aria-disabled="true"]:hover {
+  color: var(--text-disabled);
+}
+
+.levelOption:hover {
+  color: var(--text-hi);
+}
+
+.levelOption[aria-pressed="true"] {
+  background: var(--bg-raised);
+  color: var(--text-hi);
+}
+
+.levelOption:focus-visible {
+  box-shadow: var(--ring-shadow);
+}
+
+.scrub {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.slider {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.clock {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+  min-width: 48px;
+  text-align: right;
+  /* "5.23 s instant" stays on one line and whole; the slider gives up the width. */
+  flex: none;
+  white-space: nowrap;
+}
+
+/* With the instant sim on, the estimate is a thin band under the sim's bars. */
+.band {
+  display: flex;
+  gap: 1px;
+  height: 3px;
+  background: var(--bar-track);
+  opacity: 0.7;
+}
+
+.band .block,
+.band .blockUnknown {
+  pointer-events: auto;
+}
+
+/* The instant sim's bars lead; the estimate sits beneath them as a band (UI_GUIDE 4.3). */
+.previewTrack .block {
+  background: var(--bar-preview);
+}
+
+/* The hold settling after a path ends: a thin line past the bar's end, over the next step. */
+.tail {
+  position: absolute;
+  left: 100%;
+  bottom: 0;
+  height: 2px;
+  background: var(--bar-preview);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.track[data-stale="true"] {
+  opacity: 0.6;
+}
+
+.simTotal {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+}
+
+.simTotal[data-stale="true"] {
+  color: var(--text-lo);
+}

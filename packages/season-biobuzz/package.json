@@ -1,0 +1,63 @@
+{
+  "name": "@horizon36596/zenith-season-biobuzz",
+  "version": "0.1.0",
+  "description": "The FTC BIOBUZZ season for Zenith: the field file and the rules plugin that reads it.",
+  "keywords": [
+    "ftc",
+    "first-tech-challenge",
+    "robotics",
+    "autonomous",
+    "zenith",
+    "biobuzz",
+    "season",
+    "field"
+  ],
+  "homepage": "https://libraries.horizon36596.org/zenith/",
+  "bugs": {
+    "url": "https://github.com/Horizon-36596/zenith/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Horizon-36596/zenith.git",
+    "directory": "packages/season-biobuzz"
+  },
+  "license": "MIT",
+  "author": "Horizon (FTC 36596)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./field/*": "./field/*"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.qa.test.*",
+    "!dist/**/testSupport.*",
+    "!dist/**/*.tsbuildinfo",
+    "!dist/testing",
+    "!dist/**/testing.*",
+    "field",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "prepack": "node ../../scripts/prepack.mjs"
+  },
+  "dependencies": {
+    "@horizon36596/zenith-core": "workspace:*",
+    "@horizon36596/zenith-schema": "workspace:*"
+  }
+}

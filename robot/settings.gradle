@@ -1,0 +1,20 @@
+// The robot half of Zenith: one Gradle build, one published module.
+//
+// `auto-runtime` is the only published module, and that is load-bearing. JitPack names
+// the artifact after the REPOSITORY while a build publishes exactly one module
+// (`com.github.Horizon-36596:zenith`), and switches to naming it after the module the moment a build
+// publishes two. Adding a second published module here would rename this one out from under every team
+// that depends on it. This is the rule Horizon's SimLoop library runs under, and it was measured there
+// on a real JitPack build rather than read from documentation.
+//
+// This build lives under `robot/` rather than at the repository root because the root belongs to the
+// pnpm workspace. `jitpack.yml` at the root points JitPack here with `-p robot`.
+rootProject.name = 'zenith-robot'
+
+include ':auto-runtime'
+
+// The Ivy runtime's own build, never published. It compiles the shared sources and the Ivy runtime with
+// no SolversLib on its classpath, which is what proves the Ivy side never needs SolversLib, and it runs
+// the Ivy unit tests. Its classes ship inside the auto-runtime AAR, so
+// the published coordinate above does not change.
+include ':ivy-runtime'

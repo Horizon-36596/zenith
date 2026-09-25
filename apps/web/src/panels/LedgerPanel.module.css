@@ -1,0 +1,70 @@
+/* UI_GUIDE 8.6. Flat, bordered rows, no vertical rules, no stripes, no shadow. */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+.textHead,
+.numHead {
+  position: sticky;
+  top: 0;
+  height: var(--row-h-compact);
+  padding-inline: var(--pad-row-x);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-lo);
+}
+
+.textHead {
+  text-align: left;
+}
+
+.numHead {
+  text-align: right;
+}
+
+.table tbody tr {
+  height: var(--row-h);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: default;
+}
+
+.table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.selected {
+  background: var(--bg-selected);
+}
+
+.id,
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  padding-inline: var(--pad-row-x);
+}
+
+.id {
+  color: var(--text-mid);
+  white-space: nowrap;
+}
+
+.num {
+  text-align: right;
+  color: var(--text-hi);
+}
+
+.num[data-over="true"] {
+  background: var(--sev-error-bg);
+  color: var(--sev-error);
+}
+
+.label {
+  padding-inline: var(--pad-row-x);
+  color: var(--text-hi);
+}

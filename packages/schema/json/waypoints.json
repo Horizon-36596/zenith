@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://libraries.horizon36596.org/zenith/schema/v1/waypoints.json",
+  "title": "Zenith waypoints file, formatVersion 1",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "formatVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "waypoints": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "xIn": {
+            "type": "number"
+          },
+          "yIn": {
+            "type": "number"
+          },
+          "headingRad": {
+            "type": "number"
+          },
+          "provenance": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "xIn",
+          "yIn",
+          "headingRad"
+        ],
+        "additionalProperties": false
+      },
+      "propertyNames": {
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "formatVersion",
+    "waypoints"
+  ],
+  "additionalProperties": false
+}

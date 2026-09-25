@@ -1,0 +1,73 @@
+{
+  "name": "@horizon36596/zenith-cli",
+  "version": "0.1.0",
+  "description": "The zenith command: validate, estimate, render, codegen, deploy and simulate FTC autonomous routines.",
+  "keywords": [
+    "ftc",
+    "first-tech-challenge",
+    "robotics",
+    "autonomous",
+    "zenith",
+    "cli",
+    "codegen",
+    "pedro-pathing",
+    "solverslib"
+  ],
+  "homepage": "https://libraries.horizon36596.org/zenith/",
+  "bugs": {
+    "url": "https://github.com/Horizon-36596/zenith/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Horizon-36596/zenith.git",
+    "directory": "packages/cli"
+  },
+  "license": "MIT",
+  "author": "Horizon (FTC 36596)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "zenith": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./lib": {
+      "types": "./dist/lib.d.ts",
+      "default": "./dist/lib.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.qa.test.*",
+    "!dist/**/testSupport.*",
+    "!dist/**/*.tsbuildinfo",
+    "!dist/testing",
+    "!dist/**/testing.*",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "prepack": "node ../../scripts/prepack.mjs"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@horizon36596/zenith-core": "workspace:*",
+    "@horizon36596/zenith-schema": "workspace:*",
+    "@horizon36596/zenith-season-biobuzz": "workspace:*",
+    "@horizon36596/zenith-seasons": "workspace:*",
+    "commander": "^13.1.0"
+  }
+}

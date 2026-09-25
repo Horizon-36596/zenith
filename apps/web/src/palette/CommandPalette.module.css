@@ -1,0 +1,107 @@
+/* UI_GUIDE 8.7. 560 px, 120 px from the top, a 60 % scrim with no blur, ever. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-palette);
+  background: color-mix(in oklab, var(--bg-app) 60%, transparent);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 120px;
+}
+
+.palette {
+  width: 560px;
+  max-width: calc(100vw - var(--space-8));
+  max-height: calc(100vh - 200px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+}
+
+.input {
+  flex: none;
+  height: var(--palette-input-h);
+  padding-inline: var(--space-3);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--fs-md);
+  color: var(--text-hi);
+}
+
+.input::placeholder {
+  color: var(--text-lo);
+}
+
+.results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-1);
+  scrollbar-gutter: stable;
+}
+
+.group {
+  margin: var(--space-2) 0 var(--space-1);
+  padding-inline: var(--space-2);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-lo);
+}
+
+.row,
+.rowActive {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: var(--row-h-comfortable);
+  padding-inline: var(--space-2);
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--text-mid);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.rowActive {
+  background: var(--bg-selected);
+  border-left-color: var(--accent);
+  color: var(--text-hi);
+}
+
+.row:disabled,
+.rowActive:disabled {
+  color: var(--text-disabled);
+}
+
+.label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match {
+  background: transparent;
+  color: var(--text-hi);
+  font-weight: var(--fw-semibold);
+}
+
+.shortcut {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.none {
+  margin: 0;
+  padding: var(--space-3);
+  font-size: var(--fs-md);
+  color: var(--text-lo);
+}

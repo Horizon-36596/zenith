@@ -1,0 +1,69 @@
+name: Bug report
+description: Something in Zenith does not work the way the docs say it should.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please check the [FAQ](https://libraries.horizon36596.org/zenith/faq/) first.
+        Found a security problem? Do not file it here. Report it privately from the repository's
+        Security tab, "Report a vulnerability".
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what Zenith did.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest set of steps that shows the problem.
+      placeholder: |
+        1. Open the starter example
+        2. Select step ...
+        3. Drag ...
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Web app
+        - Desktop app (Windows)
+        - CLI (zenith)
+        - MCP server (zenith-mcp)
+        - Robot runtime (Java)
+        - Docs
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Zenith version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser, OS or Node version
+      placeholder: "Chrome 140 on Windows 11"
+  - type: textarea
+    id: files
+    attributes:
+      label: Files or output
+      description: |
+        The auto file, the `zenith validate --json` output, or a screenshot. Remove anything private
+        from your robot repository first.
+      render: text

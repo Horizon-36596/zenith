@@ -1,0 +1,234 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "groups",
+  "title": "Every parallel mode and nesting",
+  "alliance": "BLUE",
+  "start": {
+    "pose": {
+      "xIn": -48,
+      "yIn": 48,
+      "headingRad": 0
+    }
+  },
+  "steps": [
+    {
+      "id": "all",
+      "kind": "parallel",
+      "mode": "all",
+      "steps": [
+        {
+          "id": "allDrive",
+          "kind": "path",
+          "segments": [
+            {
+              "kind": "line",
+              "from": "current",
+              "to": {
+                "xIn": -24,
+                "yIn": 48,
+                "headingRad": 0
+              }
+            }
+          ],
+          "heading": {
+            "mode": "tangent"
+          },
+          "markers": [
+            {
+              "at": {
+                "t": 0.5
+              },
+              "command": {
+                "name": "instant",
+                "args": {
+                  "tag": "halfway"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "allTake",
+          "kind": "command",
+          "name": "take",
+          "args": {
+            "loops": 3,
+            "requires": "intake"
+          }
+        },
+        {
+          "id": "allInstant",
+          "kind": "command",
+          "name": "instant"
+        }
+      ]
+    },
+    {
+      "id": "race",
+      "kind": "parallel",
+      "mode": "race",
+      "steps": [
+        {
+          "id": "raceForever",
+          "kind": "command",
+          "name": "forever"
+        },
+        {
+          "id": "raceTake",
+          "kind": "command",
+          "name": "take",
+          "args": {
+            "loops": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "deadlineSequence",
+      "kind": "parallel",
+      "mode": "deadline",
+      "deadline": "inner",
+      "steps": [
+        {
+          "id": "outerForever",
+          "kind": "command",
+          "name": "forever"
+        },
+        {
+          "id": "inner",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "innerTake",
+              "kind": "command",
+              "name": "take",
+              "args": {
+                "loops": 2
+              }
+            },
+            {
+              "id": "innerWait",
+              "kind": "wait",
+              "seconds": 0.1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "deep",
+      "kind": "parallel",
+      "mode": "all",
+      "steps": [
+        {
+          "id": "deepSequence",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "deepRace",
+              "kind": "parallel",
+              "mode": "race",
+              "steps": [
+                {
+                  "id": "deepestSequence",
+                  "kind": "sequence",
+                  "steps": [
+                    {
+                      "id": "deepTake",
+                      "kind": "command",
+                      "name": "take",
+                      "args": {
+                        "loops": 2
+                      }
+                    },
+                    {
+                      "id": "deepInstant",
+                      "kind": "command",
+                      "name": "instant"
+                    }
+                  ]
+                },
+                {
+                  "id": "deepForever",
+                  "kind": "command",
+                  "name": "forever"
+                }
+              ]
+            },
+            {
+              "id": "afterRace",
+              "kind": "command",
+              "name": "instant"
+            }
+          ]
+        },
+        {
+          "id": "deepSide",
+          "kind": "command",
+          "name": "take",
+          "args": {
+            "loops": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "pathDeadline",
+      "kind": "parallel",
+      "mode": "deadline",
+      "deadline": "deadlineDrive",
+      "steps": [
+        {
+          "id": "deadlineDrive",
+          "kind": "path",
+          "segments": [
+            {
+              "kind": "line",
+              "from": "current",
+              "to": {
+                "xIn": 0,
+                "yIn": 24,
+                "headingRad": 0
+              }
+            }
+          ],
+          "heading": {
+            "mode": "facePoint",
+            "xIn": 0,
+            "yIn": 0
+          }
+        },
+        {
+          "id": "longIntake",
+          "kind": "command",
+          "name": "take",
+          "args": {
+            "loops": 100,
+            "requires": "intake"
+          }
+        }
+      ]
+    },
+    {
+      "id": "groupTimeout",
+      "kind": "parallel",
+      "mode": "all",
+      "steps": [
+        {
+          "id": "timedForever",
+          "kind": "command",
+          "name": "forever"
+        },
+        {
+          "id": "timedTake",
+          "kind": "command",
+          "name": "take",
+          "args": {
+            "loops": 1
+          }
+        }
+      ]
+    }
+  ]
+}

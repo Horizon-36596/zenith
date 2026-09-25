@@ -1,0 +1,77 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 1,
+  "name": "migrate-fixture",
+  "alliance": "RED",
+  "start": {
+    "pose": {
+      "xIn": -40,
+      "yIn": -63,
+      "headingRad": 1.5708
+    }
+  },
+  "steps": [
+    {
+      "id": "leg1",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -40,
+            "yIn": -40
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      }
+    },
+    {
+      "id": "group",
+      "kind": "parallel",
+      "mode": "deadline",
+      "deadline": "leg2",
+      "steps": [
+        {
+          "id": "leg2",
+          "kind": "path",
+          "segments": [
+            {
+              "kind": "line",
+              "from": "current",
+              "to": {
+                "xIn": -20,
+                "yIn": -40
+              }
+            }
+          ],
+          "heading": {
+            "mode": "tangent"
+          }
+        },
+        {
+          "id": "pause",
+          "kind": "wait",
+          "seconds": 0.5
+        }
+      ]
+    },
+    {
+      "id": "choose",
+      "kind": "branch",
+      "condition": "hopperFull",
+      "then": [
+        {
+          "id": "shoot",
+          "kind": "command",
+          "name": "shootAll",
+          "args": {
+            "count": 4
+          }
+        }
+      ]
+    }
+  ]
+}

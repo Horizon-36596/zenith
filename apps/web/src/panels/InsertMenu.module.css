@@ -1,0 +1,285 @@
+/* The insert menu: a button at the foot of the step list and a raised popover above the ledger. */
+
+.insert {
+  position: relative;
+  padding: var(--space-2) var(--pad-row-x);
+}
+
+/* UI_GUIDE 9.6: a text button in the accent, not a dashed box. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  border-radius: var(--radius-xs);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+
+.button:hover:not([aria-disabled="true"]),
+.button[aria-expanded="true"] {
+  background: var(--bg-hover);
+  color: var(--accent-hover);
+}
+
+.button[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.buttonLabel {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.shortcut {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.menu {
+  position: absolute;
+  left: var(--pad-row-x);
+  right: var(--pad-row-x);
+  top: calc(var(--row-h) + var(--space-3));
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  max-height: 440px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover);
+}
+
+.menu[data-up="true"] {
+  top: auto;
+  bottom: calc(var(--row-h) + var(--space-3));
+}
+
+.heading,
+.group {
+  margin: var(--space-1) 0;
+  padding-inline: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-lo);
+}
+
+.group {
+  margin-top: var(--space-3);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--row-h-comfortable);
+  padding-block: var(--space-1);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  color: var(--text-hi);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.item:hover:not([aria-disabled="true"]),
+.item:focus-visible {
+  background: var(--bg-hover);
+}
+
+.item[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.icon {
+  flex: none;
+  color: var(--text-mid);
+}
+
+/* UI_GUIDE 9.10: each kind with its one-line help on a second line. */
+.itemText {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.itemLabel {
+  color: inherit;
+}
+
+.itemHint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.more {
+  flex: none;
+  color: var(--text-lo);
+}
+
+.paneHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--row-h);
+  padding-inline: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-1);
+}
+
+.back {
+  display: inline-grid;
+  place-items: center;
+  width: var(--ctl-h-sm);
+  height: var(--ctl-h-sm);
+  border-radius: var(--radius-xs);
+  color: var(--text-mid);
+}
+
+.back:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+.paneTitle {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+.search,
+.number,
+.select {
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  color: var(--text-hi);
+  font-size: var(--fs-sm);
+}
+
+.search {
+  margin: 0 var(--space-1) var(--space-1);
+}
+
+.number {
+  width: 72px;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.select {
+  flex: 1;
+  min-width: 0;
+}
+
+.search:focus,
+.number:focus,
+.select:focus {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+}
+
+.scroll {
+  overflow: auto;
+  min-height: 0;
+}
+
+.none,
+.note {
+  margin: var(--space-1) 0;
+  padding-inline: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.formRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+
+.formLabel {
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+}
+
+.radios {
+  display: flex;
+  flex-direction: column;
+}
+
+.radio,
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-h);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+  cursor: pointer;
+}
+
+.radio:hover,
+.check:hover {
+  background: var(--bg-hover);
+}
+
+.radioTitle {
+  flex: none;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-2);
+}
+
+.add {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-h-md);
+  margin-left: auto;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-xs);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.add:hover:not([aria-disabled="true"]) {
+  background: var(--accent-hover);
+}
+
+.add[aria-disabled="true"] {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-disabled);
+  cursor: default;
+}

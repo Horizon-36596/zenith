@@ -1,0 +1,590 @@
+/* Self-hosted faces: Jost (headings), IBM Plex Sans (body), JetBrains Mono (code and figures) —
+   the same three families and files the editor itself ships (apps/web/public/fonts/), so the docs
+   site and the app read as one product. No Google Fonts request leaves the browser. */
+@font-face {
+  font-family: 'Jost';
+  src: url('../fonts/jost-latin-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  src: url('../fonts/ibm-plex-sans-latin-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../fonts/jetbrains-mono-latin-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ===========================================================================
+   Zenith documentation — Horizon (FTC 36596) theme.
+
+   A skin over MkDocs Material, not a fork of it: every rule sets one of
+   Material's own custom properties or restyles one of its components.
+
+   Tokens copied from apps/web/src/styles/tokens.css so the docs site and the
+   editor cannot drift:
+
+     ground     #17061D   the app's own --bg-app
+     panel      #1C0A24   --bg-panel
+     text       #FAF6FB   --text-hi
+     accent     #F86A43   --accent
+     sunrise    amber #FFCB5C -> orange #F86A43 -> crimson #B13848, chrome only
+
+   Dark only, like the app: no light-mode toggle is offered here.
+   =========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  --horizon-amber: #ffcb5c;
+  --horizon-orange: #f86a43;
+  --horizon-crimson: #b13848;
+
+  --horizon-night-950: #17061d;
+  --horizon-night-925: #1c0a24;
+  --horizon-night-900: #22102b;
+  --horizon-night-850: #2a1735;
+  --horizon-night-800: #331e3f;
+  --horizon-night-700: #42294f;
+  --horizon-night-600: #563863;
+
+  --horizon-haze-50: #faf6fb;
+  --horizon-haze-100: #f0e8f2;
+  --horizon-haze-200: #dccfe0;
+  --horizon-haze-300: #c2b0c8;
+  --horizon-haze-400: #a08fa8;
+  --horizon-haze-500: #93849b;
+  --horizon-haze-600: #665572;
+
+  --horizon-measure: 74ch;
+  --horizon-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Re-tinting Material's own `slate` rather than declaring a scheme name of our own: a custom name
+   inherits the LIGHT defaults for every variable left unset here, and the first casualty of that is
+   black admonition text on a night ground. */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: var(--horizon-night-950);
+  --md-default-bg-color--light: var(--horizon-night-900);
+  --md-default-bg-color--lighter: var(--horizon-night-850);
+  --md-default-bg-color--lightest: var(--horizon-night-800);
+
+  --md-default-fg-color: var(--horizon-haze-200);
+  --md-default-fg-color--light: var(--horizon-haze-300);
+  --md-default-fg-color--lighter: var(--horizon-haze-500);
+  --md-default-fg-color--lightest: var(--horizon-haze-600);
+
+  --md-primary-fg-color: var(--horizon-night-950);
+  --md-primary-fg-color--light: var(--horizon-night-900);
+  --md-primary-fg-color--dark: var(--horizon-night-950);
+  --md-primary-bg-color: var(--horizon-haze-50);
+  --md-primary-bg-color--light: var(--horizon-haze-300);
+
+  --md-accent-fg-color: var(--horizon-amber);
+  --md-accent-fg-color--transparent: rgba(255, 203, 92, 0.1);
+  --md-accent-bg-color: var(--horizon-night-950);
+
+  --md-typeset-color: var(--horizon-haze-300);
+  --md-typeset-a-color: var(--horizon-orange);
+  --md-typeset-mark-color: rgba(255, 203, 92, 0.28);
+  --md-typeset-del-color: rgba(177, 56, 72, 0.35);
+  --md-typeset-ins-color: rgba(255, 203, 92, 0.22);
+
+  --md-admonition-fg-color: var(--horizon-haze-300);
+  --md-admonition-bg-color: var(--horizon-night-925);
+
+  --md-code-bg-color: var(--horizon-night-925);
+  --md-code-fg-color: var(--horizon-haze-200);
+  --md-code-hl-color: rgba(255, 203, 92, 0.16);
+
+  --md-footer-bg-color: var(--horizon-night-925);
+  --md-footer-bg-color--dark: var(--horizon-night-950);
+  --md-footer-fg-color: var(--horizon-haze-200);
+  --md-footer-fg-color--light: var(--horizon-haze-500);
+  --md-footer-fg-color--lighter: var(--horizon-haze-600);
+
+  --md-shadow-z1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --md-shadow-z2: 0 4px 16px rgba(0, 0, 0, 0.55);
+  --md-shadow-z3: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* --------------------------------------------------------------------------
+   Type. Jost for structure, IBM Plex Sans for body copy (Zenith's own UI
+   face, not SimLoop's Newsreader), JetBrains Mono for anything that is a
+   figure, id or code — the same split the editor itself uses.
+   -------------------------------------------------------------------------- */
+
+body,
+input,
+.md-typeset {
+  font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+}
+
+code,
+kbd,
+pre,
+.md-typeset code,
+.md-typeset pre {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-feature-settings: 'kern' 1, 'liga' 0;
+}
+
+.md-typeset > p {
+  font-size: 1.0rem;
+  line-height: 1.7;
+  color: var(--horizon-haze-300);
+  text-wrap: pretty;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5 {
+  font-family: 'Jost', ui-sans-serif, system-ui, sans-serif;
+  color: var(--horizon-haze-50);
+  text-wrap: balance;
+}
+
+.md-typeset h1 {
+  font-weight: 500;
+  font-size: clamp(2rem, 4.5vw, 2.75rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  margin-bottom: 0.35em;
+}
+
+/* The one piece of brand on every page: a short sunrise rule under the title. */
+.md-typeset h1::after {
+  content: '';
+  display: block;
+  width: 4rem;
+  height: 3px;
+  margin-top: 0.75rem;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--horizon-amber) 0%,
+    var(--horizon-orange) 55%,
+    var(--horizon-crimson) 100%
+  );
+}
+
+.md-typeset h2 {
+  font-weight: 500;
+  font-size: 1.6rem;
+  letter-spacing: -0.015em;
+  margin-top: 2.4em;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--horizon-night-800);
+}
+
+.md-typeset h3 {
+  font-weight: 500;
+  font-size: 1.22rem;
+  letter-spacing: -0.01em;
+  margin-top: 1.9em;
+}
+
+.md-typeset h4 {
+  font-weight: 500;
+  font-size: 1.02rem;
+  color: var(--horizon-haze-100);
+}
+
+.md-typeset table th,
+.md-typeset table td,
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: rgba(177, 56, 72, 0.4);
+  color: var(--horizon-haze-50);
+}
+
+/* --------------------------------------------------------------------------
+   Chrome: header, tabs, sidebars.
+   -------------------------------------------------------------------------- */
+
+.md-header {
+  background: rgba(23, 6, 29, 0.88);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--horizon-night-800);
+  box-shadow: none;
+}
+
+.md-header__title {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+}
+
+.md-tabs {
+  background: transparent;
+  border-bottom: 1px solid var(--horizon-night-800);
+}
+
+.md-tabs__link {
+  opacity: 1;
+  color: var(--horizon-haze-500);
+  font-weight: 400;
+}
+
+.md-tabs__link:hover,
+.md-tabs__link--active {
+  color: var(--horizon-haze-50);
+}
+
+.md-nav {
+  font-size: 0.72rem;
+}
+
+.md-nav__title {
+  color: var(--horizon-haze-500);
+  font-weight: 500;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.md-nav__link {
+  color: var(--horizon-haze-400);
+  transition: color 0.2s var(--horizon-ease);
+}
+
+.md-nav__link:hover,
+.md-nav__link:focus {
+  color: var(--horizon-haze-50);
+}
+
+.md-nav__link--active,
+.md-nav__item .md-nav__link--active {
+  color: var(--horizon-amber);
+  font-weight: 500;
+}
+
+.md-sidebar--secondary .md-nav__link--active {
+  border-left: 2px solid var(--horizon-orange);
+  margin-left: -2px;
+  padding-left: 0.6rem;
+}
+
+/* --------------------------------------------------------------------------
+   Prose furniture: links, rules, tables, code, admonitions.
+   -------------------------------------------------------------------------- */
+
+.md-typeset a {
+  color: var(--horizon-orange);
+  text-decoration-color: rgba(248, 106, 67, 0.35);
+  text-underline-offset: 0.18em;
+  transition: color 0.2s var(--horizon-ease);
+}
+
+.md-typeset a:hover {
+  color: var(--horizon-amber);
+  text-decoration-color: currentColor;
+}
+
+.md-typeset hr {
+  border-bottom: 1px solid var(--horizon-night-800);
+}
+
+.md-typeset table:not([class]) {
+  border: 1px solid var(--horizon-night-800);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: none;
+  font-size: 0.76rem;
+}
+
+.md-typeset table:not([class]) th {
+  background: var(--horizon-night-900);
+  color: var(--horizon-haze-100);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.md-typeset table:not([class]) td {
+  border-top: 1px solid var(--horizon-night-850);
+}
+
+.md-typeset table:not([class]) tr:hover td {
+  background: rgba(42, 23, 53, 0.5);
+}
+
+.md-typeset code {
+  background: var(--horizon-night-900);
+  color: var(--horizon-haze-100);
+  border: 1px solid var(--horizon-night-800);
+  border-radius: 4px;
+  padding: 0.1em 0.38em;
+  font-size: 0.86em;
+}
+
+.md-typeset pre > code {
+  border: none;
+  border-radius: 0;
+  padding: 0.8rem 1.05rem;
+}
+
+.md-typeset .highlight,
+.md-typeset pre {
+  border-radius: 14px;
+  border: 1px solid var(--horizon-night-800);
+  overflow: hidden;
+}
+
+.md-typeset .highlighttable .linenos {
+  background: var(--horizon-night-925);
+  color: var(--horizon-haze-600);
+}
+
+.md-clipboard {
+  color: var(--horizon-haze-600);
+}
+
+.md-clipboard:hover {
+  color: var(--horizon-amber);
+}
+
+.md-typeset .admonition,
+.md-typeset details {
+  border: 1px solid var(--horizon-night-800);
+  border-left: 3px solid var(--horizon-night-600);
+  border-radius: 14px;
+  background: var(--horizon-night-925);
+  box-shadow: none;
+  font-size: 0.78rem;
+}
+
+.md-typeset .admonition > p,
+.md-typeset details > p {
+  font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.82rem;
+  line-height: 1.68;
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  background: transparent;
+  color: var(--horizon-haze-100);
+  font-weight: 500;
+  letter-spacing: 0.005em;
+}
+
+.md-typeset .admonition-title::before,
+.md-typeset summary::before {
+  background-color: var(--horizon-haze-400);
+}
+
+.md-typeset .note,
+.md-typeset .info,
+.md-typeset .tip {
+  border-left-color: var(--horizon-amber);
+}
+
+.md-typeset .note > .admonition-title::before,
+.md-typeset .info > .admonition-title::before,
+.md-typeset .tip > .admonition-title::before {
+  background-color: var(--horizon-amber);
+}
+
+.md-typeset .warning,
+.md-typeset .caution {
+  border-left-color: var(--horizon-orange);
+}
+
+.md-typeset .warning > .admonition-title::before,
+.md-typeset .caution > .admonition-title::before {
+  background-color: var(--horizon-orange);
+}
+
+.md-typeset .danger,
+.md-typeset .failure,
+.md-typeset .bug {
+  border-left-color: var(--horizon-crimson);
+  background: rgba(177, 56, 72, 0.08);
+}
+
+.md-typeset .danger > .admonition-title::before,
+.md-typeset .failure > .admonition-title::before,
+.md-typeset .bug > .admonition-title::before {
+  background-color: var(--horizon-crimson);
+}
+
+.md-typeset blockquote {
+  border-left: 2px solid var(--horizon-night-700);
+  color: var(--horizon-haze-400);
+}
+
+/* --------------------------------------------------------------------------
+   Search and footer.
+   -------------------------------------------------------------------------- */
+
+.md-search__form {
+  background: var(--horizon-night-900);
+  border: 1px solid var(--horizon-night-800);
+  border-radius: 8px;
+}
+
+.md-search__form:hover {
+  background: var(--horizon-night-850);
+}
+
+.md-search__input::placeholder {
+  color: var(--horizon-haze-600);
+}
+
+[data-md-toggle="search"]:checked ~ .md-header .md-search__form {
+  border-color: var(--horizon-night-700);
+}
+
+.md-search-result__meta,
+.md-search-result__article {
+  background: var(--horizon-night-950);
+}
+
+.md-search-result mark {
+  color: var(--horizon-amber);
+}
+
+.md-footer {
+  border-top: 1px solid var(--horizon-night-800);
+}
+
+.md-footer-meta {
+  background: var(--horizon-night-950);
+}
+
+.md-footer-meta__inner {
+  font-size: 0.68rem;
+}
+
+.md-copyright,
+.md-copyright__highlight {
+  color: var(--horizon-haze-500);
+}
+
+.md-footer-meta .md-social,
+.md-footer-custom {
+  color: var(--horizon-haze-600);
+}
+
+/* --------------------------------------------------------------------------
+   Reading measure.
+   -------------------------------------------------------------------------- */
+
+.md-content__inner {
+  max-width: var(--horizon-measure);
+  margin-left: auto;
+  margin-right: auto;
+  padding-bottom: 3rem;
+}
+
+.md-content__inner .md-typeset table:not([class]),
+.md-content__inner .md-typeset .highlight,
+.md-content__inner .md-typeset pre {
+  max-width: none;
+}
+
+@media screen and (max-width: 76.1875em) {
+  .md-content__inner {
+    max-width: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The home page's opening line. `.md-typeset .hero` is applied with attr_list
+   in index.md, so it is opt-in and no other page picks it up by accident.
+   -------------------------------------------------------------------------- */
+
+.md-typeset .hero {
+  font-family: 'Jost', ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(1.15rem, 2.4vw, 1.45rem);
+  font-weight: 300;
+  line-height: 1.45;
+  letter-spacing: -0.015em;
+  color: var(--horizon-haze-100);
+  margin-bottom: 1.6rem;
+}
+
+/* --------------------------------------------------------------------------
+   Admonition title bars. Written at the same specificity Material uses for
+   the strip, which is why they are separate from the block above: a single
+   .admonition-title rule loses to Material's own per-type selector.
+   -------------------------------------------------------------------------- */
+
+.md-typeset .note > .admonition-title,
+.md-typeset .note > summary,
+.md-typeset .info > .admonition-title,
+.md-typeset .info > summary,
+.md-typeset .tip > .admonition-title,
+.md-typeset .tip > summary,
+.md-typeset .abstract > .admonition-title,
+.md-typeset .abstract > summary,
+.md-typeset .question > .admonition-title,
+.md-typeset .question > summary,
+.md-typeset .success > .admonition-title,
+.md-typeset .success > summary,
+.md-typeset .example > .admonition-title,
+.md-typeset .example > summary {
+  background-color: rgba(255, 203, 92, 0.1);
+}
+
+.md-typeset .warning > .admonition-title,
+.md-typeset .warning > summary,
+.md-typeset .caution > .admonition-title,
+.md-typeset .caution > summary {
+  background-color: rgba(248, 106, 67, 0.12);
+}
+
+.md-typeset .danger > .admonition-title,
+.md-typeset .danger > summary,
+.md-typeset .failure > .admonition-title,
+.md-typeset .failure > summary,
+.md-typeset .bug > .admonition-title,
+.md-typeset .bug > summary {
+  background-color: rgba(177, 56, 72, 0.16);
+}
+
+.md-typeset .quote > .admonition-title,
+.md-typeset .quote > summary {
+  background-color: rgba(86, 56, 99, 0.35);
+}
+
+.md-typeset .note > .admonition-title::before,
+.md-typeset .info > .admonition-title::before,
+.md-typeset .tip > .admonition-title::before,
+.md-typeset .abstract > .admonition-title::before,
+.md-typeset .question > .admonition-title::before,
+.md-typeset .success > .admonition-title::before,
+.md-typeset .example > .admonition-title::before {
+  background-color: var(--horizon-amber);
+}
+
+.md-typeset .warning > .admonition-title::before,
+.md-typeset .caution > .admonition-title::before {
+  background-color: var(--horizon-orange);
+}
+
+.md-typeset .danger > .admonition-title::before,
+.md-typeset .failure > .admonition-title::before,
+.md-typeset .bug > .admonition-title::before {
+  background-color: var(--horizon-crimson);
+}

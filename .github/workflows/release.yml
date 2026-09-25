@@ -1,0 +1,91 @@
+# Builds the Windows desktop app from a release tag and publishes the GitHub Release: the NSIS
+# installer, the portable exe and a SHA256SUMS.txt, with the notes taken from that version's section
+# of CHANGELOG.md.
+#
+# Not code-signed yet: a certificate costs money, and until there is one SmartScreen warns on first
+# run. The getting-started page says how to get past it. The version in the file names comes from
+# apps/desktop/package.json, which the version stamp keeps equal to the root one.
+#
+# Fails before building anything when the tag does not match the root package.json, and when
+# CHANGELOG.md has no section for the version.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Check the tag matches the version
+        run: node scripts/check-tag.mjs "$env:GITHUB_REF_NAME"
+
+      - name: Read the version and the release notes
+        id: version
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$version" >> $env:GITHUB_OUTPUT
+          node scripts/changelog-section.mjs $version > release-notes.md
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-Content release-notes.md
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # electron-builder, through apps/desktop/scripts/dist.mjs, with publishing off: this workflow
+      # uploads the files itself. No certificate, so nothing is signed.
+      - name: Package the desktop app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: pnpm --filter ./apps/desktop run dist
+
+      - name: Collect the release files and their checksums
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $release = 'apps/desktop/release'
+          $files = @("Zenith-Setup-$version.exe", "Zenith-Portable-$version.exe")
+          New-Item -ItemType Directory -Force out | Out-Null
+          foreach ($file in $files) {
+            $path = Join-Path $release $file
+            if (-not (Test-Path $path)) {
+              Write-Error "electron-builder did not produce $file. apps/desktop/release holds: $((Get-ChildItem $release -Name) -join ', ')"
+              exit 1
+            }
+            Copy-Item $path out/
+          }
+          # sha256sum format: the lower-case hash, two spaces, the file name. `sha256sum -c` reads it.
+          $lines = foreach ($file in $files) { '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 "out/$file").Hash.ToLowerInvariant(), $file }
+          [System.IO.File]::WriteAllText("$PWD/out/SHA256SUMS.txt", (($lines -join "`n") + "`n"))
+          Get-Content out/SHA256SUMS.txt
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          gh release create "$env:GITHUB_REF_NAME" --verify-tag --title "Zenith $version" --notes-file release-notes.md "out/Zenith-Setup-$version.exe" "out/Zenith-Portable-$version.exe" out/SHA256SUMS.txt

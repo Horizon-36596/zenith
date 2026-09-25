@@ -1,0 +1,19 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 2,
+  "name": "requirement-clash",
+  "title": "Two members of one parallel that need the same subsystem",
+  "alliance": "RED",
+  "start": { "pose": { "ref": "a" } },
+  "steps": [
+    {
+      "id": "clash",
+      "kind": "parallel",
+      "mode": "all",
+      "steps": [
+        { "id": "scoreOne", "kind": "command", "name": "score" },
+        { "id": "scoreTwo", "kind": "command", "name": "spinUp" }
+      ]
+    }
+  ]
+}

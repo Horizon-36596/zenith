@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+.env
+.env.local
+.vercel/
+playwright-report/
+test-results/
+.DS_Store
+Thumbs.db
+dist-types/
+
+# Copied into each package by scripts/prepack.mjs; the root LICENSE and NOTICE are the originals.
+packages/*/LICENSE
+packages/*/NOTICE
+# Tarballs from pnpm pack.
+*.tgz
+
+# Agent worktrees made by Claude Code
+.claude/worktrees/

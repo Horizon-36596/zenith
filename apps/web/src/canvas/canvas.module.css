@@ -1,0 +1,92 @@
+/*
+ * The canvas's own HTML overlays: the right-click menu and the Play/Pause button. Opaque, bordered
+ * and as small as they can be (UI_GUIDE anti-pattern 2); every value is a token.
+ *
+ * The Play button sits on the field well, which stays dark in both themes, so it takes the fixed
+ * --chrome-* ink (UI_GUIDE section 4), as the well's ? does. The menu is a popover like the
+ * tooltips, so it keeps the theme.
+ */
+
+.menu {
+  position: absolute;
+  z-index: var(--z-canvas-overlay);
+  min-width: 200px;
+  max-width: 320px;
+  padding: var(--space-1) 0;
+  margin: 0;
+  list-style: none;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover);
+  font: var(--fs-sm) / var(--lh-sm) var(--font-ui);
+  color: var(--text-hi);
+  outline: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-4);
+  align-items: center;
+  width: 100%;
+  height: var(--row-h-compact);
+  padding: 0 var(--pad-row-x);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.item:hover:not([aria-disabled="true"]),
+.item:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.item[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.shortcut {
+  font: var(--fs-xs) / var(--lh-xs) var(--font-mono);
+  color: var(--text-lo);
+}
+
+.separator {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--border-subtle);
+}
+
+.play {
+  position: absolute;
+  z-index: var(--z-canvas-overlay);
+  top: var(--space-2);
+  left: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-h-tool);
+  height: var(--ctl-h-tool);
+  padding: 0;
+  background: var(--chrome-active);
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--radius-xs);
+  color: var(--chrome-text-mid);
+  cursor: pointer;
+}
+
+.play:hover {
+  color: var(--chrome-text-hi);
+  border-color: var(--chrome-border-strong);
+}
+
+.play:focus-visible {
+  box-shadow: 0 0 0 var(--ring-offset) var(--bg-canvas),
+              0 0 0 calc(var(--ring-offset) + var(--ring-width)) var(--chrome-ring);
+  outline: none;
+}

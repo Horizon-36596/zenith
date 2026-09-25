@@ -1,0 +1,229 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "sequence-rules",
+  "title": "Every end rule in a sequence",
+  "alliance": "BLUE",
+  "start": {
+    "pose": {
+      "xIn": 48,
+      "yIn": 48,
+      "headingRad": 3.1416
+    }
+  },
+  "steps": [
+    {
+      "id": "markers",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": 48,
+            "yIn": 48,
+            "headingRad": 3.1416
+          },
+          "to": {
+            "xIn": 24,
+            "yIn": 48,
+            "headingRad": 3.1416
+          }
+        },
+        {
+          "kind": "bezier",
+          "from": {
+            "xIn": 24,
+            "yIn": 48,
+            "headingRad": 3.1416
+          },
+          "control": [
+            {
+              "xIn": 12,
+              "yIn": 40
+            }
+          ],
+          "to": {
+            "xIn": 24,
+            "yIn": 24,
+            "headingRad": -1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "markers": [
+        {
+          "at": {
+            "t": 1
+          },
+          "command": {
+            "name": "instant",
+            "args": {
+              "at": "t1"
+            }
+          }
+        },
+        {
+          "at": {
+            "t": 0
+          },
+          "command": {
+            "name": "instant",
+            "args": {
+              "at": "t0"
+            }
+          }
+        },
+        {
+          "at": {
+            "t": 0.5
+          },
+          "command": {
+            "name": "take",
+            "args": {
+              "at": "t0.5",
+              "loops": 2
+            }
+          }
+        },
+        {
+          "at": {
+            "distanceIn": 4
+          },
+          "command": {
+            "name": "instant",
+            "args": {
+              "at": "4in"
+            }
+          }
+        },
+        {
+          "at": {
+            "distanceFromEndIn": 6
+          },
+          "command": {
+            "name": "instant",
+            "args": {
+              "at": "6in from end"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "timeoutFires",
+      "kind": "command",
+      "name": "forever",
+      "timeoutS": 0.1
+    },
+    {
+      "id": "timeoutSpare",
+      "kind": "command",
+      "name": "take",
+      "args": {
+        "loops": 3
+      },
+      "timeoutS": 1
+    },
+    {
+      "id": "instantStep",
+      "kind": "command",
+      "name": "instant"
+    },
+    {
+      "id": "waitTime",
+      "kind": "wait",
+      "seconds": 0.1
+    },
+    {
+      "id": "waitHolds",
+      "kind": "wait",
+      "until": "holdingPiece",
+      "timeoutS": 2
+    },
+    {
+      "id": "waitHopper",
+      "kind": "wait",
+      "until": "hopperFull"
+    },
+    {
+      "id": "waitNever",
+      "kind": "wait",
+      "until": "never",
+      "timeoutS": 0.1
+    },
+    {
+      "id": "endFires",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": 0,
+            "yIn": 24,
+            "headingRad": 3.1416
+          }
+        }
+      ],
+      "heading": {
+        "mode": "linear",
+        "fromRad": -1.5708,
+        "toRad": -3.1416
+      },
+      "endCondition": {
+        "condition": "pastHalfway"
+      }
+    },
+    {
+      "id": "endSpare",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": 24,
+            "yIn": 24,
+            "headingRad": -1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangentReversed"
+      },
+      "endCondition": {
+        "condition": "never"
+      }
+    },
+    {
+      "id": "pathTimeout",
+      "kind": "path",
+      "timeoutS": 0.1,
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": 48,
+            "yIn": 48,
+            "headingRad": 3.1416
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "headingRad": 3.1416
+      }
+    },
+    {
+      "id": "last",
+      "kind": "command",
+      "name": "instant",
+      "args": {
+        "tag": "last"
+      }
+    }
+  ]
+}

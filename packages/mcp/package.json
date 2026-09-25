@@ -1,0 +1,69 @@
+{
+  "name": "@horizon36596/zenith-mcp",
+  "version": "0.1.0",
+  "description": "The Zenith MCP server: lets an agent read, edit, check, render and simulate FTC autonomous routines over stdio.",
+  "keywords": [
+    "ftc",
+    "first-tech-challenge",
+    "robotics",
+    "autonomous",
+    "zenith",
+    "mcp",
+    "model-context-protocol",
+    "agent"
+  ],
+  "homepage": "https://libraries.horizon36596.org/zenith/",
+  "bugs": {
+    "url": "https://github.com/Horizon-36596/zenith/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Horizon-36596/zenith.git",
+    "directory": "packages/mcp"
+  },
+  "license": "MIT",
+  "author": "Horizon (FTC 36596)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "zenith-mcp": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.qa.test.*",
+    "!dist/**/testSupport.*",
+    "!dist/**/*.tsbuildinfo",
+    "!dist/testing",
+    "!dist/**/testing.*",
+    "spec",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "prepack": "node ../../scripts/prepack.mjs"
+  },
+  "dependencies": {
+    "@horizon36596/zenith-cli": "workspace:*",
+    "@horizon36596/zenith-core": "workspace:*",
+    "@horizon36596/zenith-schema": "workspace:*",
+    "@horizon36596/zenith-seasons": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.6.5"
+  }
+}

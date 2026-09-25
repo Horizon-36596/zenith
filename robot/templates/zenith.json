@@ -1,0 +1,21 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/link.json",
+  "formatVersion": 1,
+  "autosDir": "autos",
+  "robot": "autos/robot.json",
+  "field": "autos/field/PLACEHOLDER.field.json",
+  "waypoints": "autos/waypoints.json",
+  "deploy": {
+    "kind": "androidAssets",
+    "dir": "TeamCode/src/main/assets/autos",
+    "robotClass": "org.firstinspires.ftc.teamcode.zenith.MyRobot"
+  },
+  "sim": {
+    "command": "./gradlew :TeamCode:testDebugUnitTest --tests \"*YourAutoHeadlessTest*\" -Dzenith.auto={auto}",
+    "trace": "TeamCode/build/sim/{auto}.trace.json"
+  },
+  "codegen": {
+    "package": "org.firstinspires.ftc.teamcode.zenith",
+    "dir": "TeamCode/src/main/java"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/waypoints.json",
+  "formatVersion": 1,
+  "waypoints": {
+    "start": { "xIn": -60, "yIn": -36, "headingRad": 0 },
+    "score": { "xIn": -24, "yIn": -36, "headingRad": 0 },
+    "pickup": { "xIn": -24, "yIn": 0, "headingRad": 1.5708 }
+  }
+}

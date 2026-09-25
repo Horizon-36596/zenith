@@ -1,0 +1,68 @@
+.dialog {
+  max-width: calc(100vw - var(--space-8));
+  max-height: calc(100vh - var(--space-12));
+  padding: var(--pad-modal);
+  background: var(--bg-raised);
+  color: var(--text-hi);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+}
+
+.dialog::backdrop {
+  background: color-mix(in oklab, var(--bg-app) 60%, transparent);
+}
+
+.title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  letter-spacing: var(--tracking-tight);
+  font-weight: var(--fw-semibold);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 60vh;
+  overflow: auto;
+}
+
+/* The browser focuses a scrolling body when a dialog has nothing else to focus; the dialog's own
+   frame already shows where focus is. */
+.body:focus-visible {
+  box-shadow: none;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* A reference sheet: the window's height, with the body taking what the title leaves. */
+.tall[open] {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - var(--space-6));
+}
+
+.tallBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  gap: 0;
+}
+
+/* Sits after the content: blank when everything fits, and over the last line while there is more
+   to scroll to, so a cut-off sheet says so. */
+.fade {
+  position: sticky;
+  bottom: 0;
+  flex: none;
+  height: var(--space-6);
+  background: linear-gradient(to bottom, transparent, var(--bg-raised));
+  pointer-events: none;
+}

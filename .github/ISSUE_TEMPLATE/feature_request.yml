@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest something Zenith should do.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How you would like it to work. A sketch or a mock-up helps.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do now instead
+      description: Any workaround you use, or other tools you have tried.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Editor (web or desktop)
+        - CLI
+        - MCP server
+        - Robot runtime
+        - GitHub mode and review
+        - File format
+        - Docs

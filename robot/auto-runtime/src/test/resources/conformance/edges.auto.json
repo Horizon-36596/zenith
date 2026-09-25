@@ -1,0 +1,57 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 2,
+  "name": "edges",
+  "title": "Ties, zero waits and markers that outlive their path",
+  "alliance": "RED",
+  "start": { "pose": { "ref": "a" } },
+  "steps": [
+    { "id": "zeroWait", "kind": "wait", "seconds": 0 },
+    {
+      "id": "alone",
+      "kind": "parallel",
+      "mode": "race",
+      "steps": [{ "id": "onlyMember", "kind": "command", "name": "take", "args": { "loops": 2 } }]
+    },
+    {
+      "id": "tie",
+      "kind": "parallel",
+      "mode": "race",
+      "steps": [
+        { "id": "tieFirst", "kind": "command", "name": "take", "args": { "loops": 3, "n": 1 } },
+        { "id": "tieSecond", "kind": "command", "name": "take", "args": { "loops": 3, "n": 2 } }
+      ]
+    },
+    { "id": "exactTimeout", "kind": "command", "name": "take", "args": { "loops": 5 }, "timeoutS": 0.1 },
+    {
+      "id": "nestedTimeouts",
+      "kind": "sequence",
+      "timeoutS": 0.3,
+      "steps": [
+        { "id": "innerShort", "kind": "command", "name": "forever", "args": { "n": 1 }, "timeoutS": 0.1 },
+        { "id": "innerLong", "kind": "command", "name": "forever", "args": { "n": 2 }, "timeoutS": 1 }
+      ]
+    },
+    {
+      "id": "instantDeadline",
+      "kind": "parallel",
+      "mode": "deadline",
+      "deadline": "quick",
+      "steps": [
+        { "id": "slow", "kind": "command", "name": "forever", "args": { "n": 3 } },
+        { "id": "quick", "kind": "command", "name": "instant" }
+      ]
+    },
+    {
+      "id": "outlived",
+      "kind": "path",
+      "segments": [{ "kind": "line", "from": "current", "to": { "ref": "b" } }],
+      "heading": { "mode": "tangent" },
+      "markers": [
+        { "at": { "distanceFromEndIn": 4 }, "command": { "name": "forever", "args": { "n": 4 } } },
+        { "at": { "t": 1 }, "command": { "name": "take", "args": { "loops": 3, "at": "end" } } }
+      ]
+    },
+    { "id": "after", "kind": "command", "name": "instant", "args": { "tag": "after" } }
+  ]
+}

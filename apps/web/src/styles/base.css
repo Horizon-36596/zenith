@@ -1,0 +1,124 @@
+/*
+ * The reset and the handful of element defaults every panel relies on. Everything here reads a
+ * token from tokens.css; a literal colour, size or duration below is a bug (UI_GUIDE section 1).
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text-hi);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  letter-spacing: var(--tracking-normal);
+  font-feature-settings: "kern", "liga", "calt";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headings are Jost (UI_GUIDE section 5): the brand face, 13 px and up only. */
+h1,
+h2,
+h3,
+h4,
+.display {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--text-hi);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+/* Focus is always visible, and it is the ring or nothing (UI_GUIDE section 9). */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+  border-radius: var(--radius-xs);
+}
+
+/* Every number is monospace with tabular figures (UI_GUIDE section 5). */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+}
+
+.unit {
+  margin-left: var(--space-1);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+  user-select: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+/* Calm scrollbars: no track, a thumb inset by a transparent border (UI_GUIDE section 3). */
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}

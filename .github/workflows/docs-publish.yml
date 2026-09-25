@@ -1,0 +1,102 @@
+# Publishes libraries.horizon36596.org/zenith/ to GitHub Pages when a release tag is pushed: the
+# documentation site at /zenith/, the web editor at /zenith/app/ and the JSON Schemas at
+# /zenith/schema/v1/<kind>.json, all from one artifact that scripts/build-pages.mjs puts together.
+#
+# It follows SimLoop's docs-publish.yml. The settings it depends on are not visible from this file,
+# and a deployment fails without them. They are a person's to set, once, and PUBLISHING.md has the
+# exact steps:
+#
+#   1. Settings > Pages > Build and deployment > Source: GitHub Actions, with the Custom domain field
+#      EMPTY. The organisation site (Horizon-36596/Horizon-36596.github.io) owns
+#      libraries.horizon36596.org, and a project site with no custom domain of its own is served under
+#      it at the repository's name, lower case: /zenith/. Setting a domain here would take the root.
+#   2. The `github-pages` environment must allow tags. Turning Pages on creates it with a policy that
+#      allows the default branch only, so a tag push is rejected before any step runs, as an annotation
+#      on the run rather than a line in a log:
+#
+#        Tag "v0.1.0" is not allowed to deploy to github-pages due to environment protection rules.
+#
+#      One policy entry fixes it (PUBLISHING.md, "Turn on Pages").
+#
+# There is no CNAME file on purpose: on this publish path GitHub ignores it, and it is how a repository
+# claims a domain root, which is the thing to avoid.
+
+name: Publish documentation site
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Lets a person run it by hand from the Actions tab, to check a change to the site without a release.
+  workflow_dispatch:
+
+# One deployment at a time, and a newer one waits rather than cancelling: a half-deployed site has some
+# pages from one version and some from another.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # A tag that disagrees with the root package.json would publish docs stamped with the wrong
+      # version. A manual run from a branch has no tag to check.
+      - name: Check the tag matches the version
+        if: github.ref_type == 'tag'
+        run: node scripts/check-tag.mjs "$GITHUB_REF_NAME"
+
+      - name: Install the site's build dependencies
+        run: pip install -r site/requirements.txt
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The workspace packages the web app imports, and the generated JSON Schemas.
+      - name: Build
+        run: pnpm build
+
+      # The same one command a person runs. It fails on a broken docs link (mkdocs --strict), on a
+      # schema whose $id does not resolve inside the artifact, and on an app asset addressed from the
+      # site root instead of /zenith/app/.
+      - name: Build the Pages artifact
+        run: node scripts/build-pages.mjs build/pages
+
+      - name: Package the site for Pages
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

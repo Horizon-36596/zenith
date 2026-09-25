@@ -1,0 +1,10 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/waypoints.json",
+  "formatVersion": 1,
+  "waypoints": {
+    "a": { "xIn": -48, "yIn": -48, "headingRad": 0 },
+    "b": { "xIn": -24, "yIn": -48, "headingRad": 0 },
+    "c": { "xIn": -24, "yIn": -24, "headingRad": 1.5708 },
+    "d": { "xIn": 0, "yIn": -24, "headingRad": 0 }
+  }
+}

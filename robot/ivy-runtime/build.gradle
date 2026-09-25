@@ -1,0 +1,100 @@
+//
+// build.gradle in robot/ivy-runtime
+//
+// The Ivy runtime (org.horizon36596.zenith.ivy): the same file-driven autos as auto-runtime, built as an
+// Ivy command tree instead of a SolversLib one. robot/README.md and the docs site's robot runtime page
+// describe it.
+//
+// This module is never published. Its classes ship inside the auto-runtime AAR, which compiles this
+// module's sources too (auto-runtime/build.gradle), so a team keeps the one JitPack coordinate whichever
+// library it uses. This module exists for two reasons:
+//   - it compiles the shared sources and the Ivy runtime with no SolversLib on any classpath, so a
+//     SolversLib import on the Ivy side fails this build;
+//   - it runs the Ivy unit tests.
+//
+// No maven-publish plugin, on purpose: robot/settings.gradle says why a second published module would
+// rename the one teams already depend on.
+//
+apply plugin: 'com.android.library'
+
+android {
+    namespace = 'org.horizon36596.zenith.ivy'
+
+    compileSdk 35
+    defaultConfig {
+        // The FTC SDK's own floor, as in auto-runtime.
+        minSdk 24
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs += ['../auto-runtime/src/shared/java']
+        }
+        // The same fixtures as the SolversLib tests, so both suites read one demo file.
+        test {
+            resources.srcDirs += ['../auto-runtime/src/test/resources']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    testOptions {
+        unitTests.all {
+            useJUnitPlatform()
+        }
+    }
+
+    // The same API 24 guard as auto-runtime: a call a Control Hub does not have fails the build here.
+    lint {
+        abortOnError true
+        error 'NewApi'
+    }
+}
+
+// Unit tests are variant-independent, so only the debug variant runs them (as in auto-runtime).
+androidComponents {
+    beforeVariants(selector().withBuildType('release')) { variantBuilder ->
+        variantBuilder.enableUnitTest = false
+    }
+}
+
+// The same pins as auto-runtime/build.gradle. SolversLib is deliberately absent.
+def ivyPedro = 'com.pedropathing.ivy:pedro:1.1.1'
+def pedroCore = 'com.pedropathing:core:3.0.0-20260828.185437-17'
+def ftcRobotCore = 'org.firstinspires.ftc:RobotCore:12.0.0'
+def ftcHardware = 'org.firstinspires.ftc:Hardware:12.0.0'
+
+dependencies {
+    // compileOnly for the reason auto-runtime gives: the team's TeamCode declares its own copies.
+    compileOnly ivyPedro
+    compileOnly pedroCore
+    compileOnly ftcRobotCore
+    compileOnly ftcHardware
+
+    testImplementation ivyPedro
+    testImplementation pedroCore
+    testImplementation ftcRobotCore
+    testImplementation ftcHardware
+
+    testImplementation "org.junit.jupiter:junit-jupiter-api:5.11.3"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.11.3"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.3"
+}
+
+// Nothing from SolversLib on any classpath of this module. A transitive
+// dependency that brought it in would otherwise make the isolation above a claim rather than a fact.
+// This matches SolversLib's own group only; a copy published under another coordinate is caught instead
+// by auto-runtime's linkCheck, which reads the compiled Ivy classes for any SolversLib reference.
+configurations.configureEach { configuration ->
+    configuration.incoming.afterResolve {
+        configuration.incoming.resolutionResult.allComponents.each { component ->
+            if (component.moduleVersion?.group == 'org.solverslib') {
+                throw new GradleException("${configuration.name} resolved ${component.moduleVersion}: " +
+                        'the Ivy runtime must build without SolversLib')
+            }
+        }
+    }
+}

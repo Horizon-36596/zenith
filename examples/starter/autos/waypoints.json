@@ -1,0 +1,36 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/waypoints.json",
+  "formatVersion": 1,
+  "waypoints": {
+    "start": {
+      "xIn": -12,
+      "yIn": -63,
+      "headingRad": 1.5708,
+      "provenance": "PLACEHOLDER: starter example, against the south wall in RED's half, facing the hive; measure your own start tile"
+    },
+    "scoreSouth": {
+      "xIn": -12,
+      "yIn": -36,
+      "headingRad": 1.5708,
+      "provenance": "PLACEHOLDER: starter example, south of the RED hive, outside the legal approach margin, facing the up cell"
+    },
+    "gardenApproach": {
+      "xIn": -61,
+      "yIn": -44,
+      "headingRad": -1.5708,
+      "provenance": "PLACEHOLDER: starter example, above the RED garden row, intake facing the south wall"
+    },
+    "gardenPickup": {
+      "xIn": -61,
+      "yIn": -62,
+      "headingRad": -1.5708,
+      "provenance": "PLACEHOLDER: starter example, the intake over the RED garden row, frame 1 in off the south wall"
+    },
+    "park": {
+      "xIn": -40,
+      "yIn": -36,
+      "headingRad": 3.1416,
+      "provenance": "PLACEHOLDER: starter example, an open spot in RED's half to finish in"
+    }
+  }
+}

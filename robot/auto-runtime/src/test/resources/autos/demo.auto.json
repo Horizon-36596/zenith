@@ -1,0 +1,51 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "demo",
+  "title": "Demo Auto",
+  "alliance": "RED",
+  "start": { "pose": { "ref": "start" } },
+  "steps": [
+    {
+      "id": "toScore",
+      "kind": "path",
+      "timeoutS": 3,
+      "segments": [{ "kind": "line", "from": { "ref": "start" }, "to": { "ref": "score" } }],
+      "heading": { "mode": "tangent" },
+      "speedFraction": 0.8,
+      "markers": [{ "at": { "t": 0.5 }, "command": { "name": "intakeOn" } }]
+    },
+    { "id": "score", "kind": "command", "name": "score", "args": { "level": 2 } },
+    { "kind": "wait", "seconds": 0.25 },
+    {
+      "id": "grab",
+      "kind": "parallel",
+      "mode": "deadline",
+      "deadline": "drive",
+      "steps": [
+        {
+          "id": "drive",
+          "kind": "path",
+          "segments": [
+            { "kind": "bezier", "from": "current", "control": [{ "xIn": -40, "yIn": -10 }], "to": { "ref": "pickup" } }
+          ],
+          "heading": { "mode": "linear", "fromRad": 0, "toRad": 1.5708 }
+        },
+        {
+          "kind": "sequence",
+          "steps": [
+            { "kind": "command", "name": "intakeOn" },
+            { "kind": "wait", "until": "holdingPiece" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "check",
+      "kind": "branch",
+      "condition": "holdingPiece",
+      "then": [{ "id": "scoreAgain", "kind": "command", "name": "score", "args": { "level": 1 } }],
+      "else": [{ "id": "park", "kind": "wait", "seconds": 1 }]
+    }
+  ]
+}

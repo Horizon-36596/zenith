@@ -1,0 +1,65 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/robot.json",
+  "formatVersion": 1,
+  "name": "PLACEHOLDER: this robot's name",
+  "frame": {
+    "forward": "+x",
+    "left": "+y",
+    "headingZero": "+x",
+    "headingPositive": "ccw"
+  },
+  "footprint": {
+    "startIn": {
+      "lengthIn": 18.0,
+      "widthIn": 18.0,
+      "provenance": "PLACEHOLDER: the largest box the game manual allows at start; measure the robot"
+    },
+    "expandedIn": {
+      "lengthIn": 18.0,
+      "widthIn": 18.0,
+      "provenance": "PLACEHOLDER: same as startIn until the robot is measured with everything out"
+    },
+    "centreOfRotationIn": {
+      "xIn": 0.0,
+      "yIn": 0.0,
+      "provenance": "PLACEHOLDER: geometric centre until the odometry pods are measured"
+    }
+  },
+  "kinematics": {
+    "maxForwardVelInPerS": { "value": 0.0, "provenance": "NEEDS MEASUREMENT: ForwardVelocityTuner" },
+    "maxStrafeVelInPerS": { "value": 0.0, "provenance": "NEEDS MEASUREMENT: LateralVelocityTuner" },
+    "forwardDecelInPerS2": { "value": 0.0, "provenance": "NEEDS MEASUREMENT: ForwardZeroPowerAccelerationTuner" },
+    "strafeDecelInPerS2": { "value": 0.0, "provenance": "NEEDS MEASUREMENT: LateralZeroPowerAccelerationTuner" },
+    "accelInPerS2": { "value": 0.0, "provenance": "NEEDS MEASUREMENT: no tuner produces this; calibrate from sim" },
+    "maxAngularVelRadPerS": { "value": 0.0, "provenance": "NEEDS MEASUREMENT" },
+    "defaultPathSpeedFraction": { "value": 0.8, "provenance": "PLACEHOLDER: the robot repo's AUTO_MAX_POWER" },
+    "settleS": { "value": 0.25, "provenance": "PLACEHOLDER: the spec's default until calibrated from sim" },
+    "follower": {
+      "library": "pedro",
+      "version": "PLACEHOLDER: the exact pinned version from TeamCode/build.gradle",
+      "holdEnd": true
+    }
+  },
+  "mouths": [],
+  "capacity": {
+    "elementKind": "PLACEHOLDER",
+    "max": 0,
+    "provenance": "PLACEHOLDER: the season's possession limit"
+  },
+  "commands": [
+    {
+      "name": "PLACEHOLDER",
+      "summary": "Every name here must be registered with NamedCommands.register on the robot.",
+      "params": {},
+      "estimateS": "unknown",
+      "requires": [],
+      "stationary": true
+    }
+  ],
+  "conditions": [
+    {
+      "name": "PLACEHOLDER",
+      "summary": "Every name here must be registered with NamedCommands.registerCondition on the robot."
+    }
+  ]
+}

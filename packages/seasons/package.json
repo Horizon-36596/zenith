@@ -1,0 +1,60 @@
+{
+  "name": "@horizon36596/zenith-seasons",
+  "version": "0.1.0",
+  "description": "The Zenith season registry: turns a field file into the season rules the checks run against.",
+  "keywords": [
+    "ftc",
+    "first-tech-challenge",
+    "robotics",
+    "autonomous",
+    "zenith",
+    "season"
+  ],
+  "homepage": "https://libraries.horizon36596.org/zenith/",
+  "bugs": {
+    "url": "https://github.com/Horizon-36596/zenith/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Horizon-36596/zenith.git",
+    "directory": "packages/seasons"
+  },
+  "license": "MIT",
+  "author": "Horizon (FTC 36596)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.qa.test.*",
+    "!dist/**/testSupport.*",
+    "!dist/**/*.tsbuildinfo",
+    "!dist/testing",
+    "!dist/**/testing.*",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "prepack": "node ../../scripts/prepack.mjs"
+  },
+  "dependencies": {
+    "@horizon36596/zenith-core": "workspace:*",
+    "@horizon36596/zenith-schema": "workspace:*",
+    "@horizon36596/zenith-season-biobuzz": "workspace:*"
+  }
+}

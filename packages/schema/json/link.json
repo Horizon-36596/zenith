@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://libraries.horizon36596.org/zenith/schema/v1/link.json",
+  "title": "Zenith link file, formatVersion 1",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "formatVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "autosDir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "robot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "field": {
+      "type": "string",
+      "minLength": 1
+    },
+    "waypoints": {
+      "type": "string",
+      "minLength": 1
+    },
+    "deploy": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "androidAssets",
+            "directory"
+          ]
+        },
+        "dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commandLibrary": {
+          "type": "string",
+          "enum": [
+            "solverslib",
+            "ivy"
+          ]
+        },
+        "robotClass": {
+          "type": "string",
+          "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)*$"
+        },
+        "preselectTeleOp": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "dir"
+      ],
+      "additionalProperties": false
+    },
+    "sim": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "command",
+        "trace"
+      ],
+      "additionalProperties": false
+    },
+    "codegen": {
+      "type": "object",
+      "properties": {
+        "package": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dir": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "package",
+        "dir"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "formatVersion",
+    "autosDir",
+    "robot",
+    "field"
+  ],
+  "additionalProperties": false
+}

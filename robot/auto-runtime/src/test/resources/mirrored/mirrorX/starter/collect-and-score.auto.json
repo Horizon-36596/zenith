@@ -1,0 +1,201 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "collect-and-score",
+  "title": "Collect and score",
+  "description": "Score the preload, collect four pollen from the garden, and score again. It shows three ways to run a command alongside driving: a marker on a path, a parallel deadline group with a sequence in it, and a wait until the robot reports full.",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "alliance": "BLUE",
+  "authors": [
+    "Horizon (FTC 36596)"
+  ],
+  "created": "2026-09-23",
+  "start": {
+    "pose": {
+      "xIn": -12,
+      "yIn": 63,
+      "headingRad": -1.5708
+    },
+    "holds": {
+      "pollen": 4
+    }
+  },
+  "steps": [
+    {
+      "id": "driveOut",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -12,
+            "yIn": 63,
+            "headingRad": -1.5708
+          },
+          "to": {
+            "xIn": -12,
+            "yIn": 36,
+            "headingRad": -1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      }
+    },
+    {
+      "id": "scorePreload",
+      "kind": "command",
+      "name": "score",
+      "args": {
+        "count": 4
+      }
+    },
+    {
+      "id": "toGarden",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "bezier",
+          "from": "current",
+          "control": [
+            {
+              "xIn": -12,
+              "yIn": 28,
+              "provenance": "PLACEHOLDER: starter example, a curve control point"
+            },
+            {
+              "xIn": -61,
+              "yIn": 24,
+              "provenance": "PLACEHOLDER: starter example, a curve control point"
+            }
+          ],
+          "to": {
+            "xIn": -61,
+            "yIn": 44,
+            "headingRad": 1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "notes": "A curve over to the garden. Its control points leave the start heading north and arrive heading south, so tangent heading needs no turn on the spot at either end."
+    },
+    {
+      "id": "sweepGarden",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -61,
+            "yIn": 62,
+            "headingRad": 1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "headingRad": 1.5708
+      },
+      "speedFraction": 0.3,
+      "markers": [
+        {
+          "at": {
+            "t": 0
+          },
+          "command": {
+            "name": "intakeOn"
+          }
+        }
+      ],
+      "endCondition": {
+        "condition": "hopperFull"
+      },
+      "expect": {
+        "collectFrom": "gardenBlue",
+        "count": 4
+      },
+      "notes": "Drives slowly onto the garden row with the intake leading. The marker starts the intake as the path starts, without a separate step; endCondition ends the path early once the robot is full, and expect tells the ledger which four pollen it picks up."
+    },
+    {
+      "id": "waitForFull",
+      "kind": "wait",
+      "until": "hopperFull",
+      "timeoutS": 1,
+      "notes": "Gives the intake up to one more second. A wait until ends as soon as its condition is true, and timeoutS stops it waiting forever."
+    },
+    {
+      "id": "stopIntake",
+      "kind": "command",
+      "name": "intakeOff"
+    },
+    {
+      "id": "returnToScore",
+      "kind": "parallel",
+      "mode": "deadline",
+      "deadline": "driveBack",
+      "steps": [
+        {
+          "id": "driveBack",
+          "kind": "path",
+          "segments": [
+            {
+              "kind": "bezier",
+              "from": "current",
+              "control": [
+                {
+                  "xIn": -61,
+                  "yIn": 24,
+                  "provenance": "PLACEHOLDER: starter example, a curve control point"
+                },
+                {
+                  "xIn": -12,
+                  "yIn": 28,
+                  "provenance": "PLACEHOLDER: starter example, a curve control point"
+                }
+              ],
+              "to": {
+                "xIn": -12,
+                "yIn": 36,
+                "headingRad": -1.5708
+              }
+            }
+          ],
+          "heading": {
+            "mode": "tangentReversed"
+          },
+          "notes": "tangentReversed drives the robot backwards, so it leaves the garden facing south and arrives at the scoring spot facing north."
+        },
+        {
+          "id": "clearThenSpinUp",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "clearGarden",
+              "kind": "wait",
+              "seconds": 0.5
+            },
+            {
+              "id": "readyLauncher",
+              "kind": "command",
+              "name": "spinUp"
+            }
+          ]
+        }
+      ],
+      "notes": "A deadline group ends when its deadline member, the drive, ends. The sequence beside it waits half a second, then spins the launcher up on the way back."
+    },
+    {
+      "id": "scoreCollected",
+      "kind": "command",
+      "name": "score",
+      "args": {
+        "count": 4
+      }
+    }
+  ]
+}

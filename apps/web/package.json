@@ -1,0 +1,31 @@
+{
+  "name": "@horizon36596/zenith-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "test:e2e:pages": "playwright test -c playwright.pages.config.ts"
+  },
+  "dependencies": {
+    "@horizon36596/zenith-core": "workspace:*",
+    "@horizon36596/zenith-github": "workspace:*",
+    "@horizon36596/zenith-schema": "workspace:*",
+    "@horizon36596/zenith-season-biobuzz": "workspace:*",
+    "@horizon36596/zenith-seasons": "workspace:*",
+    "lucide-react": "^1.47.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.6",
+    "@vitejs/plugin-react": "^4.4.1",
+    "vite": "^6.3.3"
+  }
+}

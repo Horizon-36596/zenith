@@ -1,0 +1,182 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "branches",
+  "title": "Both arms, an empty else and a nested branch",
+  "alliance": "BLUE",
+  "start": {
+    "pose": {
+      "xIn": -48,
+      "yIn": 48,
+      "headingRad": 0
+    }
+  },
+  "steps": [
+    {
+      "id": "yes",
+      "kind": "branch",
+      "condition": "always",
+      "then": [
+        {
+          "id": "yesThen",
+          "kind": "command",
+          "name": "instant",
+          "args": {
+            "arm": "then"
+          }
+        }
+      ],
+      "else": [
+        {
+          "id": "yesElse",
+          "kind": "command",
+          "name": "instant",
+          "args": {
+            "arm": "else"
+          }
+        }
+      ]
+    },
+    {
+      "id": "no",
+      "kind": "branch",
+      "condition": "never",
+      "then": [
+        {
+          "id": "noThen",
+          "kind": "command",
+          "name": "instant",
+          "args": {
+            "arm": "then"
+          }
+        }
+      ],
+      "else": []
+    },
+    {
+      "id": "outer",
+      "kind": "branch",
+      "condition": "always",
+      "then": [
+        {
+          "id": "inner",
+          "kind": "branch",
+          "condition": "never",
+          "then": [
+            {
+              "id": "innerThen",
+              "kind": "command",
+              "name": "instant"
+            }
+          ],
+          "else": [
+            {
+              "id": "innerElse",
+              "kind": "command",
+              "name": "take",
+              "args": {
+                "loops": 2
+              }
+            },
+            {
+              "id": "innerDrive",
+              "kind": "path",
+              "segments": [
+                {
+                  "kind": "line",
+                  "from": "current",
+                  "to": {
+                    "xIn": -24,
+                    "yIn": 48,
+                    "headingRad": 0
+                  }
+                },
+                {
+                  "kind": "line",
+                  "from": {
+                    "xIn": -24,
+                    "yIn": 48,
+                    "headingRad": 0
+                  },
+                  "to": {
+                    "xIn": -24,
+                    "yIn": 24,
+                    "headingRad": -1.5708
+                  }
+                }
+              ],
+              "heading": {
+                "mode": "piecewise",
+                "ranges": [
+                  {
+                    "startT": 0,
+                    "endT": 0.25,
+                    "heading": {
+                      "mode": "constant",
+                      "headingRad": 0
+                    }
+                  },
+                  {
+                    "startT": 0.25,
+                    "endT": 0.75,
+                    "heading": {
+                      "mode": "linear",
+                      "fromRad": 0,
+                      "toRad": -1.5708
+                    }
+                  },
+                  {
+                    "startT": 0.75,
+                    "endT": 1,
+                    "heading": {
+                      "mode": "tangent"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "else": []
+    },
+    {
+      "id": "late",
+      "kind": "branch",
+      "condition": "holdingPiece",
+      "then": [
+        {
+          "id": "lateThen",
+          "kind": "command",
+          "name": "instant",
+          "args": {
+            "arm": "then"
+          }
+        }
+      ],
+      "else": [
+        {
+          "id": "lateElse",
+          "kind": "command",
+          "name": "instant",
+          "args": {
+            "arm": "else"
+          }
+        }
+      ]
+    },
+    {
+      "id": "branchTimeout",
+      "kind": "branch",
+      "condition": "always",
+      "then": [
+        {
+          "id": "stuck",
+          "kind": "command",
+          "name": "forever"
+        }
+      ],
+      "else": []
+    }
+  ]
+}

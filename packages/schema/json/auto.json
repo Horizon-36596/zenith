@@ -1,0 +1,683 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "title": "Zenith auto file, formatVersion 3",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "formatVersion": {
+      "type": "number",
+      "const": 3
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "robot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "field": {
+      "type": "string",
+      "minLength": 1
+    },
+    "alliance": {
+      "type": "string",
+      "enum": [
+        "RED",
+        "BLUE"
+      ]
+    },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "created": {
+      "type": "string"
+    },
+    "start": {
+      "type": "object",
+      "properties": {
+        "pose": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "ref"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "xIn": {
+                  "type": "number"
+                },
+                "yIn": {
+                  "type": "number"
+                },
+                "headingRad": {
+                  "type": "number"
+                },
+                "provenance": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "xIn",
+                "yIn"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "holds": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "pose"
+      ],
+      "additionalProperties": false
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "const": "path"
+              },
+              "timeoutS": {
+                "type": "number",
+                "exclusiveMinimum": true,
+                "minimum": 0
+              },
+              "segments": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "line"
+                        },
+                        "from": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "current"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "ref": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "ref"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "$ref": "#/properties/start/properties/pose/anyOf/1"
+                            }
+                          ]
+                        },
+                        "to": {
+                          "$ref": "#/properties/steps/items/anyOf/0/properties/segments/items/anyOf/0/properties/from"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "from",
+                        "to"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "bezier"
+                        },
+                        "from": {
+                          "$ref": "#/properties/steps/items/anyOf/0/properties/segments/items/anyOf/0/properties/from"
+                        },
+                        "control": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/properties/start/properties/pose/anyOf/1"
+                          },
+                          "minItems": 1,
+                          "maxItems": 3
+                        },
+                        "to": {
+                          "$ref": "#/properties/steps/items/anyOf/0/properties/segments/items/anyOf/0/properties/from"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "from",
+                        "control",
+                        "to"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "minItems": 1
+              },
+              "heading": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "tangent"
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "tangentReversed"
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "constant"
+                      },
+                      "headingRad": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "headingRad"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "linear"
+                      },
+                      "fromRad": {
+                        "type": "number"
+                      },
+                      "toRad": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "fromRad",
+                      "toRad"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "facePoint"
+                      },
+                      "xIn": {
+                        "type": "number"
+                      },
+                      "yIn": {
+                        "type": "number"
+                      },
+                      "offsetRad": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "xIn",
+                      "yIn"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "piecewise"
+                      },
+                      "ranges": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "startT": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "endT": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "heading": {
+                              "anyOf": [
+                                {
+                                  "$ref": "#/properties/steps/items/anyOf/0/properties/heading/anyOf/0"
+                                },
+                                {
+                                  "$ref": "#/properties/steps/items/anyOf/0/properties/heading/anyOf/1"
+                                },
+                                {
+                                  "$ref": "#/properties/steps/items/anyOf/0/properties/heading/anyOf/2"
+                                },
+                                {
+                                  "$ref": "#/properties/steps/items/anyOf/0/properties/heading/anyOf/3"
+                                },
+                                {
+                                  "$ref": "#/properties/steps/items/anyOf/0/properties/heading/anyOf/4"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "startT",
+                            "endT",
+                            "heading"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "ranges"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "speedFraction": {
+                "type": "number",
+                "exclusiveMinimum": true,
+                "minimum": 0,
+                "maximum": 1
+              },
+              "markers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "t": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "t"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "distanceIn": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "distanceIn"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "distanceFromEndIn": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "distanceFromEndIn"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "command": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "args": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": [
+                              "string",
+                              "number",
+                              "boolean"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "command"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "endCondition": {
+                "type": "object",
+                "properties": {
+                  "condition": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "condition"
+                ],
+                "additionalProperties": false
+              },
+              "expect": {
+                "type": "object",
+                "properties": {
+                  "collectFrom": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "count": {
+                    "type": "number"
+                  },
+                  "launchesInto": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tip": {
+                    "type": "string",
+                    "enum": [
+                      "own",
+                      "opponent"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "segments"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "const": "command"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "args": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              },
+              "timeoutS": {
+                "type": "number",
+                "exclusiveMinimum": true,
+                "minimum": 0
+              },
+              "expect": {
+                "$ref": "#/properties/steps/items/anyOf/0/properties/expect"
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "const": "wait"
+              },
+              "seconds": {
+                "type": "number",
+                "minimum": 0
+              },
+              "until": {
+                "type": "string",
+                "minLength": 1
+              },
+              "timeoutS": {
+                "type": "number",
+                "exclusiveMinimum": true,
+                "minimum": 0
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "const": "sequence"
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/properties/steps/items"
+                },
+                "minItems": 1
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "steps"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "const": "parallel"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "race",
+                  "deadline"
+                ]
+              },
+              "deadline": {
+                "type": "string",
+                "minLength": 1
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/properties/steps/items"
+                },
+                "minItems": 1
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "mode",
+              "steps"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "const": "branch"
+              },
+              "condition": {
+                "type": "string",
+                "minLength": 1
+              },
+              "then": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/properties/steps/items"
+                }
+              },
+              "else": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/properties/steps/items"
+                }
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "condition",
+              "then"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "formatVersion",
+    "name",
+    "alliance",
+    "start",
+    "steps"
+  ],
+  "additionalProperties": false
+}

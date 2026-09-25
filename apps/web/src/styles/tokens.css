@@ -1,0 +1,422 @@
+/*
+ * Zenith design tokens, version 2. Horizon (FTC 36596).
+ *
+ * The single source of colour, type, spacing, sizing, motion and layer values for apps/web.
+ * Every token named in apps/web/UI_GUIDE.md is defined here and nowhere else. Components read
+ * tokens; they never write a literal colour, size or duration.
+ *
+ * v2 (2026-09-22, site/docs/editor.md): the app sits on the Horizon website's
+ * ground #17061D and its violet-tinted night ramp; the Horizon gradient (amber #FFCB5C, orange
+ * #F86A43, crimson #B13848) is spent on chrome and brand only. The teal accent is retired.
+ * Every v1 token name still resolves; names that changed meaning are marked "v1 name, kept".
+ *
+ * Colours are sRGB hex (brand values are exact copies of horizon-website/tailwind.config.ts, and
+ * hex keeps the contrast table in UI_GUIDE section 4 reproducible). Alpha variants use
+ * rgb(r g b / a). The oklch hue after a value is for reasoning about collisions.
+ *
+ * Dark is the default and the designed theme. The light block at the bottom is for printing and
+ * bright shop lighting; it overrides surfaces, text, borders and the hues that fail on white.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- 0. Brand: Horizon -----------------------------------------------------------
+   * Chrome and brand ONLY: the frame edge, the title bar's horizon line, the logo, the
+   * active tool indicator, primary buttons and the focus ring. Never on the field, never on
+   * a path, never on a finding, never as a panel wash.
+   */
+  --brand-amber:   #ffcb5c;  /* brand.300, oklch h 84 */
+  --brand-400:     #fb9a4c;
+  --brand-orange:  #f86a43;  /* brand.500, oklch h 36, the brand DEFAULT */
+  --brand-600:     #e14f41;
+  --brand-crimson: #b13848;  /* brand.700, oklch h 17 */
+  --brand-800:     #8e2c40;
+
+  /* Left-to-right sunrise: the frame edge and the active tool bar. */
+  --brand-gradient: linear-gradient(90deg, #ffcb5c 0%, #f86a43 55%, #b13848 100%);
+  /* The logo's horizon band, symmetric with a bright centre: the title bar's bottom edge. */
+  --brand-gradient-horizon: linear-gradient(90deg, #b13848 0%, #f86a43 38%, #ff884f 50%,
+                                            #f86a43 62%, #b13848 100%);
+  /* Primary buttons. Stops at orange: dark ink fails 4.5:1 on crimson (3.27:1). */
+  --brand-gradient-button: linear-gradient(180deg, #ffcb5c 0%, #fb9a4c 45%, #f86a43 100%);
+  --brand-gradient-button-hover: linear-gradient(180deg, #ffd87f 0%, #fcaa5f 45%, #f97a55 100%);
+  --brand-muted: rgb(248 106 67 / 0.14);  /* fill behind the active tool or the selected row */
+  --brand-line:  rgb(248 106 67 / 0.45);  /* brand hairlines: the tour card's top edge */
+  --brand-ink:   #17061d;                 /* text on any brand fill */
+  --selection-bg: rgb(248 106 67 / 0.32); /* ::selection, text-hi stays 9:1 on it */
+
+  --frame-edge-w: 1px;  /* the gradient hairline round the desktop window */
+  --horizon-w:    2px;  /* the gradient line under the title bar */
+
+  /* ---- 1. Surfaces, the night ramp ----------------------------------------------------
+   * Chrome and panels share the ground; elevation is lightness, not borders.
+   */
+  --bg-app:      #17061d;  /* night.950, the Horizon ground: title bar, toolbar, gutters */
+  --bg-panel:    #1c0a24;  /* night.925: side panels, findings, one step above the ground */
+  --bg-raised:   #2a1735;  /* night.850: popovers, menus, tooltips, modals, palette, tour card */
+  --bg-canvas:   #110414;  /* the field well, one step BELOW the ground so the field board leads */
+  --bg-inset:    #13051a;  /* inputs, code wells, scroll tracks */
+  --bg-chrome:   #17061d;  /* title bar; same as the ground, named so the shell can say so */
+
+  /* Ink on the title bar. It is Horizon chrome in both themes, so these are never overridden:
+   * the light theme keeps the bar night and its text haze (QA-19). The title bar maps its own
+   * --text-*, --bg-hover and ring tokens onto these, so everything inside it follows. */
+  --chrome-text-hi:  #faf6fb;  /* haze.50, 18.2:1 on --bg-chrome */
+  --chrome-text-mid: #c2b0c8;  /* haze.300, 9.6:1 */
+  --chrome-text-lo:  #a08fa8;  /* haze.400, 6.5:1 */
+  --chrome-hover:    #22102b;  /* night.900 */
+  --chrome-active:   #2a1735;  /* night.850 */
+  --chrome-inset:    #13051a;
+  --chrome-border:   #331e3f;  /* night.800 */
+  --chrome-border-strong: #6f5b7c;
+  --chrome-ring:     #ffcb5c;  /* brand amber, as the dark theme's --ring; 12.9:1 */
+
+  --bg-hover:    #22102b;  /* night.900: row and control hover */
+  --bg-active:   #2a1735;  /* night.850: pressed, or an open menu's trigger */
+  --bg-selected: #3b1728;  /* --brand-orange at 14 % over --bg-panel, solid so text contrast is fixed */
+
+  /* ---- 2. Borders -------------------------------------------------------------------
+   * Decorative separators, used sparingly (UI_GUIDE section 3). --border-strong is the only
+   * border that meets 3:1 and the only one allowed to identify a control on its own.
+   */
+  --border-subtle:  #22102b;  /* hairlines inside a panel, where proximity alone is ambiguous */
+  --border-default: #331e3f;  /* night.800: the one divider between regions */
+  --border-strong:  #6f5b7c;  /* hovered or focused control outline, drop target; 3.1:1 on panel */
+
+  /* ---- 3. Text, the haze ramp ------------------------------------------------------- */
+  --text-hi:        #faf6fb;  /* haze.50: values, headings, the thing you are reading */
+  --text-mid:       #c2b0c8;  /* haze.300: labels, secondary copy */
+  --text-lo:        #a08fa8;  /* haze.400: units, hints, timestamps; 5.2:1 on --bg-selected, the floor */
+  --text-disabled:  #665572;  /* haze.600: inert controls only, never load-bearing */
+  --text-on-accent: #17061d;  /* dark ink on an accent or brand fill */
+
+  /* ---- 4. Accent: brand orange, for chrome controls ----------------------------------
+   * v1 name, kept. It now means "this control is active or acts": the selected row bar, the
+   * active tab underline, a text button, a link. Geometry on the canvas does NOT use it; the
+   * canvas has --path-selected and --canvas-annotation.
+   */
+  --accent:        #f86a43;  /* 6.4:1 on --bg-panel */
+  --accent-hover:  #fb9a4c;
+  --accent-active: #e14f41;
+  --accent-muted:  var(--brand-muted);
+  --accent-line:   var(--brand-line);
+
+  /* ---- 5. Focus ----------------------------------------------------------------------
+   * Brand amber: 10.4:1 or better on every surface, so the focus accent can be brand.
+   */
+  --ring:        #ffcb5c;
+  --ring-width:  2px;
+  --ring-offset: 2px;
+  --ring-shadow: 0 0 0 var(--ring-offset) var(--bg-app),
+                 0 0 0 calc(var(--ring-offset) + var(--ring-width)) var(--ring);
+
+  /* ---- 6. Finding severities ---------------------------------------------------------
+   * Moved off the brand arc (oklch h 17 to 84). error goes rose (h 8, pinker and lighter than
+   * crimson), warning goes lemon (h 102, greener and more chromatic than amber), info is a
+   * quiet periwinkle. Each has a low-alpha -bg for a chip or a canvas tint; findings rows are
+   * no longer tinted as a whole (UI_GUIDE section 8.5).
+   */
+  --sev-error:    #fb6188;
+  --sev-error-bg: rgb(251 97 136 / 0.14);
+  --sev-warn:     #eddb49;
+  --sev-warn-bg:  rgb(237 219 73 / 0.12);
+  --sev-info:     #9abae4;
+  --sev-info-bg:  rgb(154 186 228 / 0.12);
+  --ok:           #62d286;  /* h 152: validate clean, provenance measured, the recorded trace */
+  --ok-bg:        rgb(98 210 134 / 0.14);
+
+  /* ---- 7. Provenance tiers (unchanged meaning) ---------------------------------------
+   *   measured    MEASURED, SPEC, CALIBRATED FROM ROBOT
+   *   derived     SET BY HAND, SET FROM EDITOR, SET FROM SIM, CALIBRATED FROM SIM, CARRIED OVER
+   *   unverified  NEEDS MEASUREMENT, PLACEHOLDER, APPROX
+   */
+  --prov-measured:      var(--ok);
+  --prov-measured-bg:   var(--ok-bg);
+  --prov-derived:       var(--text-lo);
+  --prov-derived-bg:    rgb(160 143 168 / 0.14);
+  --prov-unverified:    var(--sev-warn);
+  --prov-unverified-bg: var(--sev-warn-bg);
+
+  /* ---- 8. Path states ----------------------------------------------------------------
+   * Authored geometry is light and violet-neutral: shape reads before colour, and nothing on
+   * the field competes with it. Selection is brightness plus width, not a hue.
+   */
+  --path-estimated: #c2b0c8;               /* haze.300 */
+  --path-selected:  #faf6fb;               /* haze.50, was var(--accent) in v1 */
+  --path-hover:     #f0e8f2;               /* haze.100 */
+  --path-actual:    #62d286;               /* recorded truth, same as --ok */
+  --path-ghost:     rgb(194 176 200 / 0.28); /* mirrored preview, dashed 4 4 */
+
+  --path-w-normal:   2px;
+  --path-w-selected: 3px;
+  --path-w-actual:   1.5px;
+
+  /* ---- 9. Canvas handles and overlays ------------------------------------------------ */
+  --canvas-annotation: #71c9fa;  /* sky, h 235: heading, markers, snap guides, the measure tool */
+  --snap-guide:        var(--canvas-annotation);
+  --robot-outline:     #faf6fb;  /* the one robot outline that follows the scrubber or the cursor */
+  --robot-outline-fill: rgb(250 246 251 / 0.08);
+
+  --handle-endpoint: #faf6fb;               /* filled square */
+  --handle-control:  #c2b7da;               /* hollow square, tied to its endpoint by a hairline */
+  --handle-heading:  var(--canvas-annotation);
+  --handle-hit:      14px;
+
+  --marker-pin:      var(--canvas-annotation);
+  --ghost-footprint: rgb(194 176 200 / 0.16);  /* v1 name, kept; v2 draws one outline, see above */
+  --highlight-find:  rgb(251 97 136 / 0.35);   /* the segment a finding points at, widened 6 px */
+
+  --grid-minor: #2a1b30;  /* every 12 in */
+  --grid-major: #3c2b44;  /* every 24 in */
+  --grid-axis:  #594364;  /* x = 0 and y = 0 */
+
+  /* ---- 10. Alliance ------------------------------------------------------------------
+   * Red is red: it sits inside the brand arc (h 27, between crimson and orange) and cannot be
+   * moved. It is kept apart by place and by chroma: alliance red is the most saturated red in
+   * the app (C 0.22 against orange 0.18 and crimson 0.16), it only appears on the field and on
+   * the alliance pill, and the pill always carries the word RED or BLUE.
+   */
+  --alliance-red:       #ee3533;
+  --alliance-red-text:  #fb8276;
+  --alliance-red-bg:    rgb(238 53 51 / 0.16);
+  --alliance-blue:      #3082f6;
+  --alliance-blue-text: #80b3fd;
+  --alliance-blue-bg:   rgb(48 130 246 / 0.16);
+
+  /* ---- 11. Field element categories --------------------------------------------------
+   * Field furniture keeps its own hues, all off the brand arc: neutral structure, lemon rule
+   * zones (the warning hue on purpose, since a breach is a KEEPOUT warning), orchid game
+   * elements, aqua scoring targets.
+   */
+  --field-obstacle:      #83738b;
+  --field-obstacle-fill: #2e2034;
+  --field-zone:          #eddb49;
+  --field-zone-fill:     rgb(237 219 73 / 0.10);
+  --field-element:       #d489e5;  /* orchid, h 320 */
+  --field-element-fill:  rgb(212 137 229 / 0.18);
+  --field-target:        #43d5dc;  /* aqua, h 200 */
+  --field-waypoint:      #a08fa8;  /* named pose pin; --canvas-annotation when referenced or hovered */
+
+  /* ---- 12. Timeline and estimate bars ------------------------------------------------ */
+  --bar-track:         #2a1735;
+  --bar-estimated:     #c2b0c8;  /* matches --path-estimated on purpose */
+  --bar-preview:       #e8dcec;  /* the instant sim's bars: haze, a step lighter than the estimate */
+  --bar-actual:        #62d286;  /* matches --path-actual on purpose */
+  --bar-unknown:       #726279;
+  --bar-unknown-hatch: repeating-linear-gradient(135deg,
+                         rgb(114 98 121 / 0.70) 0 2px,
+                         transparent 2px 5px);
+  --bar-over:          var(--sev-error);
+  --bar-h:             4px;
+  --bar-h-timeline:    10px;
+
+  /* ---- 13. Type ----------------------------------------------------------------------
+   * Jost (display): the title bar, panel and section titles, buttons, tabs, the tour. 13 px
+   * and up only; its x-height is too small for 11-12 px rows (UI_GUIDE section 5).
+   * IBM Plex Sans (UI): body copy, field labels, messages, tooltips.
+   * JetBrains Mono: every number, id, file path, code and provenance string.
+   */
+  --font-display: "Jost", "Futura", "Century Gothic", "Segoe UI Variable Display", sans-serif;
+  --font-ui:      "IBM Plex Sans", "Segoe UI Variable Text", "Segoe UI", "Noto Sans", sans-serif;
+  --font-mono:    "JetBrains Mono", "Cascadia Mono", "SF Mono", Consolas, monospace;
+
+  --fs-micro: 10px;  /* timeline ruler ticks only */
+  --fs-xs:    11px;  /* chips, unit suffixes, shortcut hints, code chips */
+  --fs-sm:    13px;  /* default: rows, inspector values, table cells, tooltips (v1 was 12) */
+  --fs-md:    14px;  /* finding messages, modal and tour body copy */
+  --fs-lg:    16px;  /* panel titles and modal titles, in Jost */
+  --fs-xl:    20px;  /* empty-state headline and tour card title, in Jost */
+  --fs-2xl:   26px;  /* the tour's choice card and the welcome screen, in Jost */
+
+  --lh-micro: 12px;
+  --lh-xs:    14px;
+  --lh-sm:    18px;
+  --lh-md:    20px;
+  --lh-lg:    22px;
+  --lh-xl:    26px;
+  --lh-2xl:   32px;
+
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+
+  --tracking-tight:   -0.01em;  /* Jost 16 px and up */
+  --tracking-display: -0.02em;  /* Jost 20 px and up */
+  --tracking-normal:  0;
+  --tracking-wide:    0.02em;   /* 10 and 11 px chips only */
+  --tracking-label:   0.01em;   /* Jost section headers at 13 px */
+
+  --numeric: tabular-nums slashed-zero;
+
+  /* ---- 14. Spacing, 4 px base -------------------------------------------------------- */
+  --space-0_5: 2px;
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-8:   32px;
+  --space-10:  40px;
+  --space-12:  48px;
+  --space-16:  64px;
+
+  --pad-panel:     var(--space-4);  /* 16 px inside a panel body (v1 was 12) */
+  --pad-row-x:     var(--space-3);  /* 12 px left and right in a list or table row (v1 was 8) */
+  --pad-control-x: var(--space-2);
+  --pad-modal:     var(--space-6);  /* 24 px */
+  --gap-section:   var(--space-6);  /* between inspector sections: space, not a rule */
+
+  /* ---- 15. Sizing -------------------------------------------------------------------- */
+  --row-h-compact:     28px;  /* ruler rows, nested finding detail */
+  --row-h:             32px;  /* the default: step rows, inspector fields, table rows (v1 28) */
+  --row-h-comfortable: 36px;  /* palette results, modal list rows */
+
+  --ctl-h-sm:        24px;  /* inline chips, ghost icon buttons inside a row */
+  --ctl-h-md:        28px;  /* inputs, selects, segmented controls */
+  --ctl-h-lg:        32px;  /* modal, tour and palette buttons */
+  --ctl-h-tool:      32px;  /* toolbar tool button, square */
+  --palette-input-h: 40px;
+
+  --icon-sm: 12px;
+  --icon:    16px;
+  --icon-lg: 20px;
+  --icon-xl: 32px;   /* empty states and the tour choice card */
+  --icon-stroke: 1.75;  /* Lucide strokeWidth everywhere */
+
+  --titlebar-h:    36px;
+  --toolbar-h:     44px;
+  --panel-left-w:  300px;
+  --panel-right-w: 320px;
+  --findings-h:    180px;
+  --resizer-w:     4px;
+
+  --help-size:     16px;   /* the ? affordance beside a section header */
+  --tooltip-max-w: 280px;  /* help tooltips wrap at this width */
+
+  /* ---- 16. Radii, outer equals inner plus padding ------------------------------------ */
+  --radius-0:    0;
+  --radius-xs:   4px;     /* chips, inputs, tool buttons (v1 was 2) */
+  --radius-sm:   6px;     /* popovers, menus, tooltips, the field board */
+  --radius-md:   12px;    /* modals, the command palette, the tour card */
+  --radius-pill: 9999px;  /* severity dots, the ? affordance, the alliance pill, the tour step dots */
+
+  /* ---- 17. Elevation -----------------------------------------------------------------
+   * On dark a drop shadow does little, so each also carries a 1 px top highlight (the Horizon
+   * website's three elevations). --shadow-ember is the one tinted shadow, for the one primary
+   * button on a screen.
+   */
+  --shadow-raised:  inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.40);
+  --shadow-popover: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 2px 6px rgb(0 0 0 / 0.35),
+                    0 12px 28px -12px rgb(0 0 0 / 0.50);
+  --shadow-modal:   inset 0 1px 0 rgb(255 255 255 / 0.09), 0 6px 16px rgb(0 0 0 / 0.40),
+                    0 28px 60px -24px rgb(0 0 0 / 0.70);
+  --shadow-ember:   0 8px 24px -8px rgb(248 106 67 / 0.50);
+
+  /* ---- 18. Motion -------------------------------------------------------------------- */
+  --dur-none: 0ms;
+  --dur-fast: 80ms;
+  --dur-base: 120ms;
+  --dur-slow: 180ms;
+  --dur-tour: 240ms;  /* the spotlight moving between tour stops */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in:  cubic-bezier(0.55, 0, 1, 0.45);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --tooltip-delay:      400ms;
+  --tooltip-skip-delay: 100ms;
+  --help-delay:         150ms;  /* the ? affordance opens faster: the user is asking */
+
+  /* ---- 19. Tour ---------------------------------------------------------------------- */
+  --tour-scrim:        rgb(10 2 12 / 0.72);  /* the dimmed backdrop around the cut-out */
+  --tour-cutout-pad:   8px;                  /* space between the anchor and the cut-out edge */
+  --tour-cutout-radius: 8px;
+  --tour-cutout-ring:  0 0 0 2px var(--brand-amber);
+  --tour-card-w:       340px;
+  --tour-choice-w:     560px;
+  --tour-gap:          12px;                 /* card to cut-out */
+
+  /* ---- 20. Layers -------------------------------------------------------------------- */
+  --z-canvas:         0;
+  --z-canvas-overlay: 10;
+  --z-panel:          20;
+  --z-toolbar:        30;
+  --z-titlebar:       35;
+  --z-resizer:        40;
+  --z-tour-ring:      45;  /* the tour's ring: over the panels, under every popover it must not hide */
+  --z-popover:        50;
+  --z-tooltip:        60;
+  --z-modal:          70;
+  --z-palette:        80;
+  --z-tour:           90;
+}
+
+/*
+ * Optional light theme. Opt in with <html data-theme="light">. Surfaces, text and borders
+ * invert to a violet-tinted off-white; hues darken to clear 4.5:1 on it. Canvas tokens are not
+ * overridden: the field well stays dark in both themes. The brand gradient is unchanged.
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-app:      #f7f2f8;
+  --bg-panel:    #fdfbfd;
+  --bg-raised:   #ffffff;
+  --bg-canvas:   #110414;
+  --bg-inset:    #f1eaf3;
+  --bg-chrome:   #17061d;  /* the title bar stays on the ground: it is brand */
+  --bg-hover:    #f1eaf3;
+  --bg-active:   #e6dce9;
+  --bg-selected: #f5e8eb;
+  --selection-bg: rgb(177 56 72 / 0.20);
+
+  --border-subtle:  #eee6f0;
+  --border-default: #e6dce9;
+  --border-strong:  #8e7c96;
+
+  --text-hi:        #26192c;
+  --text-mid:       #55475c;
+  --text-lo:        #6b5d71;
+  --text-disabled:  #a799ad;
+  --text-on-accent: #ffffff;
+
+  --accent:        #b13848;
+  --accent-hover:  #8e2c40;
+  --accent-active: #6d2136;
+  --accent-muted:  rgb(177 56 72 / 0.10);
+  --accent-line:   rgb(177 56 72 / 0.45);
+  --ring:          #b13848;
+
+  --sev-error:    #be2357;
+  --sev-error-bg: rgb(190 35 87 / 0.10);
+  --sev-warn:     #786900;
+  --sev-warn-bg:  rgb(120 105 0 / 0.12);
+  --sev-info:     #3e6596;
+  --sev-info-bg:  rgb(62 101 150 / 0.10);
+  --ok:           #05773b;
+  --ok-bg:        rgb(5 119 59 / 0.10);
+
+  --prov-derived-bg: rgb(107 93 113 / 0.12);
+
+  --bar-track:         #eee6f0;
+  --bar-preview:       #8e7c96;  /* a step darker than the estimate, so it leads on a light track */
+  --bar-unknown:       #a799ad;
+  --bar-unknown-hatch: repeating-linear-gradient(135deg,
+                         rgb(167 153 173 / 0.70) 0 2px,
+                         transparent 2px 5px);
+
+  --shadow-raised:  0 1px 1px rgb(38 25 44 / 0.05), 0 1px 2px rgb(38 25 44 / 0.05);
+  --shadow-popover: 0 2px 4px rgb(38 25 44 / 0.06), 0 8px 16px rgb(38 25 44 / 0.08);
+  --shadow-modal:   0 4px 8px rgb(38 25 44 / 0.08), 0 16px 40px rgb(38 25 44 / 0.12);
+  --tour-scrim:     rgb(23 6 29 / 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+    --dur-tour: 0ms;
+  }
+}

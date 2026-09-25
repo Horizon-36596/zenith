@@ -1,0 +1,22 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 2,
+  "name": "never-ends",
+  "title": "Commands that never end",
+  "alliance": "RED",
+  "start": { "pose": { "ref": "a" } },
+  "steps": [
+    { "id": "boundedForever", "kind": "command", "name": "forever", "timeoutS": 0.2 },
+    {
+      "id": "raceForever",
+      "kind": "parallel",
+      "mode": "race",
+      "timeoutS": 0.1,
+      "steps": [
+        { "id": "first", "kind": "command", "name": "forever", "args": { "n": 1 } },
+        { "id": "second", "kind": "command", "name": "forever", "args": { "n": 2 } }
+      ]
+    },
+    { "id": "unbounded", "kind": "command", "name": "forever", "args": { "n": 3 } }
+  ]
+}

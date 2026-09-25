@@ -1,0 +1,246 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "cycle-and-park",
+  "title": "Cycle and park",
+  "description": "Score the preload, try one garden cycle with a time limit, score again only if the robot picked something up, and park. It is the auto the generated Java in examples/starter/generated/ comes from, so it uses most of what the file format can say: markers, timeouts, an end condition, a race, a deadline group with a sequence in it, and a branch.",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "alliance": "BLUE",
+  "authors": [
+    "Horizon (FTC 36596)"
+  ],
+  "created": "2026-09-24",
+  "start": {
+    "pose": {
+      "xIn": -12,
+      "yIn": 63,
+      "headingRad": -1.5708
+    },
+    "holds": {
+      "pollen": 4
+    }
+  },
+  "steps": [
+    {
+      "id": "driveOut",
+      "kind": "path",
+      "timeoutS": 4,
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -12,
+            "yIn": 63,
+            "headingRad": -1.5708
+          },
+          "to": {
+            "xIn": -12,
+            "yIn": 36,
+            "headingRad": -1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "markers": [
+        {
+          "at": {
+            "t": 0.25
+          },
+          "command": {
+            "name": "spinUp"
+          }
+        }
+      ],
+      "notes": "The marker spins the launcher up a quarter of the way out, so it is ready when the robot arrives. timeoutS stops the step if the robot is held up."
+    },
+    {
+      "id": "scorePreload",
+      "kind": "command",
+      "name": "score",
+      "args": {
+        "count": 4
+      },
+      "timeoutS": 3
+    },
+    {
+      "id": "toGarden",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "bezier",
+          "from": "current",
+          "control": [
+            {
+              "xIn": -12,
+              "yIn": 28,
+              "provenance": "PLACEHOLDER: starter example, a curve control point"
+            },
+            {
+              "xIn": -61,
+              "yIn": 24,
+              "provenance": "PLACEHOLDER: starter example, a curve control point"
+            }
+          ],
+          "to": {
+            "xIn": -61,
+            "yIn": 44,
+            "headingRad": 1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "notes": "A curve over to the garden. Its control points leave the scoring spot heading north and arrive heading south, so tangent heading needs no turn on the spot."
+    },
+    {
+      "id": "collect",
+      "kind": "parallel",
+      "mode": "race",
+      "steps": [
+        {
+          "id": "sweepGarden",
+          "kind": "path",
+          "segments": [
+            {
+              "kind": "line",
+              "from": "current",
+              "to": {
+                "xIn": -61,
+                "yIn": 62,
+                "headingRad": 1.5708
+              }
+            }
+          ],
+          "heading": {
+            "mode": "constant",
+            "headingRad": 1.5708
+          },
+          "speedFraction": 0.3,
+          "markers": [
+            {
+              "at": {
+                "t": 0
+              },
+              "command": {
+                "name": "intakeOn"
+              }
+            }
+          ],
+          "endCondition": {
+            "condition": "hopperFull"
+          },
+          "expect": {
+            "collectFrom": "gardenBlue",
+            "count": 4
+          },
+          "notes": "Drives slowly onto the garden row with the intake leading. The marker starts the intake as the path starts, and endCondition ends the path early once the robot is full."
+        },
+        {
+          "id": "giveUp",
+          "kind": "wait",
+          "seconds": 2.5
+        }
+      ],
+      "notes": "A race ends when its first member ends: the sweep, once it arrives or the robot is full, or the two and a half second limit, whichever comes first."
+    },
+    {
+      "id": "stopIntake",
+      "kind": "command",
+      "name": "intakeOff"
+    },
+    {
+      "id": "scoreIfCollected",
+      "kind": "branch",
+      "condition": "holdingPiece",
+      "then": [
+        {
+          "id": "returnToScore",
+          "kind": "parallel",
+          "mode": "deadline",
+          "deadline": "driveBack",
+          "steps": [
+            {
+              "id": "driveBack",
+              "kind": "path",
+              "segments": [
+                {
+                  "kind": "bezier",
+                  "from": "current",
+                  "control": [
+                    {
+                      "xIn": -61,
+                      "yIn": 24,
+                      "provenance": "PLACEHOLDER: starter example, a curve control point"
+                    },
+                    {
+                      "xIn": -12,
+                      "yIn": 28,
+                      "provenance": "PLACEHOLDER: starter example, a curve control point"
+                    }
+                  ],
+                  "to": {
+                    "xIn": -12,
+                    "yIn": 36,
+                    "headingRad": -1.5708
+                  }
+                }
+              ],
+              "heading": {
+                "mode": "tangentReversed"
+              }
+            },
+            {
+              "id": "clearThenSpinUp",
+              "kind": "sequence",
+              "steps": [
+                {
+                  "id": "clearGarden",
+                  "kind": "wait",
+                  "seconds": 0.5
+                },
+                {
+                  "id": "readyLauncher",
+                  "kind": "command",
+                  "name": "spinUp"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "scoreCollected",
+          "kind": "command",
+          "name": "score",
+          "args": {
+            "count": 4
+          },
+          "timeoutS": 3
+        }
+      ],
+      "else": [],
+      "notes": "The branch reads holdingPiece once, when it starts. With nothing aboard the robot skips the trip back and goes straight to park."
+    },
+    {
+      "id": "park",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -40,
+            "yIn": 36,
+            "headingRad": -3.1416
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      }
+    }
+  ]
+}

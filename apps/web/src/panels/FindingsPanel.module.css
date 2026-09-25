@@ -1,0 +1,223 @@
+/* UI_GUIDE 9.7. Rows are not tinted; the severity is the icon, in its colour. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  height: var(--row-h);
+  padding-inline: var(--pad-row-x);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+.counts {
+  display: flex;
+  align-items: center;
+  margin-left: var(--space-2);
+}
+
+.countWrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sep {
+  padding-inline: var(--space-2);
+  color: var(--text-lo);
+}
+
+.count {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-variant-numeric: var(--numeric);
+  border-radius: var(--radius-xs);
+  padding-inline: 2px;
+}
+
+.count[data-severity="error"] {
+  color: var(--sev-error);
+}
+
+.count[data-severity="warning"] {
+  color: var(--sev-warn);
+}
+
+.count[data-severity="info"] {
+  color: var(--sev-info);
+}
+
+.count[aria-pressed="true"] {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-3) var(--pad-row-x);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.when {
+  color: var(--text-lo);
+}
+
+/* Findings 25: findingsReason and seasonWarnings, above the list, so an unknown season plugin or a
+   check() failure never reads as a clean "No findings". */
+.banners {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-height: var(--row-h);
+  padding: var(--space-1) var(--pad-row-x);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+.banner svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.banner[data-kind="error"] {
+  background: var(--sev-error-bg);
+}
+
+.banner[data-kind="error"] svg {
+  color: var(--sev-error);
+}
+
+.banner[data-kind="warning"] {
+  background: var(--sev-warn-bg);
+}
+
+.banner[data-kind="warning"] svg {
+  color: var(--sev-warn);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-h);
+  padding-inline: var(--pad-row-x);
+  cursor: default;
+}
+
+.row:hover,
+.row[data-selected="true"] {
+  background: var(--bg-hover);
+}
+
+.icon {
+  align-self: start;
+  margin-top: 6px;
+}
+
+.row[data-severity="error"] .icon {
+  color: var(--sev-error);
+}
+
+.row[data-severity="warning"] .icon {
+  color: var(--sev-warn);
+}
+
+.row[data-severity="info"] .icon {
+  color: var(--sev-info);
+}
+
+.message {
+  display: flex;
+  align-items: flex-start;
+  text-align: left;
+  color: inherit;
+  border-radius: var(--radius-xs);
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-block: var(--space-1);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-hi);
+}
+
+.howTo {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.code {
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--bg-hover);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.row:hover .code,
+.row[data-selected="true"] .code {
+  background: var(--bg-active, var(--bg-raised));
+}
+
+.step {
+  font-size: var(--fs-sm);
+  color: var(--text-lo);
+}
+
+.fixes {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.fix {
+  height: var(--ctl-h-sm);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  opacity: 0;
+}
+
+.fix:hover {
+  background: var(--bg-raised);
+}
+
+.row:hover .fix,
+.row:focus-within .fix,
+.fix:focus-visible {
+  opacity: 1;
+}

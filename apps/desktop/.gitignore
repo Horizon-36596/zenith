@@ -1,0 +1,2 @@
+# The installer and portable exe from `pnpm --filter @horizon36596/zenith-desktop dist`.
+release/

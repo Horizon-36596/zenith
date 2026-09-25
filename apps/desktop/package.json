@@ -1,0 +1,31 @@
+{
+  "name": "@horizon36596/zenith-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Zenith for Windows: the planner with high-fidelity sim, deploy and git built in.",
+  "license": "MIT",
+  "author": "Horizon (FTC 36596)",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/build.mjs",
+    "dev": "node scripts/dev.mjs",
+    "start": "electron .",
+    "dist": "node scripts/dist.mjs",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22.15.0",
+    "@horizon36596/zenith-cli": "workspace:*",
+    "@horizon36596/zenith-core": "workspace:*",
+    "@horizon36596/zenith-github": "workspace:*",
+    "@horizon36596/zenith-schema": "workspace:*",
+    "@horizon36596/zenith-seasons": "workspace:*",
+    "@horizon36596/zenith-web": "workspace:*",
+    "electron": "43.7.4",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.25.12",
+    "vite": "^6.3.3"
+  }
+}

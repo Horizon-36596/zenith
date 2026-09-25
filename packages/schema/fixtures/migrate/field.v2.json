@@ -1,0 +1,24 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/field.json",
+  "formatVersion": 2,
+  "season": "fixture",
+  "name": "Migration fixture field",
+  "frame": {
+    "origin": "centre",
+    "xAxis": "audienceRight",
+    "yAxis": "awayFromAudience",
+    "headingZero": "+x",
+    "headingPositive": "ccw",
+    "units": "in",
+    "canonicalAlliance": "RED",
+    "mirror": "pointSymmetry"
+  },
+  "sizeIn": {
+    "xIn": 144,
+    "yIn": 144
+  },
+  "periods": {
+    "autoS": 30,
+    "teleopS": 120
+  }
+}

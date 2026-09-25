@@ -1,0 +1,182 @@
+/* UI_GUIDE section 9.3: the ? affordance and its help tooltip. */
+
+.tip {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--help-size);
+  height: var(--help-size);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  color: var(--text-lo);
+  transition: color var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out);
+}
+
+/* A 24 px hit area round the 16 px circle (UI_GUIDE section 11). */
+.tip::after {
+  content: "";
+  position: absolute;
+  inset: calc((var(--help-size) - 24px) / 2);
+}
+
+.tip:hover,
+.tip[aria-expanded="true"] {
+  color: var(--text-hi);
+  background: var(--bg-hover);
+}
+
+.bubble {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: var(--tooltip-max-w);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-raised);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover);
+  animation: fade var(--dur-base) var(--ease-out);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+.body {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.showMe {
+  margin-top: var(--space-1);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+}
+
+.showMe:hover {
+  color: var(--accent-hover);
+}
+
+/*
+ * The shortcut overlay (QA-22): the tables flow down newspaper columns, four at 1280 px, so the
+ * whole sheet fits a 1280x720 window. A table may run on into the next column, a whole row at a
+ * time, and never leaves its title at the foot of one.
+ */
+.keysGrid {
+  columns: 4 240px;
+  column-gap: var(--space-6);
+}
+
+.keysSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  margin-bottom: var(--space-3);
+}
+
+.keysSection[data-long] {
+  display: block;
+}
+
+.keysSection:last-child {
+  margin-bottom: 0;
+}
+
+.keysTitle {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  color: var(--text-mid);
+  break-after: avoid;
+}
+
+.keys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+/* The key column is wide enough for Ctrl Shift Enter, so every key in a table lines up. */
+.keyRow {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
+  column-gap: var(--space-2);
+  align-items: baseline;
+  break-inside: avoid;
+}
+
+[data-long] .keys {
+  display: block;
+}
+
+/* A short gesture sits beside what it does; a long one takes its own line with the sentence under
+   it. Each keeps a box of its own, so the two never run into each other. */
+[data-long] .keyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: var(--space-2);
+  row-gap: 2px;
+  margin-bottom: 2px;
+}
+
+[data-long] .keyCap {
+  flex: none;
+  max-width: 100%;
+}
+
+[data-long] .keyDoes {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.keyCap {
+  margin: 0;
+}
+
+/* The chip, border included, is one line of the description tall (--lh-sm), so a key adds no
+   height to its row and the sheet keeps room to spare at 1280x720. */
+.keyCap kbd {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: calc(var(--lh-sm) - 2px);
+  color: var(--text-hi);
+  white-space: normal;
+}
+
+.keyDoes {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}

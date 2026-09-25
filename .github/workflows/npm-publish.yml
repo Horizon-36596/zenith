@@ -1,0 +1,94 @@
+# Publishes the seven @horizon36596/zenith-* packages to npm. A release is a human-pushed v* tag; the steps are in PUBLISHING.md.
+#
+# The tag must match the root package.json version (v0.1.0 for 0.1.0), and the job stops before
+# publishing anything when it does not. The packages go out in dependency order, each with an npm
+# provenance statement, using the NPM_TOKEN secret. A version already on npm is skipped, so a run
+# that failed halfway can be re-run.
+#
+# A manual run is a dry run unless "publish" is ticked: it builds, tests, packs and runs the smoke
+# test, then prints what it would publish.
+name: npm publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to npm (unticked: dry run only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write # npm provenance
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Check the tag matches the root version
+        id: version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            node scripts/check-tag.mjs "$GITHUB_REF_NAME"
+          elif [ "${{ inputs.publish }}" = "true" ]; then
+            echo "::error::Publishing needs a v* tag; run this workflow from the tag, not from a branch."
+            exit 1
+          fi
+          echo "Releasing $version"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check every package carries the root version
+        run: node scripts/check-version.mjs
+
+      # Build first: the MCP stdio tests spawn the server as its own Node process.
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Pack and smoke-test the tarballs
+        run: node scripts/smoke-pack.mjs
+
+      - name: Publish in dependency order
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+          VERSION: ${{ steps.version.outputs.version }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.publish != true }}
+        run: |
+          set -euo pipefail
+          for dir in schema core season-biobuzz seasons github cli mcp; do
+            name="$(node -p "require('./packages/$dir/package.json').name")"
+            if npm view "$name@$VERSION" version >/dev/null 2>&1; then
+              echo "$name@$VERSION is already on npm; skipping."
+              continue
+            fi
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "Dry run: would publish $name@$VERSION"
+              (cd "packages/$dir" && pnpm publish --dry-run --no-git-checks --access public)
+            else
+              echo "Publishing $name@$VERSION"
+              (cd "packages/$dir" && pnpm publish --no-git-checks --access public --provenance)
+            fi
+          done

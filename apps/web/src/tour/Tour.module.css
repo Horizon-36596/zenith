@@ -1,0 +1,253 @@
+/*
+ * UI_GUIDE section 10: the ring, the coach-mark card, the choice card and the closing card. The tour
+ * is non-modal: the layer and the ring take no pointer events, only the cards do.
+ */
+
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-tour);
+  pointer-events: none;
+}
+
+.ring {
+  position: fixed;
+  z-index: var(--z-tour-ring);
+  border-radius: var(--tour-cutout-radius);
+  box-shadow: var(--tour-cutout-ring);
+  pointer-events: none;
+  transition:
+    left var(--dur-tour) var(--ease-out-expo),
+    top var(--dur-tour) var(--ease-out-expo),
+    width var(--dur-tour) var(--ease-out-expo),
+    height var(--dur-tour) var(--ease-out-expo);
+}
+
+.card,
+.choice,
+.finished {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--pad-modal);
+  background: var(--bg-raised);
+  border-top: 2px solid var(--brand-line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  pointer-events: auto;
+  animation: fade var(--dur-base) var(--ease-out);
+}
+
+.card {
+  width: var(--tour-card-w);
+}
+
+.card:focus {
+  outline: none;
+}
+
+.choice,
+.finished {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.choice {
+  width: var(--tour-choice-w);
+  max-width: calc(100vw - 32px);
+}
+
+.finished {
+  width: var(--tour-card-w);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-xl);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-display);
+  color: var(--text-hi);
+}
+
+.count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.body {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.task {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+.taskCircle {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.taskDone {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--ok);
+  color: var(--brand-ink);
+}
+
+.dots {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.dot,
+.dotOn {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+}
+
+.dotOn {
+  background: var(--accent);
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.ghost,
+.primary {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-h-lg);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.ghost {
+  color: var(--text-mid);
+}
+
+.ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+.primary {
+  padding-inline: var(--space-4);
+  background: var(--brand-gradient-button);
+  color: var(--brand-ink);
+  box-shadow: var(--shadow-ember);
+}
+
+.primary:hover {
+  background: var(--brand-gradient-button-hover);
+}
+
+.choiceTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-2xl);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-display);
+  color: var(--text-hi);
+}
+
+.options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--pad-panel);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: background var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+
+.option:hover {
+  background: var(--bg-hover);
+}
+
+.optionDefault {
+  border-color: var(--border-strong);
+}
+
+.optionDefault:hover {
+  box-shadow: var(--shadow-ember);
+}
+
+.optionIcon {
+  color: var(--text-mid);
+}
+
+.optionTitle {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+.optionBody {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}

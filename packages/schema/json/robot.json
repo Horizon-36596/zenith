@@ -1,0 +1,664 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://libraries.horizon36596.org/zenith/schema/v1/robot.json",
+  "title": "Zenith robot file, formatVersion 1",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "formatVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "frame": {
+      "type": "object",
+      "properties": {
+        "forward": {
+          "type": "string",
+          "enum": [
+            "+x",
+            "-x",
+            "+y",
+            "-y"
+          ]
+        },
+        "left": {
+          "type": "string",
+          "enum": [
+            "+x",
+            "-x",
+            "+y",
+            "-y"
+          ]
+        },
+        "headingZero": {
+          "type": "string",
+          "enum": [
+            "+x",
+            "+y"
+          ]
+        },
+        "headingPositive": {
+          "type": "string",
+          "enum": [
+            "ccw",
+            "cw"
+          ]
+        }
+      },
+      "required": [
+        "forward",
+        "left",
+        "headingZero",
+        "headingPositive"
+      ],
+      "additionalProperties": false
+    },
+    "footprint": {
+      "type": "object",
+      "properties": {
+        "startIn": {
+          "type": "object",
+          "properties": {
+            "lengthIn": {
+              "type": "number",
+              "exclusiveMinimum": true,
+              "minimum": 0
+            },
+            "widthIn": {
+              "type": "number",
+              "exclusiveMinimum": true,
+              "minimum": 0
+            },
+            "provenance": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "lengthIn",
+            "widthIn"
+          ],
+          "additionalProperties": false
+        },
+        "expandedIn": {
+          "$ref": "#/properties/footprint/properties/startIn"
+        },
+        "centreOfRotationIn": {
+          "type": "object",
+          "properties": {
+            "xIn": {
+              "type": "number"
+            },
+            "yIn": {
+              "type": "number"
+            },
+            "provenance": {
+              "$ref": "#/properties/footprint/properties/startIn/properties/provenance"
+            }
+          },
+          "required": [
+            "xIn",
+            "yIn"
+          ],
+          "additionalProperties": false
+        },
+        "heightIn": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "provenance": {
+              "$ref": "#/properties/footprint/properties/startIn/properties/provenance"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "startIn",
+        "expandedIn",
+        "centreOfRotationIn"
+      ],
+      "additionalProperties": false
+    },
+    "heightIn": {
+      "anyOf": [
+        {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        {
+          "type": "number",
+          "exclusiveMinimum": true,
+          "minimum": 0
+        }
+      ]
+    },
+    "kinematics": {
+      "type": "object",
+      "properties": {
+        "maxForwardVelInPerS": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "maxStrafeVelInPerS": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "forwardDecelInPerS2": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "strafeDecelInPerS2": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "accelInPerS2": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "maxAngularVelRadPerS": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "defaultPathSpeedFraction": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "settleS": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "strafeFractionWarn": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "strafeFractionThreshold": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "sweepSpeedFraction": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        },
+        "calibration": {
+          "type": "object",
+          "properties": {
+            "band": {
+              "type": "number",
+              "exclusiveMinimum": true,
+              "minimum": 0
+            },
+            "samples": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "provenance": {
+              "$ref": "#/properties/footprint/properties/startIn/properties/provenance"
+            }
+          },
+          "required": [
+            "band"
+          ],
+          "additionalProperties": false
+        },
+        "follower": {
+          "type": "object",
+          "properties": {
+            "library": {
+              "type": "string",
+              "enum": [
+                "pedro"
+              ]
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "holdEnd": {
+              "type": "boolean"
+            },
+            "forwardTranslationalPowerPerIn": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "strafeTranslationalPowerPerIn": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "headingPowerPerRad": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "headingStaticPower": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "coastPowerPerInPerS": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "coastFeedforwardPowerPerInPerS": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "brakeFeedforwardPowerPerInPerS": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "maxBrakingPower": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "headingDriveRatio": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "brakeAggression": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "brakeLinearForwardS": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "brakeQuadraticForwardS2PerIn": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "brakeLinearStrafeS": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "brakeQuadraticStrafeS2PerIn": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "headingBrakeLinearS": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "headingBrakeQuadraticS2PerRad": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "endParametricT": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "endHeadingToleranceRad": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "endTranslationalToleranceIn": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "endVelocityToleranceInPerS": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "holdTimeoutS": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "headingDeviationToleranceRad": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "translationalDeviationToleranceIn": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "minCorrectionDistanceIn": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "cosineScale": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "boolean"
+                    },
+                    "provenance": {
+                      "$ref": "#/properties/footprint/properties/startIn/properties/provenance"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "turnBeforeDriving": {
+              "$ref": "#/properties/kinematics/properties/follower/properties/cosineScale"
+            }
+          },
+          "required": [
+            "library",
+            "version",
+            "holdEnd"
+          ],
+          "additionalProperties": false
+        },
+        "drivetrain": {
+          "type": "object",
+          "properties": {
+            "trackWidthIn": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "wheelBaseIn": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            },
+            "wheelResponseRatePerS": {
+              "$ref": "#/properties/footprint/properties/heightIn"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "maxForwardVelInPerS",
+        "maxStrafeVelInPerS",
+        "forwardDecelInPerS2",
+        "strafeDecelInPerS2",
+        "accelInPerS2",
+        "maxAngularVelRadPerS",
+        "defaultPathSpeedFraction",
+        "follower"
+      ],
+      "additionalProperties": false
+    },
+    "mouths": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "FRONT",
+              "BACK",
+              "LEFT",
+              "RIGHT"
+            ]
+          },
+          "offsetIn": {
+            "type": "object",
+            "properties": {
+              "xIn": {
+                "type": "number"
+              },
+              "yIn": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "xIn",
+              "yIn"
+            ],
+            "additionalProperties": false
+          },
+          "widthIn": {
+            "type": "number",
+            "exclusiveMinimum": true,
+            "minimum": 0
+          },
+          "depthIn": {
+            "type": "number",
+            "exclusiveMinimum": true,
+            "minimum": 0
+          },
+          "provenance": {
+            "$ref": "#/properties/footprint/properties/startIn/properties/provenance"
+          }
+        },
+        "required": [
+          "id",
+          "side",
+          "offsetIn",
+          "widthIn",
+          "depthIn"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "capacity": {
+      "type": "object",
+      "properties": {
+        "elementKind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provenance": {
+          "$ref": "#/properties/footprint/properties/startIn/properties/provenance"
+        }
+      },
+      "required": [
+        "elementKind",
+        "max"
+      ],
+      "additionalProperties": false
+    },
+    "shooter": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "turretRangeRad": {
+          "type": "object",
+          "properties": {
+            "minRad": {
+              "type": "number"
+            },
+            "maxRad": {
+              "type": "number"
+            },
+            "provenance": {
+              "$ref": "#/properties/footprint/properties/startIn/properties/provenance"
+            }
+          },
+          "required": [
+            "minRad",
+            "maxRad"
+          ],
+          "additionalProperties": false
+        },
+        "cadenceS": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "settleS": {
+          "$ref": "#/properties/footprint/properties/heightIn"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": true
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "summary": {
+            "type": "string"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "integer"
+                    },
+                    "min": {
+                      "type": "number"
+                    },
+                    "max": {
+                      "type": "number"
+                    },
+                    "default": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "number"
+                    },
+                    "min": {
+                      "type": "number"
+                    },
+                    "max": {
+                      "type": "number"
+                    },
+                    "default": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "enum"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "minItems": 1
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "boolean"
+                    },
+                    "default": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "string"
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "estimateS": {
+            "type": "string"
+          },
+          "requires": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "stationary": {
+            "type": "boolean"
+          },
+          "movesRobot": {
+            "type": "boolean"
+          },
+          "ledger": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number"
+              ]
+            }
+          }
+        },
+        "required": [
+          "name",
+          "estimateS"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "summary": {
+            "type": "string"
+          },
+          "ledger": {
+            "type": "string",
+            "enum": [
+              "full",
+              "empty"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "formatVersion",
+    "name",
+    "frame",
+    "footprint",
+    "kinematics",
+    "commands"
+  ],
+  "additionalProperties": false
+}

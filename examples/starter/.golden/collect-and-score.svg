@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1052" height="770" viewBox="0 0 1052 770" font-family="IBM Plex Sans, Segoe UI, Noto Sans, sans-serif">
+<rect width="1052" height="770" fill="#060709"/>
+<g id="header">
+<text x="16" y="20" fill="#edeff1" font-size="15">Collect and score</text>
+<text x="1036" y="20" fill="#b5b8bb" font-size="12" text-anchor="end" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">RED · 13.48 s (10.79-16.18) at least · no findings</text>
+</g>
+<g id="field">
+<line x1="16" y1="754" x2="16" y2="34" stroke="#45484b" stroke-width="0.5"/>
+<line x1="76" y1="754" x2="76" y2="34" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="136" y1="754" x2="136" y2="34" stroke="#45484b" stroke-width="0.5"/>
+<line x1="196" y1="754" x2="196" y2="34" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="256" y1="754" x2="256" y2="34" stroke="#45484b" stroke-width="0.5"/>
+<line x1="316" y1="754" x2="316" y2="34" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="376" y1="754" x2="376" y2="34" stroke="#616a75" stroke-width="1"/>
+<line x1="436" y1="754" x2="436" y2="34" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="496" y1="754" x2="496" y2="34" stroke="#45484b" stroke-width="0.5"/>
+<line x1="556" y1="754" x2="556" y2="34" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="616" y1="754" x2="616" y2="34" stroke="#45484b" stroke-width="0.5"/>
+<line x1="676" y1="754" x2="676" y2="34" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="736" y1="754" x2="736" y2="34" stroke="#45484b" stroke-width="0.5"/>
+<line x1="16" y1="754" x2="736" y2="754" stroke="#45484b" stroke-width="0.5"/>
+<line x1="16" y1="694" x2="736" y2="694" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="16" y1="634" x2="736" y2="634" stroke="#45484b" stroke-width="0.5"/>
+<line x1="16" y1="574" x2="736" y2="574" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="16" y1="514" x2="736" y2="514" stroke="#45484b" stroke-width="0.5"/>
+<line x1="16" y1="454" x2="736" y2="454" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="16" y1="394" x2="736" y2="394" stroke="#616a75" stroke-width="1"/>
+<line x1="16" y1="334" x2="736" y2="334" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="16" y1="274" x2="736" y2="274" stroke="#45484b" stroke-width="0.5"/>
+<line x1="16" y1="214" x2="736" y2="214" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="16" y1="154" x2="736" y2="154" stroke="#45484b" stroke-width="0.5"/>
+<line x1="16" y1="94" x2="736" y2="94" stroke="#2c2e31" stroke-width="0.5"/>
+<line x1="16" y1="34" x2="736" y2="34" stroke="#45484b" stroke-width="0.5"/>
+<rect x="16" y="34" width="720" height="720" fill="none" stroke="#35383c" stroke-width="1.5"/>
+<rect x="16" y="154" width="55" height="120" fill="#f0ab4d" fill-opacity="0.1" stroke="#f0ab4d" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="43.5" y="214" fill="#f0ab4d" font-size="9" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace" opacity="0.7">loadingZoneRed</text>
+<rect x="681" y="514" width="55" height="120" fill="#f0ab4d" fill-opacity="0.1" stroke="#f0ab4d" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="708.5" y="574" fill="#f0ab4d" font-size="9" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace" opacity="0.7">loadingZoneBlue</text>
+<rect x="262.25" y="301.1" width="100" height="185.8" fill="none" stroke="#5e646a" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="389.75" y="301.1" width="100" height="185.8" fill="none" stroke="#5e646a" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="496" y="297" width="5" height="194" fill="#262b2f" fill-opacity="1" stroke="#5e646a" stroke-width="1"/>
+<rect x="251" y="297" width="5" height="194" fill="#262b2f" fill-opacity="1" stroke="#5e646a" stroke-width="1"/>
+<rect x="16" y="499" width="24.5" height="30" fill="#262b2f" fill-opacity="1" stroke="#5e646a" stroke-width="1"/>
+<rect x="241" y="34" width="30" height="24.5" fill="#262b2f" fill-opacity="1" stroke="#5e646a" stroke-width="1"/>
+<rect x="711.5" y="259" width="24.5" height="30" fill="#262b2f" fill-opacity="1" stroke="#5e646a" stroke-width="1"/>
+<rect x="481" y="729.5" width="30" height="24.5" fill="#262b2f" fill-opacity="1" stroke="#5e646a" stroke-width="1"/>
+<circle cx="23" cy="747" r="7" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1"/>
+<circle cx="37" cy="747" r="7" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1"/>
+<circle cx="51" cy="747" r="7" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1"/>
+<circle cx="65" cy="747" r="7" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1"/>
+<circle cx="729" cy="41" r="7" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1"/>
+<circle cx="715" cy="41" r="7" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1"/>
+<circle cx="701" cy="41" r="7" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1"/>
+<circle cx="687" cy="41" r="7" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1"/>
+<circle cx="28.7" cy="514" r="15" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1" stroke-dasharray="2 2"/>
+<text x="28.7" y="496" fill="#d887ae" font-size="9" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">flower0</text>
+<circle cx="256" cy="46.7" r="15" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1" stroke-dasharray="2 2"/>
+<text x="256" y="28.7" fill="#d887ae" font-size="9" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">flower1</text>
+<circle cx="723.3" cy="274" r="15" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1" stroke-dasharray="2 2"/>
+<text x="723.3" y="256" fill="#d887ae" font-size="9" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">flower2</text>
+<circle cx="496" cy="741.3" r="15" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1" stroke-dasharray="2 2"/>
+<text x="496" y="723.3" fill="#d887ae" font-size="9" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">flower3</text>
+<circle cx="312.25" cy="394" r="15" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1" stroke-dasharray="2 2"/>
+<text x="312.25" y="376" fill="#d887ae" font-size="9" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">hiveRed</text>
+<circle cx="439.75" cy="394" r="15" fill="#d887ae" fill-opacity="0.18" stroke="#d887ae" stroke-width="1" stroke-dasharray="2 2"/>
+<text x="439.75" y="376" fill="#d887ae" font-size="9" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">hiveBlue</text>
+<g id="target-hiveRedUpCell" stroke="#ddb961" stroke-width="1" fill="none">
+<circle cx="312.25" cy="394" r="5"/>
+<line x1="304.25" y1="394" x2="320.25" y2="394"/>
+<line x1="312.25" y1="386" x2="312.25" y2="402"/>
+</g>
+<g id="target-hiveBlueUpCell" stroke="#ddb961" stroke-width="1" fill="none">
+<circle cx="439.75" cy="394" r="5"/>
+<line x1="431.75" y1="394" x2="447.75" y2="394"/>
+<line x1="439.75" y1="386" x2="439.75" y2="402"/>
+</g>
+<g id="target-flower0Top" stroke="#ddb961" stroke-width="1" fill="none">
+<circle cx="28.7" cy="514" r="5"/>
+<line x1="20.7" y1="514" x2="36.7" y2="514"/>
+<line x1="28.7" y1="506" x2="28.7" y2="522"/>
+</g>
+<g id="target-flower1Top" stroke="#ddb961" stroke-width="1" fill="none">
+<circle cx="256" cy="46.7" r="5"/>
+<line x1="248" y1="46.7" x2="264" y2="46.7"/>
+<line x1="256" y1="38.7" x2="256" y2="54.7"/>
+</g>
+<g id="target-flower2Top" stroke="#ddb961" stroke-width="1" fill="none">
+<circle cx="723.3" cy="274" r="5"/>
+<line x1="715.3" y1="274" x2="731.3" y2="274"/>
+<line x1="723.3" y1="266" x2="723.3" y2="282"/>
+</g>
+<g id="target-flower3Top" stroke="#ddb961" stroke-width="1" fill="none">
+<circle cx="496" cy="741.3" r="5"/>
+<line x1="488" y1="741.3" x2="504" y2="741.3"/>
+<line x1="496" y1="733.3" x2="496" y2="749.3"/>
+</g>
+<g id="waypoints">
+<circle cx="316" cy="709" r="2.5" fill="none" stroke="#92a0b1" stroke-width="1"/>
+<text x="321" y="705" fill="#92a0b1" font-size="9" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">start</text>
+<circle cx="316" cy="574" r="2.5" fill="none" stroke="#92a0b1" stroke-width="1"/>
+<text x="321" y="570" fill="#92a0b1" font-size="9" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">scoreSouth</text>
+<circle cx="71" cy="614" r="2.5" fill="none" stroke="#92a0b1" stroke-width="1"/>
+<text x="76" y="610" fill="#92a0b1" font-size="9" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">gardenApproach</text>
+<circle cx="71" cy="704" r="2.5" fill="none" stroke="#92a0b1" stroke-width="1"/>
+<text x="76" y="700" fill="#92a0b1" font-size="9" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">gardenPickup</text>
+<circle cx="176" cy="574" r="2.5" fill="none" stroke="#92a0b1" stroke-width="1"/>
+<text x="181" y="570" fill="#92a0b1" font-size="9" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">park</text>
+</g>
+</g>
+<g id="findings" fill="none" stroke-linecap="round">
+</g>
+<g id="paths" fill="none" stroke-linejoin="round" stroke-linecap="round">
+<polyline id="path-driveOut" points="316,709 316,699 316,689 316,679 316,669 316,659 316,649 316,639 316,629 316,619 316,609 316,599 316,589 316,579 316,574" stroke="#98aebf" stroke-width="2"/>
+<polyline id="path-toGarden" points="316,574 311.87,565.17 303.92,559.2 294.91,554.87 285.48,551.52 275.85,548.84 266.09,546.68 256.24,544.93 246.33,543.56 236.38,542.52 226.41,541.79 216.41,541.36 206.41,541.23 196.42,541.39 186.42,541.87 176.46,542.66 166.52,543.8 156.63,545.3 146.82,547.22 137.1,549.58 127.53,552.45 118.15,555.91 109.05,560.05 100.35,564.99 92.25,570.84 85,577.72 78.96,585.66 74.49,594.58 71.83,604.21 71,614" stroke="#98aebf" stroke-width="2"/>
+<polyline id="path-sweepGarden" points="71,614 71,624 71,634 71,644 71,654 71,664 71,674 71,684 71,694 71,704" stroke="#98aebf" stroke-width="2"/>
+<polyline id="path-driveBack" points="71,704 71.23,693.99 71.96,684 73.21,674.08 75.02,664.27 77.44,654.56 80.49,645.03 84.18,635.76 88.54,626.75 93.55,618.12 99.21,609.87 105.48,602.09 112.33,594.8 119.69,588.04 127.52,581.82 135.76,576.16 144.35,571.05 153.25,566.48 162.39,562.44 171.75,558.92 181.28,555.89 190.95,553.34 200.73,551.26 210.59,549.63 220.53,548.45 230.51,547.72 240.5,547.44 250.5,547.61 260.48,548.27 270.41,549.46 280.25,551.24 289.92,553.73 299.31,557.17 308.05,561.98 314.81,569.22 316,574" stroke="#98aebf" stroke-width="2"/>
+</g>
+<g id="ghosts">
+<polygon points="271,664 271,754 361,754 361,664" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="316" y1="709" x2="316" y2="679" stroke="#eace8c" stroke-width="1"/>
+<polygon points="271,624 271,714 361,714 361,624" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="316" y1="669" x2="316" y2="639" stroke="#eace8c" stroke-width="1"/>
+<polygon points="271,544 271,634 361,634 361,544" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="316" y1="589" x2="316" y2="559" stroke="#eace8c" stroke-width="1"/>
+<polygon points="271,529 271,619 361,619 361,529" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="316" y1="574" x2="316" y2="544" stroke="#eace8c" stroke-width="1"/>
+<polygon points="271,529 271,619 361,619 361,529" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="316" y1="574" x2="316" y2="544" stroke="#eace8c" stroke-width="1"/>
+<polygon points="236.26,579.59 319.63,613.51 353.55,530.15 270.19,496.23" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="294.91" y1="554.87" x2="267.12" y2="543.56" stroke="#eace8c" stroke-width="1"/>
+<polygon points="161.49,586.3 251.49,586.16 251.34,496.16 161.34,496.3" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="206.41" y1="541.23" x2="176.41" y2="541.28" stroke="#eace8c" stroke-width="1"/>
+<polygon points="89.23,620.53 169.52,579.88 128.87,499.58 48.57,540.23" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="109.05" y1="560.05" x2="82.28" y2="573.61" stroke="#eace8c" stroke-width="1"/>
+<polygon points="108.39,656.29 123.92,567.64 35.27,552.12 19.74,640.77" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="71.83" y1="604.21" x2="66.66" y2="633.76" stroke="#eace8c" stroke-width="1"/>
+<polygon points="116,659 116,569 26,569 26,659" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="71" y1="614" x2="71" y2="644" stroke="#eace8c" stroke-width="1"/>
+<polygon points="116,659 116,569 26,569 26,659" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="71" y1="614" x2="71" y2="644" stroke="#eace8c" stroke-width="1"/>
+<polygon points="116,689 116,599 26,599 26,689" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="71" y1="644" x2="71" y2="674" stroke="#eace8c" stroke-width="1"/>
+<polygon points="116,739 116,649 26,649 26,739" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="71" y1="694" x2="71" y2="724" stroke="#eace8c" stroke-width="1"/>
+<polygon points="116,749 116,659 26,659 26,749" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="71" y1="704" x2="71" y2="734" stroke="#eace8c" stroke-width="1"/>
+<polygon points="116,749 116,659 26,659 26,749" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="71" y1="704" x2="71" y2="734" stroke="#eace8c" stroke-width="1"/>
+<polygon points="109.51,717.75 128.51,629.78 40.54,610.78 21.54,698.75" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="75.02" y1="664.27" x2="68.69" y2="693.59" stroke="#eace8c" stroke-width="1"/>
+<polygon points="111.94,658.44 175.97,595.18 112.71,531.16 48.69,594.41" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="112.33" y1="594.8" x2="90.99" y2="615.88" stroke="#eace8c" stroke-width="1"/>
+<polygon points="157.57,607.52 245.14,586.72 224.33,499.15 136.77,519.96" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="190.95" y1="553.34" x2="161.76" y2="560.27" stroke="#eace8c" stroke-width="1"/>
+<polygon points="233.76,583.67 319.85,609.89 346.07,523.79 259.98,497.58" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="289.92" y1="553.73" x2="261.22" y2="544.99" stroke="#eace8c" stroke-width="1"/>
+<polygon points="271,529 271,619 361,619 361,529" fill="#98aebf" fill-opacity="0.16" stroke="#98aebf" stroke-width="0.5" stroke-opacity="0.5"/>
+<line x1="316" y1="574" x2="316" y2="544" stroke="#eace8c" stroke-width="1"/>
+</g>
+<g id="markers">
+<line x1="71" y1="614" x2="71" y2="602" stroke="#7be6e2" stroke-width="1"/>
+<circle cx="71" cy="600" r="3" fill="#7be6e2"/>
+<text x="76" y="598" fill="#7be6e2" font-size="9" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">intakeOn</text>
+</g>
+<g id="ledger">
+<rect x="736" y="34" width="300" height="720" fill="#15171a" stroke="#25282b" stroke-width="1"/>
+<text x="752" y="52" fill="#edeff1" font-size="12">Ledger</text>
+<text x="752" y="72" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">scorePreload: launched 4</text>
+<text x="752" y="85" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">hiveRed up cell holds 7 pieces</text>
+<text x="752" y="105" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">sweepGarden: collected 4 from gardenRed</text>
+<text x="752" y="125" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">scoreCollected: launched 4</text>
+<text x="752" y="138" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">hiveRed tipped and now faces NORTH; 11 pieces spilled to an unknown place</text>
+<text x="752" y="158" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">robot</text>
+<text x="752" y="171" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">empty</text>
+<text x="752" y="191" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">hiveRed</text>
+<text x="752" y="204" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">up NORTH, 1 tip, 0 pieces in the up cell</text>
+<text x="752" y="224" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">hiveBlue</text>
+<text x="752" y="237" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">up NORTH, 0 tips, 3 pieces in the up cell</text>
+<text x="752" y="257" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">flower0</text>
+<text x="752" y="270" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">4 pieces</text>
+<text x="752" y="290" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">flower1</text>
+<text x="752" y="303" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">4 pieces</text>
+<text x="752" y="323" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">flower2</text>
+<text x="752" y="336" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">4 pieces</text>
+<text x="752" y="356" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">flower3</text>
+<text x="752" y="369" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">4 pieces</text>
+<text x="752" y="389" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">garden</text>
+<text x="752" y="402" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">4 pieces</text>
+<text x="752" y="422" fill="#b5b8bb" font-size="11" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">loose</text>
+<text x="752" y="435" fill="#8c8f94" font-size="10" font-family="IBM Plex Mono, ui-monospace, Consolas, monospace">11 pieces, position unknown</text>
+</g>
+</svg>

@@ -1,0 +1,371 @@
+/* GitHub mode's own chrome, on the tokens of apps/web/UI_GUIDE.md: no new colours, no new sizes. */
+
+.prose {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.warn {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--sev-warn-bg);
+  color: var(--sev-warn);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+}
+
+.error {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--sev-error-bg);
+  color: var(--sev-error);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+}
+
+.ok {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.steps {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.steps strong {
+  color: var(--text-hi);
+  font-weight: var(--fw-medium);
+}
+
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.token {
+  width: 100%;
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-mid);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+/* ---- The toolbar's status chip ------------------------------------------ */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--ctl-h-sm);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+  max-width: 360px;
+  overflow: hidden;
+}
+
+.chip:hover {
+  background: var(--bg-hover);
+}
+
+.initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-selected);
+  color: var(--text-hi);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--tracking-wide);
+}
+
+.repoName {
+  color: var(--text-hi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch {
+  color: var(--text-lo);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.baseWarn {
+  color: var(--sev-warn);
+}
+
+/* ---- Repository and branch pickers --------------------------------------- */
+
+.search {
+  width: 100%;
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  height: var(--row-h-comfortable);
+  padding-inline: var(--pad-row-x);
+  text-align: left;
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.listRow:hover {
+  background: var(--bg-hover);
+}
+
+.listRow[aria-selected="true"] {
+  background: var(--bg-selected);
+  font-weight: var(--fw-medium);
+}
+
+.listMeta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.empty {
+  padding: var(--space-3) var(--pad-row-x);
+  font-size: var(--fs-sm);
+  color: var(--text-lo);
+}
+
+/* ---- Propose ------------------------------------------------------------- */
+
+.prUrl {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+/* ---- Review -------------------------------------------------------------- */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--pad-row-x);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-default);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.bannerTitle {
+  color: var(--text-hi);
+  font-weight: var(--fw-medium);
+}
+
+.bannerMono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.bannerSpacer {
+  flex: 1 1 auto;
+}
+
+.changeRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-h-comfortable);
+  padding: var(--space-1) var(--pad-row-x);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  width: 100%;
+}
+
+.changeRow:hover {
+  background: var(--bg-hover);
+}
+
+.changeRow[aria-selected="true"] {
+  background: var(--bg-selected);
+}
+
+.changeHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.changeId {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kind {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  background: var(--bg-inset);
+  color: var(--text-lo);
+}
+
+.kind[data-kind="added"] {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.kind[data-kind="removed"] {
+  color: var(--sev-error);
+  background: var(--sev-error-bg);
+}
+
+.kind[data-kind="moved"] {
+  color: var(--sev-info);
+  background: var(--sev-info-bg);
+}
+
+.changeSummary {
+  grid-column: 1 / -1;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.delta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-variant-numeric: var(--numeric);
+  color: var(--text-mid);
+  white-space: nowrap;
+}
+
+.delta[data-sign="slower"] {
+  color: var(--sev-warn);
+}
+
+.delta[data-sign="faster"] {
+  color: var(--ok);
+}
+
+.totals {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--pad-row-x);
+  border-top: 1px solid var(--border-default);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.totalValue {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  color: var(--text-hi);
+}
+
+.readOnly {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}

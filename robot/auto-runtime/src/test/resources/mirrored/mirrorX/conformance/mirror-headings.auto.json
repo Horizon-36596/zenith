@@ -1,0 +1,239 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "mirror-headings",
+  "title": "Every heading mode, with numbers a mirror has to move",
+  "alliance": "BLUE",
+  "start": {
+    "pose": {
+      "xIn": -48,
+      "yIn": 48,
+      "headingRad": -0.3
+    }
+  },
+  "steps": [
+    {
+      "id": "constant",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -48,
+            "yIn": 48
+          },
+          "to": {
+            "xIn": -24,
+            "yIn": 48
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "headingRad": -0.7
+      }
+    },
+    {
+      "id": "sweep270",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -24,
+            "yIn": 48
+          },
+          "to": {
+            "xIn": -24,
+            "yIn": 24
+          }
+        },
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -24,
+            "yIn": 24
+          },
+          "to": {
+            "xIn": -48,
+            "yIn": 24
+          }
+        }
+      ],
+      "heading": {
+        "mode": "linear",
+        "fromRad": 2.3562,
+        "toRad": -2.3562
+      },
+      "markers": [
+        {
+          "at": {
+            "t": 0.5
+          },
+          "command": {
+            "name": "instant",
+            "args": {
+              "at": "sweepJoin"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "linearFromHere",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -12,
+            "yIn": 36
+          }
+        }
+      ],
+      "heading": {
+        "mode": "linear",
+        "fromRad": -2.3562,
+        "toRad": -3
+      }
+    },
+    {
+      "id": "facePoint",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "bezier",
+          "from": {
+            "xIn": -12,
+            "yIn": 36
+          },
+          "control": [
+            {
+              "xIn": 0,
+              "yIn": 60
+            }
+          ],
+          "to": {
+            "xIn": -36,
+            "yIn": 60
+          }
+        }
+      ],
+      "heading": {
+        "mode": "facePoint",
+        "xIn": -60,
+        "yIn": -12
+      }
+    },
+    {
+      "id": "piecewise",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -36,
+            "yIn": 60
+          },
+          "to": {
+            "xIn": -12,
+            "yIn": 60
+          }
+        },
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -12,
+            "yIn": 60
+          },
+          "to": {
+            "xIn": -12,
+            "yIn": 36
+          }
+        }
+      ],
+      "heading": {
+        "mode": "piecewise",
+        "ranges": [
+          {
+            "startT": 0,
+            "endT": 0.3,
+            "heading": {
+              "mode": "constant",
+              "headingRad": 1
+            }
+          },
+          {
+            "startT": 0.3,
+            "endT": 0.7,
+            "heading": {
+              "mode": "linear",
+              "fromRad": -0.5,
+              "toRad": -2.5
+            }
+          },
+          {
+            "startT": 0.7,
+            "endT": 0.85,
+            "heading": {
+              "mode": "facePoint",
+              "xIn": 30,
+              "yIn": 30
+            }
+          },
+          {
+            "startT": 0.85,
+            "endT": 1,
+            "heading": {
+              "mode": "tangentReversed"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tangentReversed",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -48,
+            "yIn": 48
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangentReversed"
+      }
+    },
+    {
+      "id": "tangent",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "bezier",
+          "from": {
+            "xIn": -48,
+            "yIn": 48
+          },
+          "control": [
+            {
+              "xIn": -60,
+              "yIn": 12
+            }
+          ],
+          "to": {
+            "xIn": -24,
+            "yIn": 12
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      }
+    }
+  ]
+}

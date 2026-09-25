@@ -1,0 +1,77 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "first-auto",
+  "title": "First auto",
+  "description": "The smallest useful auto: drive out from the start tile, score the four preloaded pollen, and park. Three steps: a path, a command and another path. The getting-started guide walks through it.",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "alliance": "BLUE",
+  "authors": [
+    "Horizon (FTC 36596)"
+  ],
+  "created": "2026-09-23",
+  "start": {
+    "pose": {
+      "xIn": -12,
+      "yIn": 63,
+      "headingRad": -1.5708
+    },
+    "holds": {
+      "pollen": 4
+    }
+  },
+  "steps": [
+    {
+      "id": "driveOut",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -12,
+            "yIn": 63,
+            "headingRad": -1.5708
+          },
+          "to": {
+            "xIn": -12,
+            "yIn": 36,
+            "headingRad": -1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "notes": "A straight line north to the scoring spot. Tangent heading keeps the front of the robot pointing the way it drives."
+    },
+    {
+      "id": "scorePreload",
+      "kind": "command",
+      "name": "score",
+      "args": {
+        "count": 4
+      },
+      "notes": "Launches the four preloaded pollen. score is stationary in robot.json, so it runs as its own step while the robot stands still."
+    },
+    {
+      "id": "park",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -40,
+            "yIn": 36,
+            "headingRad": -3.1416
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "notes": "from current starts where the last step ended, so the park leg follows on from wherever the robot scored."
+    }
+  ]
+}

@@ -1,0 +1,296 @@
+/* The desktop actions' floating panel and the title bar's menu button (desktopPanel.tsx). Reads the
+   app's own tokens, with fallbacks. */
+
+/* In the title bar, just left of the window controls Electron draws over it (titleBarOverlay). */
+.menuButton {
+  position: fixed;
+  top: 0;
+  right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 4px);
+  z-index: calc(var(--z-titlebar, 35) + 1);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: var(--titlebar-h, 36px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-mid, #cbb9cf);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.menuButton:hover {
+  background: var(--bg-hover, rgb(255 255 255 / 8%));
+  color: var(--text-hi, #faf6fb);
+}
+
+.menuButton:focus-visible {
+  outline: var(--ring-width, 2px) solid var(--ring, #ffcb5c);
+  outline-offset: -2px;
+}
+
+.panel {
+  position: fixed;
+  right: var(--space-4, 16px);
+  bottom: calc(var(--space-8, 32px) + 8px);
+  z-index: 50;
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(70vh, 640px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  padding: var(--space-4, 16px);
+  background: var(--bg-raised, #2a1330);
+  color: var(--text-hi, #f5eef6);
+  border: 1px solid var(--border-default, #4a2f52);
+  border-radius: var(--radius-md, 6px);
+  box-shadow: var(--shadow-modal, 0 12px 40px rgb(0 0 0 / 45%));
+  font-size: var(--fs-sm, 13px);
+  line-height: var(--lh-sm, 1.45);
+}
+
+/* The Horizon gradient as a thin top edge: brand chrome, not content (09 section 1). */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  border-radius: var(--radius-md, 6px) var(--radius-md, 6px) 0 0;
+  background: var(--brand-gradient, linear-gradient(90deg, #ffcb5c, #f86a43, #b13848));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-md, 14px);
+  font-weight: var(--fw-semibold, 600);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-mid, #cbb9cf);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--bg-hover, rgb(255 255 255 / 8%));
+  color: var(--text-hi, #fff);
+}
+
+.prose {
+  margin: 0;
+  color: var(--text-mid, #cbb9cf);
+}
+
+.ok {
+  margin: 0;
+  color: var(--ok, #6fcf97);
+}
+
+.ok a {
+  color: inherit;
+}
+
+.error {
+  margin: 0;
+  color: var(--sev-error, #ff7a7a);
+  white-space: pre-wrap;
+}
+
+.note {
+  color: var(--text-lo, #9d8aa3);
+}
+
+.command,
+.code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs, 12px);
+  color: var(--text-lo, #9d8aa3);
+  overflow-wrap: anywhere;
+}
+
+.command {
+  margin: 0;
+}
+
+.lastLine {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs, 12px);
+  color: var(--text-mid, #cbb9cf);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--bar-track, rgb(255 255 255 / 10%));
+}
+
+.progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  background: var(--brand-gradient, linear-gradient(90deg, #ffcb5c, #f86a43, #b13848));
+  animation: slide 1.4s ease-in-out infinite;
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(290%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}
+
+.log {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--space-2, 8px);
+  background: var(--bg-inset, #12040f);
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-mid, #cbb9cf);
+}
+
+.linkButton {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-mid, #cbb9cf);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.list li {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.chip {
+  flex: none;
+  min-width: 56px;
+  font-size: var(--fs-micro, 11px);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label, 0.04em);
+  color: var(--text-lo, #9d8aa3);
+}
+
+.path {
+  min-width: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs, 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reason {
+  color: var(--sev-warn, #f2c14e);
+  font-size: var(--fs-xs, 12px);
+}
+
+.skipRow .path {
+  color: var(--sev-warn, #f2c14e);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px var(--space-3, 12px);
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--text-lo, #9d8aa3);
+}
+
+.facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.factRow {
+  display: contents;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-mid, #cbb9cf);
+}
+
+.input {
+  height: 28px;
+  padding: 0 var(--space-2, 8px);
+  border: 1px solid var(--border-default, #4a2f52);
+  border-radius: 4px;
+  background: var(--bg-inset, #12040f);
+  color: var(--text-hi, #fff);
+  font: inherit;
+}
+
+.input:focus-visible {
+  outline: var(--ring-width, 2px) solid var(--ring, #f86a43);
+  outline-offset: 1px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-1, 4px);
+}

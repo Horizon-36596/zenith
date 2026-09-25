@@ -1,0 +1,21 @@
+# How JitPack builds the Zenith robot runtime.
+#
+# JitPack builds a git tag on demand and serves whatever the build installs into the local Maven
+# repository, which is why publishToMavenLocal is the whole install step and no credentials are involved.
+#
+# The Gradle build lives under robot/, because the repository root belongs to the pnpm workspace; `-p
+# robot` points the wrapper at it. Exactly one module is published, :auto-runtime, and that is what makes
+# JitPack serve it under the repository's own name: com.github.Horizon-36596:zenith:<tag>. Publishing a
+# second module would switch JitPack to com.github.Horizon-36596.zenith:<module>:<tag>.
+#
+# JDK 17 because the Android Gradle Plugin 8.7 requires it. JitPack's default is older and fails with a
+# Java-version error before any of this project's code is compiled.
+jdk:
+  - openjdk17
+
+before_install:
+  # Git on Windows can check the wrapper out without its executable bit.
+  - chmod +x robot/gradlew
+
+install:
+  - ./robot/gradlew -p robot :auto-runtime:publishToMavenLocal

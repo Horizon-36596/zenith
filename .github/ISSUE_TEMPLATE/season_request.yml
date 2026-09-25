@@ -1,0 +1,47 @@
+name: Season request
+description: Ask for a season plugin for an FTC game Zenith does not support yet.
+title: "season: "
+labels: ["season"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Zenith already plans paths for any season. A plugin adds the game rules: scoring, legal
+        approaches, start rules and the ledger. See
+        [Seasons](https://libraries.horizon36596.org/zenith/seasons/) for what a plugin does.
+  - type: input
+    id: season
+    attributes:
+      label: Season name
+      placeholder: "GAME NAME presented by SPONSOR (FTC 20XX-YY)"
+    validations:
+      required: true
+  - type: input
+    id: manual
+    attributes:
+      label: Game manual link
+      description: A link to the official game manual.
+    validations:
+      required: true
+  - type: textarea
+    id: field
+    attributes:
+      label: Field CAD or dimensions
+      description: |
+        A link to the official field CAD, a drawing, or the dimensions you have. Say where each number
+        came from.
+  - type: textarea
+    id: scoring
+    attributes:
+      label: Scoring summary
+      description: |
+        What the robot collects, where it scores in auto, and any rules that decide whether a shot or
+        a start position is legal.
+    validations:
+      required: true
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Helping out
+      options:
+        - label: I would like to write or test the plugin.

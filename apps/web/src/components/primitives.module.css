@@ -1,0 +1,346 @@
+/* Every value below is a token. A literal colour, radius, size or duration here is a bug. */
+
+/* ---- Toolbar and ghost buttons (UI_GUIDE 8.1) --------------------------- */
+
+.tool {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--ctl-h-tool);
+  height: var(--ctl-h-tool);
+  border-radius: var(--radius-xs);
+  color: var(--text-mid);
+  background: transparent;
+  transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+
+.tool:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+.tool:disabled,
+.tool[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.toolActive {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.toolBar::after {
+  content: "";
+  position: absolute;
+  inset-inline: 2px;
+  bottom: 0;
+  height: 2px;
+  background: var(--brand-gradient);
+}
+
+.ghost,
+.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--ctl-h-lg);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  transition: background var(--dur-base) var(--ease-out);
+}
+
+.ghost {
+  border: 1px solid var(--border-default);
+  color: var(--text-hi);
+  background: transparent;
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-weight: var(--fw-medium);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.ghost:disabled,
+.primary:disabled {
+  color: var(--text-disabled);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+}
+
+.rowButton {
+  display: inline-grid;
+  place-items: center;
+  width: var(--ctl-h-sm);
+  height: var(--ctl-h-sm);
+  border-radius: var(--radius-xs);
+  color: var(--text-mid);
+}
+
+.rowButton:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+.rowButton:disabled,
+.rowButton[aria-disabled="true"] {
+  color: var(--text-disabled);
+}
+
+/* ---- Severity (UI_GUIDE 8.4, 8.5) --------------------------------------- */
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+
+.dot[data-severity="error"] {
+  background: var(--sev-error);
+}
+
+.dot[data-severity="warning"] {
+  background: var(--sev-warn);
+}
+
+.dot[data-severity="info"] {
+  background: var(--sev-info);
+}
+
+.badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 8px;
+  height: 8px;
+  padding-inline: 2px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: var(--lh-micro);
+  color: var(--text-on-accent);
+}
+
+.badge[data-severity="error"] {
+  background: var(--sev-error);
+}
+
+.badge[data-severity="warning"] {
+  background: var(--sev-warn);
+}
+
+.badge[data-severity="info"] {
+  background: var(--sev-info);
+}
+
+.badgeCount {
+  padding-inline: 2px;
+}
+
+/* ---- The estimate bar (UI_GUIDE 4) -------------------------------------- */
+
+.barTrack {
+  position: relative;
+  display: inline-block;
+  height: var(--bar-h);
+  background: var(--bar-track);
+  border-radius: var(--radius-0);
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.barEstimated,
+.barUnknown,
+.barActual {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: var(--bar-h);
+}
+
+.barEstimated {
+  background: var(--bar-estimated);
+}
+
+.barUnknown {
+  background-color: var(--bar-unknown);
+  background-image: var(--bar-unknown-hatch);
+}
+
+.barActual {
+  top: auto;
+  bottom: 0;
+  height: 2px;
+  background: var(--bar-actual);
+}
+
+/* ---- Provenance chip (UI_GUIDE 8.3) ------------------------------------- */
+
+.chipWrap,
+.chipButton {
+  display: inline-flex;
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-h-sm);
+  padding-inline: 6px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  letter-spacing: var(--tracking-wide);
+  white-space: nowrap;
+}
+
+.chip[data-tier="measured"] {
+  color: var(--prov-measured);
+  background: var(--prov-measured-bg);
+}
+
+.chip[data-tier="derived"] {
+  color: var(--prov-derived);
+  background: var(--prov-derived-bg);
+}
+
+.chip[data-tier="unverified"] {
+  color: var(--prov-unverified);
+  background: var(--prov-unverified-bg);
+}
+
+/* ---- Panels (UI_GUIDE 3, 6) --------------------------------------------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  background: var(--bg-panel);
+}
+
+/* UI_GUIDE 9.3: a 40 px region title in Jost, the ? 8 px after it, no rule under it. */
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  flex: none;
+  height: 40px;
+  padding-inline: var(--pad-panel) var(--pad-row-x);
+}
+
+.panelTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+  white-space: nowrap;
+}
+
+.panelFold {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: calc(-1 * var(--space-1));
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  color: var(--text-lo);
+}
+
+.panelFold:hover {
+  background: var(--bg-hover);
+}
+
+.panelSummary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--text-lo);
+}
+
+.panel[data-folded="true"] {
+  height: auto;
+}
+
+.panelActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.panelBody,
+.panelBodyScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.panelBodyScroll {
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+/* ---- Empty state (UI_GUIDE 8.9) ----------------------------------------- */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--pad-panel);
+  color: var(--text-disabled);
+}
+
+.emptyLine {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.emptyHint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}
+
+.emptyAction {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+}
+
+.emptyShortcut {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.unavailable {
+  margin: 0;
+  padding: var(--pad-panel);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}

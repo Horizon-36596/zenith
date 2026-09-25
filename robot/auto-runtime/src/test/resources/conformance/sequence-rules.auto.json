@@ -1,0 +1,55 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 2,
+  "name": "sequence-rules",
+  "title": "Every end rule in a sequence",
+  "alliance": "RED",
+  "start": { "pose": { "ref": "a" } },
+  "steps": [
+    {
+      "id": "markers",
+      "kind": "path",
+      "segments": [
+        { "kind": "line", "from": { "ref": "a" }, "to": { "ref": "b" } },
+        { "kind": "bezier", "from": { "ref": "b" }, "control": [{ "xIn": -12, "yIn": -40 }], "to": { "ref": "c" } }
+      ],
+      "heading": { "mode": "tangent" },
+      "markers": [
+        { "at": { "t": 1 }, "command": { "name": "instant", "args": { "at": "t1" } } },
+        { "at": { "t": 0 }, "command": { "name": "instant", "args": { "at": "t0" } } },
+        { "at": { "t": 0.5 }, "command": { "name": "take", "args": { "at": "t0.5", "loops": 2 } } },
+        { "at": { "distanceIn": 4 }, "command": { "name": "instant", "args": { "at": "4in" } } },
+        { "at": { "distanceFromEndIn": 6 }, "command": { "name": "instant", "args": { "at": "6in from end" } } }
+      ]
+    },
+    { "id": "timeoutFires", "kind": "command", "name": "forever", "timeoutS": 0.1 },
+    { "id": "timeoutSpare", "kind": "command", "name": "take", "args": { "loops": 3 }, "timeoutS": 1 },
+    { "id": "instantStep", "kind": "command", "name": "instant" },
+    { "id": "waitTime", "kind": "wait", "seconds": 0.1 },
+    { "id": "waitHolds", "kind": "wait", "until": "holdingPiece", "timeoutS": 2 },
+    { "id": "waitHopper", "kind": "wait", "until": "hopperFull" },
+    { "id": "waitNever", "kind": "wait", "until": "never", "timeoutS": 0.1 },
+    {
+      "id": "endFires",
+      "kind": "path",
+      "segments": [{ "kind": "line", "from": "current", "to": { "ref": "d" } }],
+      "heading": { "mode": "linear", "fromRad": 1.5708, "toRad": 0 },
+      "endCondition": { "condition": "pastHalfway" }
+    },
+    {
+      "id": "endSpare",
+      "kind": "path",
+      "segments": [{ "kind": "line", "from": "current", "to": { "ref": "c" } }],
+      "heading": { "mode": "tangentReversed" },
+      "endCondition": { "condition": "never" }
+    },
+    {
+      "id": "pathTimeout",
+      "kind": "path",
+      "timeoutS": 0.1,
+      "segments": [{ "kind": "line", "from": "current", "to": { "ref": "a" } }],
+      "heading": { "mode": "constant", "headingRad": 0 }
+    },
+    { "id": "last", "kind": "command", "name": "instant", "args": { "tag": "last" } }
+  ]
+}

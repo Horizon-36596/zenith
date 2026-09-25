@@ -1,0 +1,142 @@
+.tabs {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  align-self: flex-start;
+}
+
+.tab {
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-xs);
+  color: var(--text-mid);
+  font-size: var(--fs-sm);
+}
+
+.tab[aria-selected="true"] {
+  background: var(--bg-raised);
+  color: var(--text-hi);
+  font-weight: var(--fw-medium);
+}
+
+.prose {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.warn {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--sev-warn-bg);
+  color: var(--sev-warn);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.file {
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.fileLabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-mid);
+}
+
+.code {
+  margin: 0;
+  padding: var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.recentTitle {
+  margin: 0;
+  padding: var(--space-2) var(--pad-row-x);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-lo);
+}
+
+.recentRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  height: var(--row-h-comfortable);
+  padding-inline: var(--pad-row-x);
+  text-align: left;
+}
+
+.recentRow:hover {
+  background: var(--bg-hover);
+}
+
+.recentName {
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.recentPath {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.readRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-h);
+  padding-inline: var(--pad-row-x);
+}
+
+.readLabel {
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+  letter-spacing: var(--tracking-wide);
+}
+
+.readValue {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}

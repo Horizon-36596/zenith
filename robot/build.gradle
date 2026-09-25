@@ -1,0 +1,31 @@
+/**
+ * Top-level build file for the robot runtime. Everything that matters is in auto-runtime/build.gradle;
+ * this file puts the Android Gradle Plugin on the buildscript classpath and gives every project the same
+ * repositories.
+ *
+ * The AGP version is pinned rather than ranged, and it is the one Horizon's SimLoop library builds with.
+ * The runtime compiles against SolversLib, which is published as an Android library (AAR), so this has to
+ * be an Android build; tracking a newer AGP than the FTC SDK's own app buys nothing and can break a
+ * consumer's build for a reason that has nothing to do with this library.
+ */
+
+buildscript {
+    repositories {
+        mavenCentral()
+        google()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.7.0'
+    }
+}
+
+allprojects {
+    repositories {
+        mavenCentral()
+        google()
+        // SolversLib is served from here, not from Maven Central.
+        maven { url "https://repo.dairy.foundation/releases" }
+        // Pedro Pathing v3 is published only as a Sonatype snapshot.
+        maven { url "https://central.sonatype.com/repository/maven-snapshots" }
+    }
+}

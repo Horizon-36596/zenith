@@ -1,0 +1,39 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 2,
+  "name": "throw-in-execute",
+  "title": "A named command that throws",
+  "alliance": "RED",
+  "start": {
+    "pose": {
+      "ref": "a"
+    }
+  },
+  "steps": [
+    {
+      "id": "before",
+      "kind": "command",
+      "name": "take",
+      "args": {
+        "loops": 2
+      }
+    },
+    {
+      "id": "together",
+      "kind": "parallel",
+      "mode": "all",
+      "steps": [
+        {
+          "id": "bystander",
+          "kind": "command",
+          "name": "forever"
+        },
+        {
+          "id": "culprit",
+          "kind": "command",
+          "name": "throwInExecute"
+        }
+      ]
+    }
+  ]
+}

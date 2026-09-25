@@ -1,0 +1,17 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "qa-heading",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "alliance": "RED",
+  "start": { "pose": { "xIn": 0, "yIn": -40, "headingRad": 0 } },
+  "steps": [
+    {
+      "id": "turn",
+      "kind": "path",
+      "segments": [{ "kind": "line", "from": "current", "to": { "xIn": 24, "yIn": -40 } }],
+      "heading": { "mode": "linear", "fromRad": 0, "toRad": 3.5 }
+    }
+  ]
+}

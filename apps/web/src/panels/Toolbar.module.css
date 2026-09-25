@@ -1,0 +1,175 @@
+/* UI_GUIDE 9.1: the title bar over the horizon line. */
+.title {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  height: var(--titlebar-h);
+  padding-inline: var(--space-4);
+  background: var(--bg-chrome);
+  z-index: var(--z-titlebar);
+  /* Night chrome in both themes (QA-19): everything on the bar reads the chrome ink, whatever the
+     theme has done to the panels below it. Tooltips are portalled out, so they keep the theme. */
+  --text-hi: var(--chrome-text-hi);
+  --text-mid: var(--chrome-text-mid);
+  --text-lo: var(--chrome-text-lo);
+  --bg-hover: var(--chrome-hover);
+  --bg-active: var(--chrome-active);
+  --bg-inset: var(--chrome-inset);
+  --border-subtle: var(--chrome-border);
+  --border-default: var(--chrome-border);
+  --border-strong: var(--chrome-border-strong);
+  --ring: var(--chrome-ring);
+  --ring-shadow: 0 0 0 var(--ring-offset) var(--bg-chrome),
+                 0 0 0 calc(var(--ring-offset) + var(--ring-width)) var(--chrome-ring);
+  color: var(--text-hi);
+}
+
+/* The horizon line: the signature, and the title bar's only edge. */
+.title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--horizon-w);
+  background: var(--brand-gradient-horizon);
+  pointer-events: none;
+}
+
+/* The Zenith wordmark (`public/brand/`), outlined, so it needs no font. 16 px tall puts its Z
+   at the cap height of 20 px Jost, and it is always on the night chrome, so the dark version. It
+   leads the bar; the team follows it. */
+.product {
+  height: 16px;
+  width: auto;
+  flex: none;
+}
+
+/* A hairline between the product and the team, the height of the Zenith Z. */
+.divider {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  margin-inline: var(--space-1);
+  background: var(--chrome-border-strong);
+}
+
+/* Horizon's white text logo, the team's own file, unedited: sized here only. 20 px tall puts its
+   capitals at 12 px, a step under the Zenith wordmark's 14 px Z. */
+.team {
+  height: 20px;
+  width: auto;
+  flex: none;
+  margin-right: var(--space-2);
+}
+
+.autoName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--ctl-h-sm);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.autoName:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+.autoText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.where {
+  min-width: 0;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.dirty {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--text-mid);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.alliancePill {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-wide);
+}
+
+.alliancePill[data-alliance="RED"] {
+  color: var(--alliance-red-text);
+  background: var(--alliance-red-bg);
+}
+
+.alliancePill[data-alliance="BLUE"] {
+  color: var(--alliance-blue-text);
+  background: var(--alliance-blue-bg);
+}
+
+/* UI_GUIDE 9.2: the toolbar, three groups 16 px apart with no dividers, on the ground. */
+.bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: var(--space-4);
+  flex: none;
+  min-height: var(--toolbar-h);
+  padding-inline: var(--space-3);
+  background: var(--bg-app);
+  z-index: var(--z-toolbar);
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--ctl-h-tool);
+  padding-inline: var(--space-2) var(--space-2);
+  border-radius: var(--radius-xs);
+  color: var(--text-mid);
+  font-size: var(--fs-sm);
+}
+
+.search:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+.searchText {
+  color: inherit;
+}
+
+.searchKey {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}

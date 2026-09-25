@@ -1,0 +1,58 @@
+.inspector {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--space-6);
+}
+
+.readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.pose {
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pose:last-child {
+  border-bottom: 0;
+}
+
+.marker {
+  margin: var(--space-2) var(--pad-row-x);
+  padding-bottom: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.markerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--row-h-compact);
+  padding-inline: var(--pad-row-x);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.markerTitle {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+  letter-spacing: var(--tracking-wide);
+}
+
+.markerAdd {
+  display: flex;
+  justify-content: flex-start;
+  padding: var(--space-1) var(--pad-row-x);
+}
+
+.note {
+  margin: 0;
+  padding: var(--space-1) var(--pad-row-x) var(--space-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
