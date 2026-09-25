@@ -12,6 +12,11 @@ when the last one does. There are six kinds of step:
 | `parallel` | runs steps at the same time | `mode` (`all`, `race` or `deadline`), `deadline?`, `steps[]` | the runtime's `Parallel.all` / `Parallel.race` / `Parallel.deadline` |
 | `branch` | picks one of two lists by a condition | `condition`, `then[]`, `else[]` | `ConditionalCommand` |
 
+Only `path`, `command` and `wait` steps take a `timeoutS`. A `sequence`, `parallel` or `branch` has
+none: the editor drops one when it loads the file, and the robot ignores it and shows a warning on the
+Driver Station during init naming the step. To bound a group, put `timeoutS` on a step inside it, or
+make it a `deadline` group whose deadline is a `wait`.
+
 Every step may also carry an `id`. The editor always gives a new step one. Ids are how findings,
 the timeline, traces and a `parallel` group's `deadline` point at a step, so keep them short and
 descriptive: `driveOut`, `scorePreload`, `park`.

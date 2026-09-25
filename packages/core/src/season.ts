@@ -19,7 +19,14 @@ export interface SeasonRules {
   onCollect(state: SeasonState, containerId: string, count: number): SeasonState;
   currentTarget(state: SeasonState, alliance: "RED" | "BLUE"): TargetId | null;
   legalApproach(state: SeasonState, target: TargetId, pose: Pose, robot: Robot): boolean;
-  startLegal(field: Field, pose: Pose, robot: Robot): Finding[];
+  /**
+   * The start rules, for a start pose in the frame of `alliance`, the file's own alliance.
+   * `field.json`'s `startRules` are written for `field.frame.canonicalAlliance`; a plugin reads them
+   * for the other alliance through its own counterparts (its own half, its own loading zone).
+   * `alliance` is optional so a plugin written before it existed still type-checks; left out, it
+   * means the canonical alliance.
+   */
+  startLegal(field: Field, pose: Pose, robot: Robot, alliance?: "RED" | "BLUE"): Finding[];
   summary(state: SeasonState): LedgerRow[];
 
   /**

@@ -179,7 +179,7 @@ describe("laying the view out for the pane", () => {
   });
 });
 
-// Finding 21/22: view.ts no longer carries its own mirror math (mirrorPose/mirrorPoint deleted).
+// Finding 22: view.ts no longer carries its own mirror math (mirrorPose/mirrorPoint deleted).
 // The alliance mirror is now @horizon36596/zenith-core's mirrorVec/mirrorHeadingRad, exercised by
 // canvas/mirror.test.ts for every MirrorMode (none/pointSymmetry/mirrorX/mirrorY) including the
 // round-trip/involution behaviour this block used to check.

@@ -8,11 +8,12 @@
  * them without crowding. The only robot outline is the one at the playback time or under the
  * cursor (section 1: the footprint ghosts are gone).
  *
- * The BLUE mirror lives here and nowhere else: when `mirror` is not `"none"` every world point is
- * put through that kind of `field.json`'s `frame.mirror` on its way to the screen, and the pointer
- * goes back through the same function on its way out, so the shell only ever sees canonical RED
- * poses (finding 22: `mirrorVec`/`mirrorHeadingRad` are `@horizon36596/zenith-core`'s, the same ones `render`
- * uses, not a second hardcoded copy).
+ * The alliance mirror lives here and nowhere else: when the file is viewed as the other alliance,
+ * `mirror` is not `"none"` and every world point is put through that kind of `field.json`'s
+ * `frame.mirror` on its way to the screen, and the pointer goes back through the same function on
+ * its way out, so the shell only ever sees poses in the file's own alliance frame (finding 22:
+ * `mirrorVec`/`mirrorHeadingRad` are `@horizon36596/zenith-core`'s, the same ones `render` uses, not a
+ * second hardcoded copy).
  */
 import {
   footprintAt,
@@ -96,8 +97,16 @@ export interface LiveLayerInput {
   theme: CanvasTheme;
   robot: Robot;
   bounds: Box2;
-  /** `"none"` at rest; otherwise the field's own `frame.mirror` kind, while a BLUE preview draws. */
+  /**
+   * `"none"` while the file is viewed as its own alliance; otherwise the field's own `frame.mirror`
+   * kind, while it is viewed as the other one.
+   */
   mirror: MirrorMode;
+  /**
+   * The same for review mode's base version, which is in its own file's frame: not the head's when
+   * the change flipped the file's alliance. Absent means `mirror`.
+   */
+  baseMirror?: MirrorMode;
   selection: Selection;
   hover: CanvasHit | null;
   findings: readonly Finding[];
@@ -230,7 +239,8 @@ const drawFindingGeometry: Painter = (ctx, input) => {
 const drawBasePaths: Painter = (ctx, input) => {
   const base = input.baseScene;
   if (base === null || base === undefined) return;
-  const { view, mirror, theme } = input;
+  const { view, theme } = input;
+  const mirror = input.baseMirror ?? input.mirror;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.strokeStyle = theme.pathGhost;

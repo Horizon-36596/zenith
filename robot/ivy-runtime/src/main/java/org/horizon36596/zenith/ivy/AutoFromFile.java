@@ -60,7 +60,8 @@ import java.util.List;
  *       and outlives the last OpMode; read and check the file; build the robot ({@link ZenithRobot#init});
  *       fill {@link NamedCommands} ({@link ZenithRobot#registerCommands}); put the robot at the
  *       alliance-correct start pose; build the whole routine.</li>
- *   <li><b>Waiting for start</b> ({@link #initialize_loop()}): show the file and its step count.</li>
+ *   <li><b>Waiting for start</b> ({@link #initialize_loop()}): show the file, its step count and
+ *       each of the file's load warnings ({@code AutoFile.warnings}).</li>
  *   <li><b>Start</b> ({@link #startRoutine()}): {@code Scheduler.schedule(routine)}, which starts it at
  *       once, then a check that Ivy did start it. A command still running from init that holds one of
  *       its requirements at a higher priority would make Ivy drop the routine without a word; the
@@ -189,6 +190,11 @@ public abstract class AutoFromFile extends LinearOpMode implements AutoContext {
         robot.initLoop(this);
         telemetry.addData("Auto file", autoName() + ".auto.json (" + spec.title + ")");
         telemetry.addData("Auto steps", spec.steps.size());
+        // What the file says that the runtime read past (AutoFile.warnings), such as a timeoutS on a
+        // group step. Shown on every loop so it is still there after the team's own init telemetry.
+        for (String warning : spec.warnings) {
+            telemetry.addData("Zenith warning", warning);
+        }
         telemetry.update();
     }
 

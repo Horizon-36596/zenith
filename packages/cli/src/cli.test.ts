@@ -127,6 +127,12 @@ describe("zenith new", () => {
       expect(parsed.errors, alliance).toBe(0);
       expect(parsed.files[0]?.findings.map((finding) => finding.code), alliance).not.toContain("START_ILLEGAL");
     }
+    // A file's poses are in its own alliance's frame, so the BLUE skeleton is the RED one mirrored
+    // onto BLUE's half by the field's point symmetry, not the RED numbers under a BLUE label.
+    const startOf = (name: string): unknown =>
+      (JSON.parse(readFileSync(join(root, `autos/${name}.auto.json`), "utf8")) as { start: { pose: unknown } }).start.pose;
+    expect(startOf("fresh-red")).toMatchObject({ xIn: -12, yIn: -63, headingRad: 1.5708 });
+    expect(startOf("fresh-blue")).toMatchObject({ xIn: 12, yIn: 63, headingRad: -1.5708 });
   });
 
   it("refuses to overwrite an auto without --force", () => {

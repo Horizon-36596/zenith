@@ -164,4 +164,17 @@ class AutoBuilderTest {
         assertEquals(5 * 20_000_000L, robot.nowNanos);
         assertTrue(interrupted[0]);
     }
+
+    @Test
+    void aTimeoutOnAGroupDoesNotCutItShort() {
+        // The file format gives a group no timeoutS, and the editor drops one, so the runtime does too:
+        // the sequence runs its whole 0.3 s wait rather than stopping at 0.1 s.
+        Json root = Json.parse("{\"formatVersion\": 3, \"start\": {\"pose\": {\"xIn\": 0, \"yIn\": 0}},"
+                + " \"steps\": [{\"id\": \"group\", \"kind\": \"sequence\", \"timeoutS\": 0.1,"
+                + " \"steps\": [{\"id\": \"long\", \"kind\": \"wait\", \"seconds\": 0.3}]}]}", "group.auto.json");
+        AutoSpec spec = AutoSpec.parse(root, "group", Collections.<String, Pose2d>emptyMap());
+        assertEquals(1, spec.warnings.size(), spec.warnings.toString());
+        robot.run(AutoBuilder.build(spec, robot), 100);
+        assertTrue(robot.nowNanos >= 300_000_000L, "the group ran " + robot.nowNanos / 1_000_000 + " ms");
+    }
 }

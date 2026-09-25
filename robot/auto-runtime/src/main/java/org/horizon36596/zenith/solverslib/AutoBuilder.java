@@ -55,7 +55,8 @@ import java.util.function.Function;
  *   <tr><td>{@code sequence}</td><td>{@code SequentialCommandGroup} of its own steps, each still wrapped
  *       in {@code ctx.step(id, ...)}, so it nests inside a {@code parallel}'s {@code deadline}, a
  *       {@code branch} arm, or anywhere else a step goes, the same as every other kind</td></tr>
- *   <tr><td>any step's {@code timeoutS}</td><td>{@link RobotTimeout}, never {@code withTimeout}</td></tr>
+ *   <tr><td>a path, command or wait step's {@code timeoutS}</td><td>{@link RobotTimeout}, never
+ *       {@code withTimeout}; a group step has none ({@link org.horizon36596.zenith.AutoFile#warnings})</td></tr>
  * </table>
  *
  * <p><b>{@code "current"} defers.</b> A path whose first segment starts at the live pose cannot be

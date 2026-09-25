@@ -239,8 +239,10 @@ class ConformanceTest {
         assertEquals(1, count(log, "step deepForever interrupted"));
         assertEquals(1, count(log, "step afterRace end"), "three deep, the race still hands on to its sequence");
         assertEquals(1, count(log, "step longIntake interrupted"), "a path as a deadline ends the others");
-        assertEquals(1, count(log, "step timedForever interrupted"));
-        assertEquals(1, count(log, "step timedTake end"), "a group timeout does not end a member twice");
+        assertEquals(1, count(log, "step timedForever end"), "a member's own timeout ends that member");
+        assertEquals(1, count(log, "step timedTake end"), "a member's timeout does not end another member");
+        assertEquals(loopOf(log, "step timedForever end"), loopOf(log, "step memberTimeout end"),
+                "the group ends once its last member has");
     }
 
     @Test
@@ -252,7 +254,9 @@ class ConformanceTest {
         assertEquals(1, count(log, "step no end"));
         assertEquals(1, count(log, "step innerDrive end"));
         assertEquals(1, count(log, "step lateThen start") + count(log, "step lateElse start"));
-        assertEquals(1, count(log, "step stuck interrupted"), "a timeout on a branch ends the arm it chose");
+        assertEquals(1, count(log, "step stuck end"), "a timeout in the arm a branch chose ends that step");
+        assertEquals(loopOf(log, "step stuck end"), loopOf(log, "step branchTimeout end"),
+                "and the branch ends with its arm");
     }
 
     @Test
@@ -260,7 +264,7 @@ class ConformanceTest {
         List<String> log = both("never-ends").log();
         assertEquals(1, count(log, "forever interrupted"));
         assertEquals(1, count(log, "forever {n=1} interrupted"));
-        assertEquals(1, count(log, "forever {n=2} interrupted"));
+        assertEquals(1, count(log, "forever {n=2} interrupted"), "a member's timeout ends a race of commands that never end");
         assertEquals(1, count(log, "forever {n=3} start"));
         assertEquals(0, count(log, "forever {n=3} interrupted"), "stopping the OpMode ends nothing");
         assertEquals(0, count(log, "routine finished"));
@@ -276,7 +280,9 @@ class ConformanceTest {
         assertEquals(1, count(log, "step tieSecond end"), "a member done on the same loop is not interrupted");
         assertEquals(1, count(log, "take {loops=5} end"), "a command done on its timeout's loop ends naturally");
         assertEquals(1, count(log, "step innerShort end"), "an inner timeout ends its own step");
-        assertEquals(1, count(log, "step innerLong interrupted"), "an outer timeout interrupts what is left");
+        assertEquals(1, count(log, "step innerLong interrupted"), "an outer deadline interrupts what is left");
+        assertEquals(loopOf(log, "step outerLimit end"), loopOf(log, "step innerLong interrupted"),
+                "on the loop the deadline wait ends, before the inner timeout would have");
         assertEquals(1, count(log, "forever {n=3} interrupted"), "an instant deadline ends the others at once");
         assertEquals(1, count(log, "forever {n=4} interrupted"), "a marker still running when the path arrives");
         assertEquals(1, count(log, "take {at=end, loops=3} start"), "a marker at t = 1 still fires");

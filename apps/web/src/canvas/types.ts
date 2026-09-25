@@ -76,7 +76,7 @@ export interface CanvasHit {
  * these two.
  */
 export interface TraceOverlay {
-  /** [timeS, xIn, yIn, headingRad] rows, canonical alliance. */
+  /** [timeS, xIn, yIn, headingRad] rows, in the auto's own alliance frame, drawn with its mirror. */
   poses: readonly TracePoseRow[];
   steps: readonly TraceStep[];
   /**
@@ -97,7 +97,11 @@ export interface FieldCanvasProps {
   findings: Finding[];
   selection: Selection;
   tool: Tool;
-  /** Mirror preview: BLUE draws the point-mirrored routine; editing stays canonical RED. */
+  /**
+   * The alliance being viewed. The file's own alliance draws its poses as they are; the other one
+   * draws them mirrored by the field's `frame.mirror`, and every edit made there is un-mirrored on
+   * the way back, so the document stays in its own alliance's frame either way.
+   */
   alliance: Alliance;
   snap: boolean;
   showGhosts: boolean;
@@ -235,7 +239,7 @@ export interface PoseMove {
 /** Appended for v2: how the field is drawn under the routine. */
 export type FieldView = "image" | "image+outlines" | "vector";
 
-/** Appended for v2: what a right-click landed on, in canonical (RED) world inches. */
+/** Appended for v2: what a right-click landed on, in world inches in the file's own alliance frame. */
 export interface CanvasMenuTarget {
   kind: "point" | "path" | "marker" | "field";
   stepId?: string;

@@ -8,6 +8,7 @@ import {
   type PoseSource,
   type Segment,
   type Step,
+  type Waypoints,
 } from "@horizon36596/zenith-schema";
 import { wrapAngle } from "./geometry/angle.js";
 import type { Vec2 } from "./geometry/vec.js";
@@ -19,8 +20,12 @@ import type { Vec2 } from "./geometry/vec.js";
  * Every mode is its own inverse: mirroring twice gives the document back, which is the property the
  * editor's "flip alliance" button rests on and what `05` section 6 asks to be tested.
  *
- * A pose that lives in `waypoints.json` is left as the reference it is: the mirrored routine wants
- * the other alliance's waypoint of the same name, not a moved copy of this one.
+ * A pose that lives in `waypoints.json` is a special case. There is one set of waypoints, in the
+ * canonical alliance's frame, and the robot runtime resolves a reference to those numbers and then
+ * mirrors the pose only when the file's alliance is not the one it is running as. So a mirrored
+ * file that kept `{ "ref": "a" }` would drive to `a` itself, where the routine run as the other
+ * alliance drives to the mirror of `a`. `mirrorAuto` therefore writes a referenced pose out as the
+ * mirrored numbers when it is given the waypoints, which is what a caller saving the result must do.
  */
 export type MirrorMode = "pointSymmetry" | "mirrorX" | "mirrorY" | "none";
 
@@ -33,11 +38,17 @@ export const mirrorForField = (field: Field): MirrorMode => field.frame.mirror;
 /**
  * Whether a routine has to be mirrored to be drawn for `viewAlliance`.
  *
- * Poses in a file are in the field's canonical frame (site/docs/file-format.md), not in the
- * routine's own alliance's frame: an auto written `"alliance": "BLUE"` still carries canonical
- * coordinates. So the question is whether the alliance being *viewed* is the canonical one, and the
- * routine's own alliance only supplies the default view. Keying this on the routine's alliance
- * instead drew the same file two different ways in the SVG and on the canvas.
+ * A file's poses are in the frame of the file's own `alliance` (site/docs/file-format.md), so the
+ * rule is the robot runtime's (`AutoFile.mirrorsInto`): mirror if and only if the alliance being
+ * viewed is not the file's. A BLUE file viewed as BLUE is drawn as it is, where the robot running it
+ * as BLUE drives; viewed as RED it is mirrored. `field.frame.canonicalAlliance` plays no part: it
+ * says which alliance the field file's own rules (`startRules`) are written for, not which frame a
+ * file is in. The field itself, its picture and its obstacles, is never mirrored.
+ *
+ * `render` and the editor's canvas both ask this one function, which is what keeps the SVG and the
+ * canvas drawing the same file the same way. A caller that draws a mirrored view has to put every
+ * point it writes back through the same mirror (every kind is its own inverse), so what is drawn
+ * is what is stored.
  *
  * `viewAlliance` is what a caller is asking to see; omit it to mean the routine's own alliance.
  */
@@ -47,7 +58,7 @@ export function shouldMirror(
   viewAlliance?: Auto["alliance"],
 ): boolean {
   if (mirrorForField(field) === "none") return false;
-  return (viewAlliance ?? auto.alliance) !== field.frame.canonicalAlliance;
+  return (viewAlliance ?? auto.alliance) !== auto.alliance;
 }
 
 /** `mirrorX` reflects across the x axis, so y changes sign; `mirrorY` reflects across the y axis. */
@@ -136,18 +147,36 @@ export function mirrorPose(pose: Pose, mode: MirrorMode): Pose {
   };
 }
 
-const mirrorSource = (source: PoseSource, mode: MirrorMode): PoseSource =>
-  source === "current" || "ref" in source ? source : mirrorPose(source, mode);
+/**
+ * A pose source for the other alliance. A waypoint reference becomes the mirrored waypoint's numbers
+ * when `waypoints` is given, and is left as it is when not; see the module comment.
+ */
+function mirrorSource(source: PoseSource, mode: MirrorMode, waypoints: Waypoints | undefined): PoseSource {
+  if (source === "current") return source;
+  if (!("ref" in source)) return mirrorPose(source, mode);
+  if (waypoints === undefined) return source;
+  const waypoint = waypoints.waypoints[source.ref];
+  if (waypoint === undefined) {
+    throw new Error(
+      `This routine cannot be mirrored: it names the waypoint ${JSON.stringify(source.ref)}, which is not in waypoints.json.`,
+    );
+  }
+  return mirrorPose({ xIn: waypoint.xIn, yIn: waypoint.yIn, headingRad: waypoint.headingRad }, mode);
+}
 
-const mirrorSegment = (segment: Segment, mode: MirrorMode): Segment =>
+const mirrorSegment = (segment: Segment, mode: MirrorMode, waypoints: Waypoints | undefined): Segment =>
   segment.kind === "bezier"
     ? {
         ...segment,
-        from: mirrorSource(segment.from, mode),
+        from: mirrorSource(segment.from, mode, waypoints),
         control: segment.control.map((point) => mirrorPose(point, mode)),
-        to: mirrorSource(segment.to, mode),
+        to: mirrorSource(segment.to, mode, waypoints),
       }
-    : { ...segment, from: mirrorSource(segment.from, mode), to: mirrorSource(segment.to, mode) };
+    : {
+        ...segment,
+        from: mirrorSource(segment.from, mode, waypoints),
+        to: mirrorSource(segment.to, mode, waypoints),
+      };
 
 /**
  * The other alliance's name for a field id, from the season's `mirrorId` hook.
@@ -176,7 +205,12 @@ function mirrorExpect(step: { expect?: Expect }, mirrorId: MirrorIds | undefined
   };
 }
 
-function mirrorStep(step: Step, mode: MirrorMode, mirrorId: MirrorIds | undefined): Step {
+function mirrorStep(
+  step: Step,
+  mode: MirrorMode,
+  mirrorId: MirrorIds | undefined,
+  waypoints: Waypoints | undefined,
+): Step {
   switch (step.kind) {
     case "path": {
       // Markers are placed by t or by distance along the path, so they mirror with it untouched.
@@ -184,7 +218,7 @@ function mirrorStep(step: Step, mode: MirrorMode, mirrorId: MirrorIds | undefine
       const expected = mirrorExpect(step, mirrorId);
       return {
         ...step,
-        segments: step.segments.map((segment) => mirrorSegment(segment, mode)),
+        segments: step.segments.map((segment) => mirrorSegment(segment, mode, waypoints)),
         ...(heading === undefined ? {} : { heading: mirrorHeading(heading, mode) }),
         ...(expected === undefined ? {} : { expect: expected }),
       };
@@ -198,7 +232,7 @@ function mirrorStep(step: Step, mode: MirrorMode, mirrorId: MirrorIds | undefine
     case "branch":
       return withChildLists(
         step,
-        childLists(step).map((list) => list.map((child) => mirrorStep(child, mode, mirrorId))),
+        childLists(step).map((list) => list.map((child) => mirrorStep(child, mode, mirrorId, waypoints))),
       );
     default:
       return step;
@@ -274,8 +308,17 @@ function mirrorHeading(heading: Heading, mode: MirrorMode): Heading {
 export type MirrorIds = (id: string) => string | null;
 
 /**
- * The same routine for the other alliance: every pose mirrored, the alliance flipped, waypoint
- * references left alone. Mirroring twice gives the document back, byte for byte.
+ * The same routine for the other alliance: every pose mirrored and the alliance flipped. Mirroring
+ * twice gives the document back, byte for byte, when the document names no waypoint or no
+ * `waypoints` is passed.
+ *
+ * `waypoints` is the project's `waypoints.json`, and a caller that is going to write the result out
+ * has to pass it too. With it, every `{ "ref": name }` pose is written as the mirrored numbers of
+ * that waypoint, so the saved file drives where the robot runtime drives the original run as the
+ * other alliance (the module comment says why a kept reference would not). That step is one way: the
+ * reference does not come back when the result is mirrored again. Left out, references are carried
+ * across unchanged, which is only safe for a result that is never saved or run. A name missing from
+ * `waypoints` is refused.
  *
  * `mirrorId` is the season's `SeasonRules.mirrorId` hook, and a caller that is going to write the
  * result out has to pass it: a step's `expect.collectFrom` and `expect.launchesInto` name field
@@ -287,15 +330,17 @@ export function mirrorAuto(
   auto: Auto,
   mode: MirrorMode = "pointSymmetry",
   mirrorId?: MirrorIds,
+  waypoints?: Waypoints,
 ): Auto {
-  const startPose = auto.start.pose;
   return {
     ...auto,
     alliance: auto.alliance === "RED" ? "BLUE" : "RED",
     start: {
       ...auto.start,
-      pose: "ref" in startPose ? startPose : mirrorPose(startPose, mode),
+      // A start pose is a waypoint reference or a pose, never "current", and mirroring keeps it one
+      // of those two, so the result is still a start pose.
+      pose: mirrorSource(auto.start.pose, mode, waypoints) as Auto["start"]["pose"],
     },
-    steps: auto.steps.map((step) => mirrorStep(step, mode, mirrorId)),
+    steps: auto.steps.map((step) => mirrorStep(step, mode, mirrorId, waypoints)),
   };
 }

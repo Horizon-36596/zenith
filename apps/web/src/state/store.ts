@@ -269,9 +269,10 @@ export function openProject(project: Project, backend: ProjectBackend): void {
 }
 
 /**
- * Opens an auto. `alliance` follows the auto's own `alliance` field, the way the canvas's mirror
- * (finding 21/22) already keys off `field.frame.canonicalAlliance` rather than a fixed default: the
- * toggle should start on the alliance the file itself was written for, not always RED.
+ * Opens an auto. `alliance`, the alliance being viewed, starts on the auto's own `alliance`: a
+ * file's poses are in that alliance's frame, so the default view draws them unmirrored, where the
+ * robot drives them, and an edit there stores what was drawn. The toggle then shows the file as the
+ * other alliance (`shouldMirror`).
  * `autoRobot`/`autoField` reset to the project's own as a synchronous default; a caller that knows
  * the auto carries `robot`/`field` overrides follows up with `setAutoOverrides` once those resolve.
  */

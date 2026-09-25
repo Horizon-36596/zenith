@@ -173,7 +173,8 @@
         {
           "id": "stuck",
           "kind": "command",
-          "name": "forever"
+          "name": "forever",
+          "timeoutS": 0.1
         }
       ],
       "else": []

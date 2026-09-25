@@ -360,6 +360,12 @@ a headless sim, time is stepped by a fixed tick while a tick costs microseconds 
 `RobotTimeout.of(cmd, seconds, clock)` races the command against `WaitRobotTime`, which reads the
 `RobotClock`.
 
+Only `path`, `command` and `wait` steps are wrapped in one, the three kinds the file format gives a
+`timeoutS`. `AutoFile` ignores a `timeoutS` on a `sequence`, `parallel` or `branch`, which the editor's
+schema drops too, and records a message naming the step in `AutoFile.warnings`. Each runtime's
+`AutoFromFile` shows those messages as `Zenith warning` lines in init telemetry. To bound a group, put
+the timeout on a step inside it, or make it a `deadline` group whose deadline is a `wait`.
+
 ### Why parallels are not SolversLib's groups
 
 `parallel` steps, step timeouts and marker groups all use the runtime's `Parallel` (`all`, `race`,

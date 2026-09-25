@@ -88,6 +88,9 @@ public final class AutoSpec {
     /** The routine, in order. */
     public final List<Step> steps;
 
+    /** What the file says that this runtime read past; {@link AutoFile#warnings}. */
+    public final List<String> warnings;
+
     /** The library-neutral file this was converted from. */
     final AutoFile file;
 
@@ -99,6 +102,7 @@ public final class AutoSpec {
         this.alliance = file.alliance;
         this.startPose = fromPedro(file.startPose);
         this.steps = Collections.unmodifiableList(steps(file.steps));
+        this.warnings = file.warnings;
     }
 
     /**
@@ -240,16 +244,16 @@ public final class AutoSpec {
         }
         if (step instanceof AutoFile.ParallelStep) {
             AutoFile.ParallelStep parallel = (AutoFile.ParallelStep) step;
-            return new ParallelStep(step.id, step.timeoutS, parallel.mode, parallel.deadlineId,
+            return new ParallelStep(step.id, parallel.mode, parallel.deadlineId,
                     steps(parallel.steps));
         }
         if (step instanceof AutoFile.BranchStep) {
             AutoFile.BranchStep branch = (AutoFile.BranchStep) step;
-            return new BranchStep(step.id, step.timeoutS, branch.condition, steps(branch.then),
+            return new BranchStep(step.id, branch.condition, steps(branch.then),
                     steps(branch.otherwise));
         }
         if (step instanceof AutoFile.SequenceStep) {
-            return new SequenceStep(step.id, step.timeoutS, steps(((AutoFile.SequenceStep) step).steps));
+            return new SequenceStep(step.id, steps(((AutoFile.SequenceStep) step).steps));
         }
         throw new IllegalStateException("unhandled step type " + step.getClass().getName());
     }
@@ -266,7 +270,10 @@ public final class AutoSpec {
          * against a parallel's {@code deadline} without a null check on every member.
          */
         public final String id;
-        /** Seconds this step is allowed, or {@code null}. Enforced by {@link RobotTimeout}. */
+        /**
+         * Seconds this step is allowed, or {@code null}. Enforced by {@link RobotTimeout}. Always
+         * {@code null} on a group step; see {@link AutoFile.Step#timeoutS}.
+         */
         public final Double timeoutS;
 
         Step(String id, Double timeoutS) {
@@ -340,8 +347,8 @@ public final class AutoSpec {
         public final String deadlineId;
         public final List<Step> steps;
 
-        ParallelStep(String id, Double timeoutS, String mode, String deadlineId, List<Step> steps) {
-            super(id, timeoutS);
+        ParallelStep(String id, String mode, String deadlineId, List<Step> steps) {
+            super(id, null);
             this.mode = mode;
             this.deadlineId = deadlineId;
             this.steps = Collections.unmodifiableList(steps);
@@ -354,8 +361,8 @@ public final class AutoSpec {
         public final List<Step> then;
         public final List<Step> otherwise;
 
-        BranchStep(String id, Double timeoutS, String condition, List<Step> then, List<Step> otherwise) {
-            super(id, timeoutS);
+        BranchStep(String id, String condition, List<Step> then, List<Step> otherwise) {
+            super(id, null);
             this.condition = condition;
             this.then = Collections.unmodifiableList(then);
             this.otherwise = Collections.unmodifiableList(otherwise);
@@ -370,8 +377,8 @@ public final class AutoSpec {
     public static final class SequenceStep extends Step {
         public final List<Step> steps;
 
-        SequenceStep(String id, Double timeoutS, List<Step> steps) {
-            super(id, timeoutS);
+        SequenceStep(String id, List<Step> steps) {
+            super(id, null);
             this.steps = Collections.unmodifiableList(steps);
         }
     }

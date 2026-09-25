@@ -1,4 +1,4 @@
-import { canonicalize } from "@horizon36596/zenith-core";
+import { canonicalize, mirrorAuto, type MirrorMode } from "@horizon36596/zenith-core";
 import type { CommandLibrary } from "./commandLibrary.js";
 import {
   FORMAT_VERSIONS,
@@ -18,8 +18,8 @@ import {
  */
 
 /**
- * Where the skeleton auto starts, in the field's canonical (RED) frame, which a BLUE auto also
- * uses. NEEDS MEASUREMENT: it is chosen to pass the BIOBUZZ field's `startRules` for
+ * Where the skeleton auto starts, in RED's frame. A BLUE skeleton is this one mirrored, because a
+ * file's poses are in its own alliance's frame (site/docs/file-format.md). NEEDS MEASUREMENT: it is chosen to pass the BIOBUZZ field's `startRules` for
  * `robotSkeleton`'s 18 x 14 in footprint, not measured off a real start. Facing +y, the robot's
  * 18 in length runs along y, so y = -63 puts its back edge on the south wall (y = -72). x = -12
  * keeps its 14 in width (x from -19 to -5) in RED's own half, clear of loadingZoneRed (on the
@@ -101,40 +101,43 @@ export function waypointsSkeleton(): string {
   );
 }
 
-export function autoSkeleton(name: string, alliance: "RED" | "BLUE" = "RED"): string {
-  return canonicalize(
-    "auto",
-    parseAuto({
-      $schema: SCHEMA_ID.auto,
-      formatVersion: FORMAT_VERSIONS.auto,
-      name,
-      title: name,
-      alliance,
-      start: {
-        pose: {
-          ...SKELETON_START,
-          provenance: "NEEDS MEASUREMENT: written by zenith new, a legal BIOBUZZ start for the skeleton robot",
-        },
+/**
+ * The skeleton auto for `zenith new`. It is laid out for RED; a BLUE one is the same routine
+ * mirrored by the field's own symmetry, `mirror`, so it starts on BLUE's half where the robot run as
+ * BLUE starts it.
+ */
+export function autoSkeleton(name: string, alliance: "RED" | "BLUE" = "RED", mirror: MirrorMode = "pointSymmetry"): string {
+  const red = parseAuto({
+    $schema: SCHEMA_ID.auto,
+    formatVersion: FORMAT_VERSIONS.auto,
+    name,
+    title: name,
+    alliance: "RED",
+    start: {
+      pose: {
+        ...SKELETON_START,
+        provenance: "NEEDS MEASUREMENT: written by zenith new, a legal BIOBUZZ start for the skeleton robot",
       },
-      steps: [
-        {
-          id: "leg1",
-          kind: "path",
-          segments: [
-            {
-              kind: "line",
-              from: "current",
-              to: {
-                xIn: SKELETON_START.xIn,
-                yIn: SKELETON_START.yIn + SKELETON_LEG_IN,
-                provenance: "PLACEHOLDER: written by zenith new, 24 in straight out from the start",
-              },
+    },
+    steps: [
+      {
+        id: "leg1",
+        kind: "path",
+        segments: [
+          {
+            kind: "line",
+            from: "current",
+            to: {
+              xIn: SKELETON_START.xIn,
+              yIn: SKELETON_START.yIn + SKELETON_LEG_IN,
+              provenance: "PLACEHOLDER: written by zenith new, 24 in straight out from the start",
             },
-          ],
-          heading: { mode: "tangent" },
-          notes: "Replace this leg with the real opening move.",
-        },
-      ],
-    }),
-  );
+          },
+        ],
+        heading: { mode: "tangent" },
+        notes: "Replace this leg with the real opening move.",
+      },
+    ],
+  });
+  return canonicalize("auto", alliance === "RED" ? red : mirrorAuto(red, mirror));
 }

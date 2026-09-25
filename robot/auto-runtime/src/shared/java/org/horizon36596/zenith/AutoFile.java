@@ -128,14 +128,27 @@ public final class AutoFile {
     /** The routine, in order. */
     public final List<Step> steps;
 
+    /**
+     * What the file says that this runtime read past, one message each, naming the step and where in
+     * the file it is. Nothing here stops the auto; each runtime's {@code AutoFromFile} shows them on the
+     * Driver Station during init. Empty for a file the editor saved.
+     *
+     * <p>Today the one case is a {@code timeoutS} on a {@code sequence}, {@code parallel} or
+     * {@code branch}. The file format gives a timeout to {@code path}, {@code command} and {@code wait}
+     * steps only, and the editor's schema drops it anywhere else, so honouring it here would run a
+     * hand-written file differently from the way the editor plans and simulates it.
+     */
+    public final List<String> warnings;
+
     private AutoFile(String name, String title, String description, String alliance,
-            Pose startPose, List<Step> steps) {
+            Pose startPose, List<Step> steps, List<String> warnings) {
         this.name = name;
         this.title = title;
         this.description = description;
         this.alliance = alliance;
         this.startPose = startPose;
         this.steps = Collections.unmodifiableList(steps);
+        this.warnings = Collections.unmodifiableList(warnings);
     }
 
     /**
@@ -260,12 +273,13 @@ public final class AutoFile {
         Json start = root.get("start");
         Pose startPose = pose(start.get("pose"), waypoints, false);
 
-        List<Step> steps = steps(root.get("steps"), waypoints, ROOT_ID_PREFIX);
+        List<String> warnings = new ArrayList<String>();
+        List<Step> steps = steps(root.get("steps"), waypoints, ROOT_ID_PREFIX, warnings);
         if (steps.isEmpty()) {
             throw new IllegalArgumentException(root.get("steps").path() + ": an auto needs at least one step");
         }
         requireUniqueIds(steps, new LinkedHashSet<String>(), root.get("steps").path());
-        return new AutoFile(name, title, description, alliance, startPose, steps);
+        return new AutoFile(name, title, description, alliance, startPose, steps, warnings);
     }
 
     private static void requireVersion(Json root, String fileName) {
@@ -315,11 +329,12 @@ public final class AutoFile {
     // Steps
     // ---------------------------------------------------------------------------------------------
 
-    private static List<Step> steps(Json array, Map<String, Pose> waypoints, String idPrefix) {
+    private static List<Step> steps(Json array, Map<String, Pose> waypoints, String idPrefix,
+            List<String> warnings) {
         List<Json> nodes = array.items();
         List<Step> out = new ArrayList<Step>(nodes.size());
         for (int index = 0; index < nodes.size(); index++) {
-            out.add(step(nodes.get(index), waypoints, idPrefix, index));
+            out.add(step(nodes.get(index), waypoints, idPrefix, index, warnings));
         }
         return out;
     }
@@ -364,10 +379,11 @@ public final class AutoFile {
      * inside one step comes out as a {@link StepFailure} naming it, and a failure from inside a nested
      * step keeps the innermost name rather than collecting one per level on the way out.
      */
-    private static Step step(Json node, Map<String, Pose> waypoints, String idPrefix, int index) {
+    private static Step step(Json node, Map<String, Pose> waypoints, String idPrefix, int index,
+            List<String> warnings) {
         String id = effectiveId(node, index, idPrefix);
         try {
-            return stepBody(node, id, waypoints);
+            return stepBody(node, id, waypoints, warnings);
         } catch (StepFailure named) {
             throw named;
         } catch (RuntimeException problem) {
@@ -376,9 +392,12 @@ public final class AutoFile {
     }
 
     /** One step, once its id is known. Everything it throws is named by the caller above. */
-    private static Step stepBody(Json node, String id, Map<String, Pose> waypoints) {
+    private static Step stepBody(Json node, String id, Map<String, Pose> waypoints, List<String> warnings) {
         String kind = node.str("kind");
-        Double timeoutS = node.opt("timeoutS") == null ? null : Double.valueOf(node.num("timeoutS"));
+        // Read for path, command and wait, the kinds the file format gives a timeout. A group's is not
+        // read at all, so whatever it holds cannot fail the load; warnIfTimed reports it instead.
+        boolean group = "parallel".equals(kind) || "branch".equals(kind) || "sequence".equals(kind);
+        Double timeoutS = group || node.opt("timeoutS") == null ? null : Double.valueOf(node.num("timeoutS"));
 
         if ("path".equals(kind)) {
             List<Segment> segments = new ArrayList<Segment>();
@@ -436,7 +455,8 @@ public final class AutoFile {
                 throw new IllegalArgumentException(node.path()
                         + ".mode: expected all, race or deadline, found \"" + mode + "\"");
             }
-            List<Step> members = steps(node.get("steps"), waypoints, childPrefix(id, 1, 0));
+            warnIfTimed(node, id, kind, warnings);
+            List<Step> members = steps(node.get("steps"), waypoints, childPrefix(id, 1, 0), warnings);
             if (members.isEmpty()) {
                 throw new IllegalArgumentException(node.get("steps").path()
                         + ": a parallel needs at least one step");
@@ -451,17 +471,18 @@ public final class AutoFile {
                         + (deadline == null ? "names no step" : "is \"" + deadline + "\", which is not"
                                 + " one of its own steps") + "; name one of " + ids(members));
             }
-            return new ParallelStep(id, timeoutS, mode, deadline, members);
+            return new ParallelStep(id, mode, deadline, members);
         }
 
         if ("branch".equals(kind)) {
             Json elseArm = node.opt("else");
             int arms = elseArm == null ? 1 : 2;
-            List<Step> then = steps(node.get("then"), waypoints, childPrefix(id, arms, 0));
+            warnIfTimed(node, id, kind, warnings);
+            List<Step> then = steps(node.get("then"), waypoints, childPrefix(id, arms, 0), warnings);
             List<Step> otherwise = elseArm == null
                     ? Collections.<Step>emptyList()
-                    : steps(elseArm, waypoints, childPrefix(id, arms, 1));
-            return new BranchStep(id, timeoutS, node.str("condition"), then, otherwise);
+                    : steps(elseArm, waypoints, childPrefix(id, arms, 1), warnings);
+            return new BranchStep(id, node.str("condition"), then, otherwise);
         }
 
         if ("sequence".equals(kind)) {
@@ -470,16 +491,34 @@ public final class AutoFile {
             // children are numbered the same way a parallel's are - one list, so childPrefix's
             // branchCount is 1 - which is what packages/core/src/edit/ids.ts calls effectiveId/childPrefix
             // for a sequence too.
-            List<Step> members = steps(node.get("steps"), waypoints, childPrefix(id, 1, 0));
+            warnIfTimed(node, id, kind, warnings);
+            List<Step> members = steps(node.get("steps"), waypoints, childPrefix(id, 1, 0), warnings);
             if (members.isEmpty()) {
                 throw new IllegalArgumentException(node.get("steps").path()
                         + ": a sequence needs at least one step");
             }
-            return new SequenceStep(id, timeoutS, members);
+            return new SequenceStep(id, members);
         }
 
         throw new IllegalArgumentException(node.path() + ".kind: unknown step kind \"" + kind
                 + "\"; this runtime knows path, command, wait, parallel, branch and sequence");
+    }
+
+    /**
+     * Report a {@code timeoutS} on a group step, which the file format does not give one, and ignore it.
+     *
+     * <p>A warning rather than a refusal: the editor loads the same file without complaint, having
+     * dropped the key, so refusing it here would stop at the tile an auto the editor shows as fine.
+     * What the robot runs is then what the editor planned. It is reported before the group's members
+     * are read, so the messages come out in file order.
+     */
+    private static void warnIfTimed(Json node, String id, String kind, List<String> warnings) {
+        if (node.opt("timeoutS") == null) {
+            return;
+        }
+        warnings.add(node.path() + " (step \"" + id + "\"): timeoutS is ignored on a " + kind
+                + " step; only path, command and wait steps take a timeout. Put timeoutS on a step"
+                + " inside the group, or bound the group with a parallel deadline whose deadline is a wait.");
     }
 
     /** Whether {@code deadline} is the effective id of one of {@code members}. */
@@ -676,7 +715,11 @@ public final class AutoFile {
          * against a parallel's {@code deadline} without a null check on every member.
          */
         public final String id;
-        /** Seconds this step is allowed, or {@code null}. Enforced by each runtime's {@code RobotTimeout}. */
+        /**
+         * Seconds this step is allowed, or {@code null}. Enforced by each runtime's {@code RobotTimeout}.
+         * Always {@code null} on a group step: the file format gives a timeout to path, command and wait
+         * steps only, and a group's is reported in {@link AutoFile#warnings} instead.
+         */
         public final Double timeoutS;
 
         Step(String id, Double timeoutS) {
@@ -747,8 +790,8 @@ public final class AutoFile {
         public final String deadlineId;
         public final List<Step> steps;
 
-        ParallelStep(String id, Double timeoutS, String mode, String deadlineId, List<Step> steps) {
-            super(id, timeoutS);
+        ParallelStep(String id, String mode, String deadlineId, List<Step> steps) {
+            super(id, null);
             this.mode = mode;
             this.deadlineId = deadlineId;
             this.steps = Collections.unmodifiableList(steps);
@@ -761,8 +804,8 @@ public final class AutoFile {
         public final List<Step> then;
         public final List<Step> otherwise;
 
-        BranchStep(String id, Double timeoutS, String condition, List<Step> then, List<Step> otherwise) {
-            super(id, timeoutS);
+        BranchStep(String id, String condition, List<Step> then, List<Step> otherwise) {
+            super(id, null);
             this.condition = condition;
             this.then = Collections.unmodifiableList(then);
             this.otherwise = Collections.unmodifiableList(otherwise);
@@ -779,8 +822,8 @@ public final class AutoFile {
     public static final class SequenceStep extends Step {
         public final List<Step> steps;
 
-        SequenceStep(String id, Double timeoutS, List<Step> steps) {
-            super(id, timeoutS);
+        SequenceStep(String id, List<Step> steps) {
+            super(id, null);
             this.steps = Collections.unmodifiableList(steps);
         }
     }

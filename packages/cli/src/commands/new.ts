@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
+import { mirrorForField } from "@horizon36596/zenith-core";
 import { findProjectRoot, loadProject, ProjectError } from "../project.js";
 import { autoSkeleton } from "../skeletons.js";
 
@@ -27,7 +28,7 @@ export function runNew(name: string, options: NewOptions): number {
     throw new ProjectError(`${relative} already exists. Pass --force to overwrite it.`);
   }
   mkdirSync(dirname(full), { recursive: true });
-  writeFileSync(full, autoSkeleton(name, alliance), "utf8");
+  writeFileSync(full, autoSkeleton(name, alliance, mirrorForField(project.field)), "utf8");
 
   if (options.json === true) process.stdout.write(`${JSON.stringify({ written: relative }, null, 2)}\n`);
   else process.stdout.write(`written: ${relative}\n`);

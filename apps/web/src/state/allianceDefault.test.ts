@@ -1,14 +1,24 @@
 /**
- * Finding 21/22 (web part): the alliance toggle's default view is the auto's own `alliance`, not a
- * fixed "always start on RED". `field.frame.canonicalAlliance` decides whether the canvas mirrors
- * (`apps/web/src/canvas/FieldCanvas.tsx`), and the toggle it reads from should start already showing
- * the alliance the file was written for, rather than starting on RED and needing a click for every
- * BLUE auto.
+ * The alliance toggle's default view is the auto's own `alliance`, not a fixed "always start on
+ * RED". A file's poses are in its own alliance's frame, and the canvas mirrors only when the view is
+ * the other alliance (`shouldMirror`, `apps/web/src/canvas/FieldCanvas.tsx`), so opening a BLUE auto
+ * draws it on BLUE's half, where the robot drives it, and an edit made there stores what was drawn.
  */
-import { canonicalize, loadAuto } from "@horizon36596/zenith-core";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { canonicalize, loadAuto, loadField, shouldMirror } from "@horizon36596/zenith-core";
 import { SCHEMA_ID } from "@horizon36596/zenith-schema";
 import { describe, expect, it } from "vitest";
 import { getState, openAuto, toggleAlliance } from "./store";
+
+const field = loadField(
+  JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL("../../../../examples/starter/autos/field/biobuzz.field.json", import.meta.url)),
+      "utf8",
+    ),
+  ),
+);
 
 const fixture = (alliance: "RED" | "BLUE") =>
   loadAuto({
@@ -49,5 +59,14 @@ describe("opening an auto sets the alliance toggle to the auto's own alliance", 
     openAuto("red-fixture.auto.json", auto, canonicalize("auto", auto));
     toggleAlliance();
     expect(getState().alliance).toBe("BLUE");
+  });
+
+  it("draws a BLUE auto unmirrored in its default view, and mirrored once toggled", () => {
+    const auto = fixture("BLUE");
+    openAuto("blue-fixture.auto.json", auto, canonicalize("auto", auto));
+    expect(shouldMirror(auto, field, getState().alliance)).toBe(false);
+    toggleAlliance();
+    expect(getState().alliance).toBe("RED");
+    expect(shouldMirror(auto, field, getState().alliance)).toBe(true);
   });
 });

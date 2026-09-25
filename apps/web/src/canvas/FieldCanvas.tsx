@@ -22,10 +22,12 @@
  * - Double-click a path to split it there; double-click empty field to fit; `F` zooms to the
  *   selection; the `measure` tool drags a dimension.
  *
- * Coordinates: world inches in, world inches out. Screen pixels exist only between `view.ts` and
- * the painters. A BLUE alliance draws the routine mirrored by the field's own `frame.mirror` kind
- * but still reports canonical RED poses to the shell, because the pointer is un-mirrored on the way
- * out (every mirror kind is its own inverse, finding 21/22).
+ * Coordinates: world inches in, world inches out, in the frame of the file's own `alliance`. Screen
+ * pixels exist only between `view.ts` and the painters. Viewed as its own alliance a file is drawn
+ * as it is, where the robot drives it. Viewed as the other alliance it is drawn mirrored by the
+ * field's own `frame.mirror` kind, and the pointer is un-mirrored on the way out (every mirror kind
+ * is its own inverse), so the shell is still handed poses in the file's own frame and what is drawn
+ * is what is stored. The field picture and its obstacles are never mirrored.
  */
 import {
   fieldBounds,
@@ -388,12 +390,20 @@ export function FieldCanvas(props: FieldCanvasProps): ReactElement {
   const waypointsRef = useRef(waypointList);
   waypointsRef.current = waypointList;
 
-  // Findings 21/22: mirrored iff the alliance being viewed differs from the field's canonical one,
-  // by the field's own `frame.mirror` kind; "none" makes `mirrorVec` an identity.
+  // Mirrored iff the alliance being viewed is not the file's own, by the field's own `frame.mirror`
+  // kind (`shouldMirror`, the rule `render` and the robot runtime follow); "none" makes `mirrorVec`
+  // an identity.
   const mirrored = shouldMirror(props.auto, props.field, props.alliance);
   const mirrorMode: MirrorMode = mirrored ? mirrorForField(props.field) : "none";
   const mirrorRef = useRef(mirrorMode);
   mirrorRef.current = mirrorMode;
+  // Review mode's base version is drawn for the same view by its own file's alliance.
+  const baseMirrorMode: MirrorMode =
+    props.basePlan !== null && props.basePlan !== undefined && shouldMirror(props.basePlan.auto, props.field, props.alliance)
+      ? mirrorForField(props.field)
+      : "none";
+  const baseMirrorRef = useRef(baseMirrorMode);
+  baseMirrorRef.current = baseMirrorMode;
 
   const fieldView: FieldView = props.fieldView ?? "image+outlines";
 
@@ -578,6 +588,7 @@ export function FieldCanvas(props: FieldCanvasProps): ReactElement {
       robot: current.robot,
       bounds: fieldBounds(current.field),
       mirror: mirrorRef.current,
+      baseMirror: baseMirrorRef.current,
       selection: current.selection,
       hover: state.hover,
       findings: current.findings,
@@ -923,7 +934,7 @@ export function FieldCanvas(props: FieldCanvasProps): ReactElement {
     return { xPx: event.clientX - rect.left, yPx: event.clientY - rect.top };
   }, []);
 
-  /** Screen pixels to canonical world inches: the mirror comes off here and nowhere else. */
+  /** Screen pixels to world inches in the file's own frame: the mirror comes off here and nowhere else. */
   const toWorld = useCallback((xPx: number, yPx: number): Vec2 => {
     const state = stateRef.current;
     if (state.view === null) return { xIn: 0, yIn: 0 };

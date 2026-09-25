@@ -51,7 +51,8 @@ import java.util.function.UnaryOperator;
  *       {@link Parallel#deadline}, members in file order</td></tr>
  *   <tr><td>{@code branch}</td><td>{@link Branch}, which picks an arm at start; an empty {@code else} is
  *       {@code Commands.instant(() -> {})}, never {@code Command.NOOP}, which never finishes</td></tr>
- *   <tr><td>any step's {@code timeoutS}</td><td>{@link RobotTimeout}</td></tr>
+ *   <tr><td>a path, command or wait step's {@code timeoutS}</td><td>{@link RobotTimeout}; a group step
+ *       has none ({@link AutoFile#warnings})</td></tr>
  * </table>
  *
  * <p>Every step is wrapped in {@link AutoContext#step}, nested ones included.

@@ -211,14 +211,15 @@
       ]
     },
     {
-      "id": "groupTimeout",
+      "id": "memberTimeout",
       "kind": "parallel",
       "mode": "all",
       "steps": [
         {
           "id": "timedForever",
           "kind": "command",
-          "name": "forever"
+          "name": "forever",
+          "timeoutS": 0.1
         },
         {
           "id": "timedTake",

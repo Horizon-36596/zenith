@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { check } from "./check.js";
 import { estimate } from "./estimate.js";
 import { plan } from "./plan.js";
-import { mirrorForField, shouldMirror } from "./mirror.js";
+import { mirrorAuto, mirrorForField, shouldMirror, type MirrorMode } from "./mirror.js";
 import { render } from "./render.js";
 import { resolve } from "./resolve.js";
 import { TOKENS } from "./tokens.js";
@@ -104,8 +104,8 @@ describe("render", () => {
   });
 });
 
-describe("which baseline the render mirrors off", () => {
-  /** The same routine and the same canonical coordinates, declared for the other alliance. */
+describe("which frame the render draws a file's poses in", () => {
+  /** The same routine and the same coordinates, declared for the other alliance. */
   const blueAuto: Auto = parseAuto({
     ...(JSON.parse(JSON.stringify(auto)) as Record<string, unknown>),
     alliance: "BLUE",
@@ -114,19 +114,28 @@ describe("which baseline the render mirrors off", () => {
   const pathOf = (svg: string): string =>
     /<polyline id="path-acrossTheHive" points="([^"]+)"/.exec(svg)?.[1] ?? "";
 
-  it("finding 21: mirrors off the field's canonical alliance, not the routine's", () => {
-    // testField is canonically RED. A BLUE routine's poses are still canonical, so viewed as RED
-    // they are drawn exactly where a RED routine's are, and viewed as BLUE they are mirrored.
-    const asRed = render(bluePlan, null, [], [], { alliance: "RED" });
-    const asBlue = render(bluePlan, null, [], [], { alliance: "BLUE" });
-    expect(pathOf(asRed)).toBe(pathOf(render(planned, null, [], [], { alliance: "RED" })));
-    expect(pathOf(asBlue)).not.toBe(pathOf(asRed));
+  it("draws a file's poses where they are when it is viewed as its own alliance", () => {
+    // The file format says `alliance` is the alliance a file's poses are written for, and the robot
+    // runs a BLUE file as BLUE without mirroring it. So the same numbers draw in the same place,
+    // whichever alliance declares them, as long as each is viewed as its own.
+    const redAsRed = render(planned, null, [], [], { alliance: "RED" });
+    const blueAsBlue = render(bluePlan, null, [], [], { alliance: "BLUE" });
+    expect(pathOf(blueAsBlue)).toBe(pathOf(redAsRed));
   });
 
-  it("finding 21: with no alliance asked for, a BLUE routine draws mirrored", () => {
+  it("mirrors a file only when it is viewed as the other alliance", () => {
+    const blueAsBlue = render(bluePlan, null, [], [], { alliance: "BLUE" });
+    const blueAsRed = render(bluePlan, null, [], [], { alliance: "RED" });
+    expect(pathOf(blueAsRed)).not.toBe(pathOf(blueAsBlue));
+    // Viewed as RED, a BLUE file is where a RED file with the same numbers is viewed as BLUE.
+    expect(pathOf(blueAsRed)).toBe(pathOf(render(planned, null, [], [], { alliance: "BLUE" })));
+  });
+
+  it("with no alliance asked for, draws a BLUE routine unmirrored, as its own alliance", () => {
     expect(pathOf(render(bluePlan, null, [], []))).toBe(
       pathOf(render(bluePlan, null, [], [], { alliance: "BLUE" })),
     );
+    expect(pathOf(render(bluePlan, null, [], []))).toBe(pathOf(render(planned, null, [], [])));
   });
 
   it("finding 22: obeys the field's own mirror mode", () => {
@@ -149,11 +158,53 @@ describe("which baseline the render mirrors off", () => {
     expect(drawnWith(none)).toBe(pathOf(render(planned, null, [], [], { alliance: "RED" })));
   });
 
-  it("finding 21: shouldMirror is the rule both front ends ask", () => {
+  it("shouldMirror is the rule both front ends ask: mirror only as the other alliance", () => {
     expect(shouldMirror(auto, testField, "RED")).toBe(false);
     expect(shouldMirror(auto, testField, "BLUE")).toBe(true);
-    expect(shouldMirror(blueAuto, testField, "RED")).toBe(false);
-    expect(shouldMirror(blueAuto, testField)).toBe(true);
+    expect(shouldMirror(auto, testField)).toBe(false);
+    expect(shouldMirror(blueAuto, testField, "BLUE")).toBe(false);
+    expect(shouldMirror(blueAuto, testField, "RED")).toBe(true);
+    expect(shouldMirror(blueAuto, testField)).toBe(false);
     expect(mirrorForField(testField)).toBe("pointSymmetry");
   });
+});
+
+describe("a routine mirrored and saved for the other alliance", () => {
+  // F is a RED file; B = mirrorAuto(F) is the BLUE file zenith writes for it, the one the robot runs
+  // unmirrored as BLUE. Viewed as BLUE, B must draw exactly where F viewed as BLUE is mirrored onto
+  // BLUE's half, which is where the robot drives F run as BLUE and B run as BLUE alike.
+  const modes: MirrorMode[] = ["pointSymmetry", "mirrorX", "mirrorY"];
+  const withMirror = (mode: MirrorMode): Field =>
+    parseField({
+      ...(JSON.parse(JSON.stringify(testField)) as Record<string, unknown>),
+      frame: { ...testField.frame, mirror: mode },
+    });
+  // Everything below the header. A reflection lists a footprint's corners the other way round, so
+  // each polygon's corners are compared as a set: the same box, wound the other way, is the same box.
+  const pictureOf = (svg: string): string =>
+    svg
+      .slice(svg.indexOf('<g id="field">'))
+      .replace(/<polygon points="([^"]+)"/g, (_, points: string) => `<polygon points="${points.split(" ").sort().join(" ")}"`);
+
+  for (const mode of modes) {
+    const field = withMirror(mode);
+    const red = plan(resolve(auto, testWaypoints), testRobot, field);
+    const blueFile = mirrorAuto(auto, mode, undefined, testWaypoints);
+    const blue = plan(resolve(blueFile, testWaypoints), testRobot, field);
+
+    it(`draws B as BLUE where F is drawn as BLUE, ${mode}`, () => {
+      expect(blueFile.alliance).toBe("BLUE");
+      expect(pictureOf(render(blue, null, [], [], { alliance: "BLUE" }))).toBe(
+        pictureOf(render(red, null, [], [], { alliance: "BLUE" })),
+      );
+      // And its default view is that same picture, not the RED half.
+      expect(pictureOf(render(blue, null, [], []))).toBe(pictureOf(render(red, null, [], [], { alliance: "BLUE" })));
+    });
+
+    it(`draws B as RED where F is drawn as RED, ${mode}`, () => {
+      expect(pictureOf(render(blue, null, [], [], { alliance: "RED" }))).toBe(
+        pictureOf(render(red, null, [], [], { alliance: "RED" })),
+      );
+    });
+  }
 });

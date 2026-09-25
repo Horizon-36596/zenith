@@ -55,8 +55,10 @@ All poses are in one frame, fixed by the field file:
 - Heading 0 points along +X, and a positive heading turns **counter-clockwise**.
 - Headings are wrapped to (−π, π].
 
-Autos are written for the **RED** alliance, which is the canonical alliance. Zenith produces the
-BLUE version by mirroring. For BIOBUZZ the mirror is a **point symmetry** through the field centre:
+An auto's poses are in the frame of its own `alliance`: a RED file's poses are where the robot
+drives as RED, and a BLUE file's poses are where it drives as BLUE. The editor draws a file as its
+own alliance by default, so what you draw is what the robot drives. Autos are usually written for
+the **RED** alliance, the canonical alliance, and Zenith produces the BLUE version by mirroring. For BIOBUZZ the mirror is a **point symmetry** through the field centre:
 a RED pose (x, y, h) becomes the BLUE pose (−x, −y, h + π). Named field elements swap to their
 other-alliance counterparts, so a mirrored routine expects the hive and flowers it will really face.
 Headings mirror with the poses. A `linear` sweep keeps its size and the way it turns, so its `toRad`

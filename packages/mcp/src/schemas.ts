@@ -21,7 +21,10 @@ export const poseInputSchema = z
     headingRad: z.number().optional(),
     provenance: z.string().optional(),
   })
-  .describe("A literal pose in the field frame: inches and radians.");
+  .describe(
+    "A literal pose in the field frame of the auto's own alliance (its `alliance`), where the robot " +
+      "drives it when running as that alliance: inches and radians.",
+  );
 
 export const poseRefSchema = z
   .object({ ref: z.string().min(1) })

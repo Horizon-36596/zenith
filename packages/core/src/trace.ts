@@ -20,7 +20,11 @@ export interface TraceStep {
   interrupted: boolean;
 }
 
-/** `[timeS, xIn, yIn, headingRad]`, in the field frame of the canonical alliance. */
+/**
+ * `[timeS, xIn, yIn, headingRad]`, where the robot believed it was. A sim that runs an auto as the
+ * auto's own alliance records them in the frame the file's poses are written in, which is how the
+ * editor overlays them and how `zenith sim` measures cross-track error against the plan.
+ */
 export type TracePoseRow = readonly [number, number, number, number];
 
 export interface TraceContact {

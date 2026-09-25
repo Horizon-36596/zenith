@@ -187,4 +187,53 @@ class AutoSpecTest {
         assertTrue(problem.getMessage().contains("absent"), problem.getMessage());
         assertTrue(problem.getMessage().contains("zenith deploy"), problem.getMessage());
     }
+
+    /** A file with a timeoutS on every step kind, groups nested, the way a hand-written file might. */
+    static final String TIMED_EVERYWHERE = "{\"formatVersion\": 3, \"start\": {\"pose\": {\"xIn\": 0, \"yIn\": 0}},"
+            + " \"steps\": ["
+            + " {\"id\": \"go\", \"kind\": \"path\", \"timeoutS\": 2, \"heading\": {\"mode\": \"tangent\"},"
+            + "  \"segments\": [{\"kind\": \"line\", \"from\": \"current\", \"to\": {\"xIn\": 24, \"yIn\": 0}}]},"
+            + " {\"id\": \"shoot\", \"kind\": \"command\", \"name\": \"score\", \"timeoutS\": 1},"
+            + " {\"id\": \"pause\", \"kind\": \"wait\", \"until\": \"holdingPiece\", \"timeoutS\": 0.5},"
+            + " {\"id\": \"both\", \"kind\": \"parallel\", \"mode\": \"all\", \"timeoutS\": 3, \"steps\": ["
+            + "  {\"id\": \"inner\", \"kind\": \"sequence\", \"timeoutS\": 2, \"steps\": ["
+            + "   {\"id\": \"innerWait\", \"kind\": \"wait\", \"seconds\": 0.1, \"timeoutS\": 1}]}]},"
+            + " {\"id\": \"check\", \"kind\": \"branch\", \"condition\": \"holdingPiece\", \"timeoutS\": 1,"
+            + "  \"then\": [{\"kind\": \"wait\", \"seconds\": 0.1}]}"
+            + "]}";
+
+    @Test
+    void readsATimeoutOnlyWhereTheFileFormatGivesOneAndWarnsAboutTheRest() {
+        AutoSpec spec = AutoSpec.parse(Json.parse(TIMED_EVERYWHERE, "timed.auto.json"), "timed",
+                Collections.<String, Pose2d>emptyMap());
+
+        // path, command and wait keep theirs, at any depth.
+        assertEquals(2.0, spec.steps.get(0).timeoutS.doubleValue());
+        assertEquals(1.0, spec.steps.get(1).timeoutS.doubleValue());
+        assertEquals(0.5, spec.steps.get(2).timeoutS.doubleValue());
+        AutoSpec.ParallelStep both = (AutoSpec.ParallelStep) spec.steps.get(3);
+        AutoSpec.SequenceStep inner = (AutoSpec.SequenceStep) both.steps.get(0);
+        assertEquals(1.0, inner.steps.get(0).timeoutS.doubleValue());
+
+        // parallel, sequence and branch lose theirs, as they do in the editor's schema.
+        assertNull(both.timeoutS);
+        assertNull(inner.timeoutS);
+        assertNull(spec.steps.get(4).timeoutS);
+
+        // One warning per group, in file order, each naming the step, its kind and where it is.
+        assertEquals(3, spec.warnings.size(), spec.warnings.toString());
+        assertTrue(spec.warnings.get(0).contains("timed.auto.json: steps[3] (step \"both\"): timeoutS is ignored on a parallel step"),
+                spec.warnings.get(0));
+        assertTrue(spec.warnings.get(1).contains("timed.auto.json: steps[3].steps[0] (step \"inner\"): timeoutS is ignored on a"
+                + " sequence step"), spec.warnings.get(1));
+        assertTrue(spec.warnings.get(2).contains("timed.auto.json: steps[4] (step \"check\"): timeoutS is ignored on a branch step"),
+                spec.warnings.get(2));
+        assertTrue(spec.warnings.get(0).contains("only path, command and wait steps take a timeout"),
+                spec.warnings.get(0));
+    }
+
+    @Test
+    void aFileWithNoGroupTimeoutHasNoWarnings() throws IOException {
+        assertEquals(Collections.<String>emptyList(), demo().warnings);
+    }
 }

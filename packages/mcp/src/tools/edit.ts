@@ -468,7 +468,9 @@ export function registerEditTools(server: McpServer): void {
       title: "Create a new auto from a template",
       description:
         "Creates <autosDir>/<name>.auto.json with the given alliance and start pose, and one " +
-        "placeholder leg so the file validates immediately. Fails if the file already exists unless " +
+        "placeholder leg so the file validates immediately. The start pose is in the given alliance's " +
+        "own frame: a BLUE auto's poses are where the robot drives as BLUE. Fails if the file " +
+        "already exists unless " +
         "force is true.",
       inputSchema: {
         name: z.string().min(1),

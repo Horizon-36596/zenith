@@ -95,12 +95,11 @@
       ]
     },
     {
-      "id": "groupTimeout",
+      "id": "memberTimeout",
       "kind": "parallel",
       "mode": "all",
-      "timeoutS": 0.1,
       "steps": [
-        { "id": "timedForever", "kind": "command", "name": "forever" },
+        { "id": "timedForever", "kind": "command", "name": "forever", "timeoutS": 0.1 },
         { "id": "timedTake", "kind": "command", "name": "take", "args": { "loops": 1 } }
       ]
     }

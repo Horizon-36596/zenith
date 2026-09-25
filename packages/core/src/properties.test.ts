@@ -1,4 +1,12 @@
-import { parseAuto, SCHEMA_ID, type Auto, type PathStep, type Step } from "@horizon36596/zenith-schema";
+import {
+  parseAuto,
+  parseWaypoints,
+  SCHEMA_ID,
+  type Auto,
+  type PathStep,
+  type Step,
+  type Waypoints,
+} from "@horizon36596/zenith-schema";
 import { describe, expect, it } from "vitest";
 import { check } from "./check.js";
 import { estimate } from "./estimate.js";
@@ -254,6 +262,82 @@ describe("mirroring a half turn", () => {
       },
     ]);
     expect(() => mirrorAuto(document, "pointSymmetry", () => null)).toThrow(/no counterpart/);
+  });
+});
+
+describe("mirroring a routine that names waypoints", () => {
+  const waypoints: Waypoints = parseWaypoints({
+    $schema: SCHEMA_ID.waypoints,
+    formatVersion: 1,
+    waypoints: {
+      home: { xIn: -40, yIn: -63, headingRad: 1.5708 },
+      score: { xIn: -12, yIn: -30, headingRad: -2.3562 },
+    },
+  });
+  const document = parseAuto({
+    $schema: SCHEMA_ID.auto,
+    formatVersion: 3,
+    name: "refs",
+    alliance: "RED",
+    start: { pose: { ref: "home" } },
+    steps: [
+      {
+        id: "toScore",
+        kind: "path",
+        segments: [{ kind: "line", from: { ref: "home" }, to: { ref: "score" } }],
+        heading: { mode: "tangent" },
+      },
+      {
+        id: "back",
+        kind: "path",
+        segments: [{ kind: "bezier", from: "current", control: [{ xIn: -30, yIn: -50 }], to: { ref: "home" } }],
+        heading: { mode: "tangent" },
+      },
+    ],
+  });
+
+  /** Every point a resolved routine drives through, start pose first, with the start heading. */
+  const pointsOf = (resolved: ReturnType<typeof resolve>): number[][] => [
+    [resolved.startPose.xIn, resolved.startPose.yIn, resolved.startPose.headingRad],
+    ...resolved.steps.flatMap((step) =>
+      (step.segments ?? []).flatMap((segment) => segment.pointsIn.map((point) => [point.xIn, point.yIn])),
+    ),
+  ];
+
+  for (const mode of MODES) {
+    it(`drives, saved for the other alliance, where the robot drives the original run as that alliance (${mode})`, () => {
+      // The robot resolves a reference to the waypoint's numbers and mirrors the pose only when the
+      // file is not written for the alliance it runs as. The original run as BLUE is therefore the
+      // mirror of the original as resolved; the saved BLUE file run as BLUE is not mirrored at all.
+      const robotMirror = pointsOf(resolve(document, waypoints)).map(([xIn, yIn, headingRad]) => {
+        const point = mirrorVec({ xIn: xIn as number, yIn: yIn as number }, mode);
+        return headingRad === undefined
+          ? [point.xIn, point.yIn]
+          : [point.xIn, point.yIn, mirrorHeadingRad(headingRad, mode)];
+      });
+      const saved = mirrorAuto(document, mode, undefined, waypoints);
+      expect(saved.alliance).toBe("BLUE");
+      expect(JSON.stringify(saved)).not.toContain('"ref"');
+      const editor = pointsOf(resolve(saved, waypoints));
+      expect(editor.length).toBe(robotMirror.length);
+      editor.forEach((point, index) => {
+        point.forEach((value, axis) => {
+          const where = `point ${String(index)} axis ${String(axis)}`;
+          expect(value, where).toBeCloseTo(robotMirror[index]?.[axis] ?? NaN, 9);
+        });
+      });
+    });
+  }
+
+  it("keeps a reference as it is when it is given no waypoints, for a result that is never saved", () => {
+    const preview = mirrorAuto(document, "pointSymmetry");
+    expect(preview.start.pose).toEqual({ ref: "home" });
+    expect(canonicalize("auto", mirrorAuto(preview, "pointSymmetry"))).toBe(canonicalize("auto", document));
+  });
+
+  it("refuses a reference to a waypoint that is not there", () => {
+    const missing = parseWaypoints({ $schema: SCHEMA_ID.waypoints, formatVersion: 1, waypoints: {} });
+    expect(() => mirrorAuto(document, "pointSymmetry", undefined, missing)).toThrow(/"home", which is not in waypoints.json/);
   });
 });
 

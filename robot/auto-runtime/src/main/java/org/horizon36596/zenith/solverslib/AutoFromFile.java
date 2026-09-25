@@ -57,7 +57,8 @@ import java.util.List;
  *   <li><b>Init</b> ({@link #initialize()}): read and check the file, build the robot
  *       ({@link ZenithRobot#init}), fill {@link NamedCommands} ({@link ZenithRobot#registerCommands}),
  *       put the robot at the alliance-correct start pose, and build the whole routine.</li>
- *   <li><b>Waiting for start</b> ({@link #initialize_loop()}): show the file and its step count.</li>
+ *   <li><b>Waiting for start</b> ({@link #initialize_loop()}): show the file, its step count and
+ *       each of the file's load warnings ({@code AutoFile.warnings}).</li>
  *   <li><b>Start</b> ({@link #startRoutine()}): schedule the routine, then check that SolversLib did. A
  *       command still running from init that holds one of its requirements and was scheduled as not
  *       interruptible would make SolversLib drop the routine without a word; the OpMode fails instead,
@@ -188,6 +189,11 @@ public abstract class AutoFromFile extends CommandOpMode implements AutoContext 
         robot.initLoop(this);
         telemetry.addData("Auto file", autoName() + ".auto.json (" + spec.title + ")");
         telemetry.addData("Auto steps", spec.steps.size());
+        // What the file says that the runtime read past (AutoFile.warnings), such as a timeoutS on a
+        // group step. Shown on every loop so it is still there after the team's own init telemetry.
+        for (String warning : spec.warnings) {
+            telemetry.addData("Zenith warning", warning);
+        }
         telemetry.update();
     }
 

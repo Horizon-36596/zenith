@@ -1,0 +1,17 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "qa-blue",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "alliance": "BLUE",
+  "start": { "pose": { "xIn": 12, "yIn": 63, "headingRad": -1.5708 } },
+  "steps": [
+    {
+      "id": "leg",
+      "kind": "path",
+      "segments": [{ "kind": "line", "from": "current", "to": { "xIn": 12, "yIn": 39 } }],
+      "heading": { "mode": "tangent" }
+    }
+  ]
+}

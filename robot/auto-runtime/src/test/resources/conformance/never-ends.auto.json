@@ -11,9 +11,8 @@
       "id": "raceForever",
       "kind": "parallel",
       "mode": "race",
-      "timeoutS": 0.1,
       "steps": [
-        { "id": "first", "kind": "command", "name": "forever", "args": { "n": 1 } },
+        { "id": "first", "kind": "command", "name": "forever", "args": { "n": 1 }, "timeoutS": 0.1 },
         { "id": "second", "kind": "command", "name": "forever", "args": { "n": 2 } }
       ]
     },

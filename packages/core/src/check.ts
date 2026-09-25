@@ -69,7 +69,7 @@ export function check(
   findings.push(...checkContinuity(plan.steps, plan.startPose));
   findings.push(...checkGeometry(steps, robot, field));
   findings.push(...checkHeading(steps));
-  findings.push(...season.startLegal(field, plan.startPose, robot));
+  findings.push(...season.startLegal(field, plan.startPose, robot, plan.auto.alliance));
   findings.push(...checkMotion(plan, estimate, robot, field, steps));
   findings.push(...checkSeason(plan, robot, season, runLedger(plan, field, season)));
   findings.push(...checkSchedule(estimate, robot, field, steps));

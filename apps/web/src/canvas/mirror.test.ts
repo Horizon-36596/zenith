@@ -1,6 +1,6 @@
 /**
- * Findings 21/22: the canvas mirrors iff the viewed alliance differs from
- * `field.frame.canonicalAlliance`, and by the field's own declared `frame.mirror` kind — not always
+ * The canvas mirrors iff the viewed alliance differs from the file's own `alliance`
+ * (`shouldMirror`), and by the field's own declared `frame.mirror` kind (finding 22) — not always
  * point symmetry. `apps/web/src/canvas/view.ts` no longer carries its own hardcoded mirror math
  * (deleted, per the finding's fix); `liveLayer.ts`'s `project`/`projectPose` now call
  * `@horizon36596/zenith-core`'s `mirrorVec`/`mirrorHeadingRad` directly, the same functions `packages/core`'s
@@ -57,7 +57,7 @@ function firstVertex(mirror: MirrorMode): { xPx: number; yPx: number } {
 }
 
 describe("the canvas mirrors by the field's own frame.mirror kind, not always point symmetry", () => {
-  it("draws the canonical pose unmoved when not mirrored", () => {
+  it("draws the file's pose unmoved when not mirrored", () => {
     expect(firstVertex("none")).toEqual({ xPx: 10, yPx: -4 });
   });
 
@@ -79,7 +79,7 @@ describe("the canvas mirrors by the field's own frame.mirror kind, not always po
 
   it("un-mirrors on the way back out, the way FieldCanvas.tsx's toWorld does", () => {
     // toWorld is screenToWorld followed by mirrorVec with the same mode: the pointer only ever
-    // hands the shell a canonical pose, whichever alliance is being previewed.
+    // hands the shell a pose in the file's own frame, whichever alliance is being viewed.
     for (const mode of ["none", "pointSymmetry", "mirrorX", "mirrorY"] as const) {
       const vertex = firstVertex(mode);
       const roundTripped = mirrorVec(screenToWorld(view, vertex), mode);

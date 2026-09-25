@@ -64,8 +64,7 @@
       "id": "branchTimeout",
       "kind": "branch",
       "condition": "always",
-      "timeoutS": 0.1,
-      "then": [{ "id": "stuck", "kind": "command", "name": "forever" }],
+      "then": [{ "id": "stuck", "kind": "command", "name": "forever", "timeoutS": 0.1 }],
       "else": []
     }
   ]

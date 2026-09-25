@@ -80,13 +80,16 @@ export function render(
   const scale = fieldPx / fieldWidthIn;
   const fieldHeightPx = fieldHeightIn * scale;
 
-  // File poses are in the field's canonical frame, so what decides the mirror is the alliance being
-  // viewed against `field.frame.canonicalAlliance`, and the symmetry used is the one the field
-  // declares. `shouldMirror`/`mirrorForField` are the shared rule: the editor's canvas asks the same
-  // two questions of the same two files and gets the same answer.
-  const mirrored = shouldMirror(plan.auto, field, options.alliance);
+  // A file's poses are in its own alliance's frame, so the routine is mirrored only when it is viewed
+  // as the other alliance, by the symmetry the field declares. `shouldMirror`/`mirrorForField` are
+  // the shared rule: the editor's canvas asks the same two questions of the same two files and gets
+  // the same answer, and both agree with the robot runtime. The field itself is never mirrored.
+  const view = options.alliance ?? plan.auto.alliance;
   const mode = mirrorForField(field);
-  const point = (p: Vec2): Vec2 => (mirrored ? mirrorVec(p, mode) : p);
+  const mirrorFor = (auto: Plan["auto"]): ((p: Vec2) => Vec2) =>
+    shouldMirror(auto, field, view) ? (p) => mirrorVec(p, mode) : (p) => p;
+  const mirrored = shouldMirror(plan.auto, field, view);
+  const point = mirrorFor(plan.auto);
   const heading = (h: number): number => (mirrored ? mirrorHeadingRad(h, mode) : h);
 
   const frame: Frame = {
@@ -111,7 +114,9 @@ export function render(
   parts.push(`<rect width="${n(widthPx)}" height="${n(heightPx)}" fill="${TOKENS.bgCanvas}"/>`);
   parts.push(...drawHeader(plan, estimateResult, findings, widthPx, options));
   parts.push(...drawField(field, plan, frame, point, options));
-  if (options.base !== undefined) parts.push(...drawBase(options.base, frame, point));
+  // The base version is in its own file's frame, which is not this one's when the change flipped
+  // the alliance, so it is drawn for the same view by its own mirror.
+  if (options.base !== undefined) parts.push(...drawBase(options.base, frame, mirrorFor(options.base.auto)));
   parts.push(...drawFindings(plan, findings, frame, point, options));
   parts.push(...drawPaths(plan, frame, point));
   parts.push(...drawGhosts(plan, estimateResult, frame, point, heading, options));

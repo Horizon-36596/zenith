@@ -25,11 +25,19 @@
     { "id": "exactTimeout", "kind": "command", "name": "take", "args": { "loops": 5 }, "timeoutS": 0.1 },
     {
       "id": "nestedTimeouts",
-      "kind": "sequence",
-      "timeoutS": 0.3,
+      "kind": "parallel",
+      "mode": "deadline",
+      "deadline": "outerLimit",
       "steps": [
-        { "id": "innerShort", "kind": "command", "name": "forever", "args": { "n": 1 }, "timeoutS": 0.1 },
-        { "id": "innerLong", "kind": "command", "name": "forever", "args": { "n": 2 }, "timeoutS": 1 }
+        { "id": "outerLimit", "kind": "wait", "seconds": 0.3 },
+        {
+          "id": "timedSequence",
+          "kind": "sequence",
+          "steps": [
+            { "id": "innerShort", "kind": "command", "name": "forever", "args": { "n": 1 }, "timeoutS": 0.1 },
+            { "id": "innerLong", "kind": "command", "name": "forever", "args": { "n": 2 }, "timeoutS": 1 }
+          ]
+        }
       ]
     },
     {

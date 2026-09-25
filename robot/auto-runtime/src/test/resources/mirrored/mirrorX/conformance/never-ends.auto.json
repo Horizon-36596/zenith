@@ -29,7 +29,8 @@
           "name": "forever",
           "args": {
             "n": 1
-          }
+          },
+          "timeoutS": 0.1
         },
         {
           "id": "second",

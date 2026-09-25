@@ -15,8 +15,25 @@ the file format; every such change ships a migration.
   resolves the link. Windows was not affected. CI now packs and installs the npm packages and runs
   their commands on Linux on every change, which is where this showed.
 - **npm.** 0.1.0 was not published to npm, because this fault stopped its publish run. 0.1.1 is the
-  first version of the `@horizon36596/zenith-*` packages there. The desktop app, the docs site and
-  the robot runtime are unchanged from 0.1.0 apart from the version.
+  first version of the `@horizon36596/zenith-*` packages there.
+- **A `timeoutS` on a group step.** The robot runtime used to honour a `timeoutS` on a `sequence`,
+  `parallel` or `branch`, which the file format does not give those kinds and the editor drops, so a
+  hand-written file ran differently on the robot from the way the editor planned it. Both runtimes now
+  ignore it and show a `Zenith warning` line in init telemetry naming the step (`AutoFile.warnings`).
+  Put the timeout on a step inside the group, or bound the group with a `deadline` whose deadline is a
+  `wait`.
+- **Waypoints in a mirrored routine.** `mirrorAuto` kept a waypoint reference as it was, so a mirrored
+  file drove to the waypoint itself where the robot, running the original as the other alliance, drives
+  to its mirror. Given the project's waypoints, `mirrorAuto` now writes a referenced pose as the
+  mirrored waypoint's numbers. A caller that saves the result has to pass them.
+- **BLUE files in the editor.** A file's `alliance` is the alliance its poses are written for, and
+  the robot runtime mirrors a file only when it runs as the other alliance. The editor, `zenith render`
+  and the MCP render mirrored whenever the view was BLUE, so a BLUE file opened on RED's half, the
+  opposite of where the robot drives it, and a point drawn on a BLUE file was stored mirrored. They now
+  follow the runtime: a file is drawn as it is when viewed as its own alliance, and mirrored only when
+  viewed as the other, with every edit made there mirrored back. The start rules read a BLUE file's
+  start against BLUE's own half and BLUE's loading zone, and `zenith new --alliance BLUE` writes its
+  skeleton on BLUE's half. The file format is unchanged.
 
 ## [0.1.0] - 2026-09-25
 

@@ -192,7 +192,9 @@ Details that affect how a routine behaves:
 - **Timeouts use the robot clock.** SolversLib's `Command.withTimeout` times itself on the wall clock,
   so the runtime never uses it. `RobotTimeout.of(command, seconds)` races the command against
   `WaitRobotTime`, which reads the robot's `nanoTime()`. The headless sim steps that clock, so
-  timeouts behave the same in the sim and on the field.
+  timeouts behave the same in the sim and on the field. Only `path`, `command` and `wait` steps have
+  one. A `timeoutS` on a `sequence`, `parallel` or `branch` is ignored, as the editor ignores it, and
+  init shows a `Zenith warning` line on the Driver Station naming the step.
 - **Markers fire by distance along the path.** `PathMarkers` reads Pedro's segment index and
   arc-length completion each loop and fires a marker when the path passes the marker's position. A
   marker placed 60% along a path in the editor fires 60% along it on the robot. Markers at the very

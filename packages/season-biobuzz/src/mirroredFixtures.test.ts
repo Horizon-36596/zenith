@@ -1,15 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  childLists,
-  withChildLists,
-  type Auto,
-  type PoseSource,
-  type Segment,
-  type Step,
-  type Waypoints,
-} from "@horizon36596/zenith-schema";
-import {
   canonicalize,
   loadAuto,
   loadField,
@@ -36,9 +27,9 @@ import { biobuzzRules } from "./rules.js";
  * there because a reflection reverses the way a turn goes and a point symmetry does not, and the
  * runtime has to get both right.
  *
- * Waypoint references are written out as their numbers before mirroring. `mirrorAuto` keeps a
- * reference as it is, meaning the other alliance's waypoint of that name, and the runtime mirrors the
- * one waypoint the file names; inlining them first compares the mirror itself and nothing else.
+ * `mirrorAuto` is given the waypoints, as any caller that saves its result has to be, so a waypoint
+ * reference is written as the mirrored waypoint's numbers: the pose the runtime drives when it
+ * mirrors the named waypoint itself.
  *
  * Set `ZENITH_UPDATE_GOLDEN=1` to write the files instead of comparing against them.
  */
@@ -53,36 +44,6 @@ const autosIn = (dir: string): string[] =>
   readdirSync(dir)
     .filter((file) => file.endsWith(".auto.json"))
     .sort();
-
-/** `source` with every waypoint reference replaced by the waypoint's numbers. */
-function inline(source: PoseSource, waypoints: Waypoints): PoseSource {
-  if (source === "current" || !("ref" in source)) return source;
-  const waypoint = waypoints.waypoints[source.ref];
-  if (waypoint === undefined) throw new Error(`no waypoint named ${JSON.stringify(source.ref)}`);
-  return { xIn: waypoint.xIn, yIn: waypoint.yIn, headingRad: waypoint.headingRad };
-}
-
-function inlineSegment(segment: Segment, waypoints: Waypoints): Segment {
-  return { ...segment, from: inline(segment.from, waypoints), to: inline(segment.to, waypoints) } as Segment;
-}
-
-function inlineStep(step: Step, waypoints: Waypoints): Step {
-  if (step.kind === "path") {
-    return { ...step, segments: step.segments.map((segment) => inlineSegment(segment, waypoints)) };
-  }
-  return withChildLists(
-    step,
-    childLists(step).map((list) => list.map((child) => inlineStep(child, waypoints))),
-  );
-}
-
-function inlineAuto(auto: Auto, waypoints: Waypoints): Auto {
-  return {
-    ...auto,
-    start: { ...auto.start, pose: inline(auto.start.pose, waypoints) as Auto["start"]["pose"] },
-    steps: auto.steps.map((step) => inlineStep(step, waypoints)),
-  };
-}
 
 interface Source {
   name: string;
@@ -114,7 +75,7 @@ describe.skipIf(!existsSync(starterAutos) || !existsSync(conformance))("the mirr
         expect(names.length, source.dir).toBeGreaterThan(0);
         for (const file of names) {
           const auto = loadAuto(read(`${source.dir}${file}`));
-          const mirrored = canonicalize("auto", mirrorAuto(inlineAuto(auto, waypoints), mode, source.mirrorId));
+          const mirrored = canonicalize("auto", mirrorAuto(auto, mode, source.mirrorId, waypoints));
           const checkedIn = `${outDir}${file}`;
           if (process.env["ZENITH_UPDATE_GOLDEN"] === "1") {
             mkdirSync(outDir, { recursive: true });

@@ -29,7 +29,6 @@ import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
 import com.pedropathing.paths.PathSegment;
 
-import org.horizon36596.zenith.AutoFile;
 import org.horizon36596.zenith.AutoSource;
 import org.horizon36596.zenith.PedroPaths;
 import org.junit.jupiter.api.DynamicTest;
@@ -38,9 +37,7 @@ import org.junit.jupiter.api.TestFactory;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -62,9 +59,6 @@ import java.util.regex.Pattern;
  * <p>Numbers are compared to within what canonical form rounds a mirrored file to: four decimals of a
  * radian, and a heading only up to whole turns, since F run as BLUE turns heading h into h + pi where
  * the saved file writes h - pi. Everything else in the log and the trace is compared exactly.
- *
- * <p>Four conformance fixtures are not compared, for a reason outside the mirror: see
- * {@link #GROUP_TIMEOUTS}.
  */
 class MirrorConformanceTest {
 
@@ -74,39 +68,6 @@ class MirrorConformanceTest {
     /** Poses in the log are printed to hundredths and headings to thousandths. */
     static final double LOGGED_INCHES = 0.011;
     static final double LOGGED_RAD = 0.0011;
-
-    /**
-     * The fixtures that put a {@code timeoutS} on a {@code sequence}, {@code parallel} or {@code branch}.
-     * The runtime honours one, but the editor's schema ({@code packages/schema/src/auto.ts}) has no
-     * {@code timeoutS} on a group step, so {@code mirrorAuto}'s copy has lost it and runs differently
-     * for a reason that has nothing to do with the mirror. They are checked to still be that case rather
-     * than compared.
-     */
-    static final Set<String> GROUP_TIMEOUTS = new HashSet<String>(Arrays.asList(
-            "branches", "edges", "groups", "never-ends"));
-
-    /** How many group steps in {@code steps}, at any depth, carry a {@code timeoutS}. */
-    static int groupTimeouts(List<AutoFile.Step> steps) {
-        int count = 0;
-        for (AutoFile.Step step : steps) {
-            List<List<AutoFile.Step>> children = new ArrayList<List<AutoFile.Step>>();
-            if (step instanceof AutoFile.SequenceStep) {
-                children.add(((AutoFile.SequenceStep) step).steps);
-            } else if (step instanceof AutoFile.ParallelStep) {
-                children.add(((AutoFile.ParallelStep) step).steps);
-            } else if (step instanceof AutoFile.BranchStep) {
-                children.add(((AutoFile.BranchStep) step).then);
-                children.add(((AutoFile.BranchStep) step).otherwise);
-            }
-            if (!children.isEmpty() && step.timeoutS != null) {
-                count++;
-            }
-            for (List<AutoFile.Step> child : children) {
-                count += groupTimeouts(child);
-            }
-        }
-        return count;
-    }
 
     static final class Mode {
         final String name;
@@ -178,13 +139,6 @@ class MirrorConformanceTest {
                         final Runner runner = "ivy".equals(runtime) ? IVY : SOLVERSLIB;
                         final String label = source[0] + " " + name + " " + mode.name + " " + runtime;
                         tests.add(DynamicTest.dynamicTest(label, () -> {
-                            if (GROUP_TIMEOUTS.contains(name)) {
-                                assertTrue(groupTimeouts(AutoFile.load(original, name).steps)
-                                        > groupTimeouts(AutoFile.load(mirrored, name).steps),
-                                        name + " no longer loses a group timeoutS in the editor; take it out of"
-                                                + " GROUP_TIMEOUTS so it is compared in full");
-                                return;
-                            }
                             World asBlue = world(mode.mirror);
                             World saved = world(mode.mirror);
                             // Every file here is written for RED, and mirrorAuto saves it for BLUE.

@@ -193,8 +193,9 @@ export function layoutPane(
  * `@horizon36596/zenith-core`'s `mirrorVec`/`mirrorHeadingRad` already implement all four kinds and are what
  * `render` uses, so the canvas calls them directly instead of keeping its own copy: `mirrorVec(point,
  * field.frame.mirror)`, `mirrorHeadingRad(headingRad, field.frame.mirror)`. Every kind is its own
- * inverse, which is what lets the canvas draw a BLUE preview and still report the canonical RED pose
- * back to the shell: the same function un-mirrors on the way out (`FieldCanvas.tsx`'s `toWorld`).
+ * inverse, which is what lets the canvas draw a file as the other alliance and still report a pose
+ * in the file's own alliance frame back to the shell: the same function un-mirrors on the way out
+ * (`FieldCanvas.tsx`'s `toWorld`). Whether to mirror at all is `shouldMirror`'s answer.
  */
 
 /** The round number of inches a scale bar should span to sit just inside `maxPx`. */

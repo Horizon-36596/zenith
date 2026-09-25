@@ -274,10 +274,24 @@ export const biobuzzRules: SeasonRules = {
     return { ...moved, headingRad };
   },
 
-  /** `startRules` from `field.json`, checked against the footprint at the start pose. */
-  startLegal: (field: Field, pose: Pose, robot: Robot): Finding[] => {
+  /**
+   * `startRules` from `field.json`, checked against the footprint at the start pose.
+   *
+   * The pose is in the frame of `alliance`, the file's own, which is where the robot starts it. The
+   * field file writes its rules for `field.frame.canonicalAlliance`, so for the other alliance its
+   * own half is the one its own hive is in and a named zone is read as its counterpart
+   * (`loadingZoneRed` is BLUE's `loadingZoneBlue`).
+   */
+  startLegal: (
+    field: Field,
+    pose: Pose,
+    robot: Robot,
+    alliance: "RED" | "BLUE" = field.frame.canonicalAlliance,
+  ): Finding[] => {
     const rules = field.startRules;
     if (rules === undefined) return [];
+    const ownId = (id: string): string =>
+      alliance === field.frame.canonicalAlliance ? id : (swapAllianceWord(id) ?? id);
     const findings: Finding[] = [];
     const bounds = fieldBounds(field);
     const corners = footprintAt(pose, robot, "startIn").bodyIn;
@@ -311,12 +325,10 @@ export const biobuzzRules: SeasonRules = {
     }
 
     if (rules.ownHalf === true) {
-      // The file is written in the canonical alliance's frame, and that alliance's hive says which
+      // The pose is in the frame of the file's own alliance, and that alliance's hive says which
       // side of the centre line is its own half.
       const ownHive = (field.elements ?? []).find(
-        (element) =>
-          element.container === "hive" &&
-          element.id.toLowerCase().includes(field.frame.canonicalAlliance.toLowerCase()),
+        (element) => element.container === "hive" && element.id.toLowerCase().includes(alliance.toLowerCase()),
       );
       const pivotX = ownHive === undefined ? -1 : (numberAt(ownHive, "pivotIn", "xIn") ?? -1);
       // Own half is where `x * ownSign` is positive, so a corner on the wrong side of the centre
@@ -330,7 +342,7 @@ export const biobuzzRules: SeasonRules = {
       }
     }
 
-    for (const zoneId of rules.notInZones ?? []) {
+    for (const zoneId of (rules.notInZones ?? []).map(ownId)) {
       const zone = (field.zones ?? []).find((candidate) => candidate.id === zoneId);
       if (zone === undefined) continue;
       if (polygonOverlapsBox(corners, zone).overlaps) {

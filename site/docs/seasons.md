@@ -47,7 +47,7 @@ state; it only passes it from one step to the next. That running state is the **
 | `onCollect(state, containerId, count)` | What happens when the robot picks up `count` pieces from a container or the floor, limited by what is there and what the robot has room for. |
 | `currentTarget(state, alliance)` | Where this alliance should score right now, given the state so far. |
 | `legalApproach(state, target, pose, robot)` | Whether scoring at `target` from `pose` is allowed by the game rules. |
-| `startLegal(field, pose, robot)` | Whether the start pose is legal, as a list of findings. An empty list means legal. |
+| `startLegal(field, pose, robot, alliance)` | Whether the start pose is legal, as a list of findings. An empty list means legal. The pose is in the frame of `alliance`, the file's own; `field.json`'s `startRules` are written for the canonical alliance, and the plugin reads them for the other one through their counterparts. |
 | `summary(state)` | The rows shown in the ledger panel and in the pull request body at the end of the routine. |
 
 Optional methods add detail when a season needs it:
