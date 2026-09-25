@@ -45,8 +45,8 @@ pnpm --filter @horizon36596/zenith-web build; pnpm --filter @horizon36596/zenith
 pnpm --filter @horizon36596/zenith-desktop dist
 ```
 
-This writes `apps/desktop/release/Zenith-Setup-0.1.0.exe` (an installer that asks where to install)
-and `apps/desktop/release/Zenith-Portable-0.1.0.exe` (runs without installing). Neither is
+This writes `apps/desktop/release/Zenith-Setup-0.1.1.exe` (an installer that asks where to install)
+and `apps/desktop/release/Zenith-Portable-0.1.1.exe` (runs without installing). Neither is
 code-signed, so Windows SmartScreen shows a warning the first time; choose More info > Run anyway.
 
 The app icon is the Zenith mark: `resources/icon.ico` (16 to 256 px, the

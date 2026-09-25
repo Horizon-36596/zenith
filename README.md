@@ -73,7 +73,7 @@ repositories {
 dependencies {
     implementation 'com.pedropathing.ivy:pedro:1.1.1'
     implementation 'com.pedropathing:core:3.0.0-20260828.185437-17'
-    implementation 'com.github.Horizon-36596:zenith:v0.1.0'
+    implementation 'com.github.Horizon-36596:zenith:v0.1.1'
 }
 ```
 
@@ -89,7 +89,7 @@ repositories {
 dependencies {
     implementation 'org.solverslib:core:0.3.6'
     implementation 'com.pedropathing:core:3.0.0-20260828.185437-17'
-    implementation 'com.github.Horizon-36596:zenith:v0.1.0'
+    implementation 'com.github.Horizon-36596:zenith:v0.1.1'
 }
 ```
 

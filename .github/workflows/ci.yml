@@ -30,6 +30,11 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Packs the npm packages, installs the tarballs and runs the linked bins, the way a team gets
+      # them. This is the only place the Linux bin symlinks are exercised before a tag.
+      - name: Pack and smoke-test the tarballs
+        run: node scripts/smoke-pack.mjs
+
       # apps/web/e2e does not exist yet (added when the web editor's Playwright smoke test
       # lands, spec 05 §6). This step is a no-op until then, rather than a hard failure, so CI
       # stays meaningful for every package in the meantime.

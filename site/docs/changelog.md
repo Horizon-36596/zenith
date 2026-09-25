@@ -5,6 +5,18 @@ every release. See the [root changelog](https://github.com/Horizon-36596/zenith/
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.1.1 - 2026-09-25
+
+### Fixed
+
+- **CLI on Linux and macOS.** The `zenith` command installed from npm exited without doing anything,
+  because npm links a bin there as a symlink and the CLI did not recognise itself through it. It now
+  resolves the link. Windows was not affected. CI now packs and installs the npm packages and runs
+  their commands on Linux on every change, which is where this showed.
+- **npm.** 0.1.0 was not published to npm, because this fault stopped its publish run. 0.1.1 is the
+  first version of the `@horizon36596/zenith-*` packages there. The desktop app, the docs site and
+  the robot runtime are unchanged from 0.1.0 apart from the version.
+
 ## 0.1.0 - 2026-09-25
 
 The first public release.

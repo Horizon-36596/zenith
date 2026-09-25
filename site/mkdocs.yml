@@ -22,7 +22,7 @@ site_dir: build/site
 # The version stamp, shown in the footer of every page. `package.json` at the repository root is
 # the authoritative source; scripts/stamp-version.mjs keeps this in sync. Bump this line when that
 # script runs.
-copyright: "Zenith 0.1.0 · Horizon (FTC 36596) · MIT"
+copyright: "Zenith 0.1.1 · Horizon (FTC 36596) · MIT"
 
 theme:
   name: material

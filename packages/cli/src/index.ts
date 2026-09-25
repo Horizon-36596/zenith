@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command } from "commander";
 import { runCalibrate } from "./commands/calibrate.js";
 import { runCodegen } from "./commands/codegen.js";
@@ -196,7 +197,23 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 }
 
-const entry = process.argv[1];
-if (entry !== undefined && import.meta.url === pathToFileURL(entry).href) {
+/**
+ * True when `entry`, the script Node was started with, is the module at `moduleUrl`.
+ *
+ * Both sides are resolved through symlinks first. npm installs a package's bin on Linux and macOS as
+ * a symlink in `node_modules/.bin`, and Node reports that link's path in `process.argv[1]` while
+ * `import.meta.url` is the real file, so a plain comparison is false there and the CLI would exit
+ * without doing anything. On Windows npm writes a `.cmd` shim that passes the real path instead.
+ */
+export function isEntryPoint(entry: string | undefined, moduleUrl: string): boolean {
+  if (entry === undefined) return false;
+  try {
+    return pathToFileURL(realpathSync(entry)).href === pathToFileURL(realpathSync(fileURLToPath(moduleUrl))).href;
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint(process.argv[1], import.meta.url)) {
   process.exitCode = await main(process.argv);
 }

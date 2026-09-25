@@ -1,6 +1,6 @@
 {
   "name": "@horizon36596/zenith-github",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "GitHub collaboration for Zenith: a fetch-based client that proposes autos as pull requests and loads review links, in the browser or Node.",
   "keywords": [
     "ftc",

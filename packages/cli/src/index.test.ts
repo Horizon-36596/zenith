@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { main, stripWrapperSeparator } from "./index.js";
+import { isEntryPoint, main, stripWrapperSeparator } from "./index.js";
 import { makeProject, simpleAuto, writeAuto } from "./testSupport.js";
 
 describe("stripWrapperSeparator", () => {
@@ -31,6 +32,47 @@ describe("stripWrapperSeparator", () => {
       "--",
       "b.json",
     ]);
+  });
+});
+
+describe("isEntryPoint", () => {
+  let root = "";
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "zenith-cli-entry-"));
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("is true for the module's own path", () => {
+    const script = join(root, "index.js");
+    writeFileSync(script, "");
+    expect(isEntryPoint(script, pathToFileURL(script).href)).toBe(true);
+  });
+
+  it("is true through a symlink, the way npm links a bin on Linux and macOS", (context) => {
+    const script = join(root, "index.js");
+    const link = join(root, "zenith");
+    writeFileSync(script, "");
+    try {
+      symlinkSync(script, link);
+    } catch {
+      // Windows without Developer Mode cannot make symlinks; CI on Linux runs this case.
+      context.skip();
+    }
+    expect(isEntryPoint(link, pathToFileURL(script).href)).toBe(true);
+  });
+
+  it("is false for another script, and for no script at all", () => {
+    const script = join(root, "index.js");
+    const other = join(root, "other.js");
+    writeFileSync(script, "");
+    writeFileSync(other, "");
+    expect(isEntryPoint(other, pathToFileURL(script).href)).toBe(false);
+    expect(isEntryPoint(undefined, pathToFileURL(script).href)).toBe(false);
+    expect(isEntryPoint(join(root, "missing.js"), pathToFileURL(script).href)).toBe(false);
   });
 });
 

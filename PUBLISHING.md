@@ -191,7 +191,7 @@ Open <https://jitpack.io/#Horizon-36596/zenith>, find `v0.1.0` under Releases or
 **Get it**. Or ask for the POM, which starts the build and waits for it (a few minutes):
 
 ```powershell
-Invoke-WebRequest -UseBasicParsing -TimeoutSec 900 https://jitpack.io/com/github/Horizon-36596/zenith/v0.1.0/zenith-v0.1.0.pom | Select-Object StatusCode
+Invoke-WebRequest -UseBasicParsing -TimeoutSec 900 https://jitpack.io/com/github/Horizon-36596/zenith/v0.1.1/zenith-v0.1.1.pom | Select-Object StatusCode
 ```
 
 [The robot runtime on JitPack](#the-robot-runtime-on-jitpack) says what a good build log looks like.
@@ -354,7 +354,7 @@ runtimes: the Ivy classes in `org.horizon36596.zenith.ivy`, the SolversLib class
 and runs the Ivy tests. Teams on either library install the same line:
 
 ```groovy
-implementation 'com.github.Horizon-36596:zenith:v0.1.0'
+implementation 'com.github.Horizon-36596:zenith:v0.1.1'
 ```
 
 The version is the tag exactly as written, `v` included. JitPack only builds public repositories on its
@@ -400,7 +400,7 @@ free tier, so the repository must be public before this works.
 4. Check that the artifact is served under the repository's name:
 
    ```powershell
-   Invoke-WebRequest -UseBasicParsing -Method Head https://jitpack.io/com/github/Horizon-36596/zenith/v0.1.0/zenith-v0.1.0.pom | Select-Object StatusCode
+   Invoke-WebRequest -UseBasicParsing -Method Head https://jitpack.io/com/github/Horizon-36596/zenith/v0.1.1/zenith-v0.1.1.pom | Select-Object StatusCode
    ```
 
    `200` means teams can install it. (SimLoop's first build was served the same way, as

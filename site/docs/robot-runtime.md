@@ -20,7 +20,7 @@ the command library your robot code uses next to it.
 
 | | |
 |---|---|
-| JitPack coordinate | `com.github.Horizon-36596:zenith:v0.1.0` |
+| JitPack coordinate | `com.github.Horizon-36596:zenith:v0.1.1` |
 | Java package | `org.horizon36596.zenith.ivy` (Ivy), `org.horizon36596.zenith.solverslib` (SolversLib), `org.horizon36596.zenith` (shared) |
 | Packaging | Android library (AAR), minSdk 24 |
 | Maven group and artifact (local builds only) | `org.horizon36596:zenith-runtime` |
@@ -47,7 +47,7 @@ dependencies {
     // ...the FTC SDK lines that are already here...
     implementation 'com.pedropathing.ivy:pedro:1.1.1'
     implementation 'com.pedropathing:core:3.0.0-20260828.185437-17'
-    implementation 'com.github.Horizon-36596:zenith:v0.1.0'
+    implementation 'com.github.Horizon-36596:zenith:v0.1.1'
 }
 ```
 
@@ -68,7 +68,7 @@ dependencies {
     // ...the FTC SDK lines that are already here...
     implementation 'org.solverslib:core:0.3.6'
     implementation 'com.pedropathing:core:3.0.0-20260828.185437-17'
-    implementation 'com.github.Horizon-36596:zenith:v0.1.0'
+    implementation 'com.github.Horizon-36596:zenith:v0.1.1'
 }
 ```
 

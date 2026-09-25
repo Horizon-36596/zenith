@@ -1,6 +1,6 @@
 {
   "name": "@horizon36596/zenith-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The pure planning core of Zenith: path geometry, heading modes, feasibility checks, time estimates, structural edits, canonical form and SVG render.",
   "keywords": [
     "ftc",

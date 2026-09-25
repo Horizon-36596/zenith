@@ -1,6 +1,6 @@
 {
   "name": "zenith",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "A PathPlanner-style autonomous planner for FTC that humans and agents share.",

@@ -19,7 +19,7 @@ MIT, copyright Horizon (FTC 36596).
 
 | | |
 |---|---|
-| JitPack coordinate | `com.github.Horizon-36596:zenith:v0.1.0` |
+| JitPack coordinate | `com.github.Horizon-36596:zenith:v0.1.1` |
 | Maven group, artifact | `org.horizon36596:zenith-runtime` (what `publishToMavenLocal` writes) |
 | Java packages | `org.horizon36596.zenith.ivy` (Ivy), `org.horizon36596.zenith.solverslib` (SolversLib), `org.horizon36596.zenith` (shared) |
 | Packaging | Android library (AAR), `minSdk` 24 |
@@ -47,7 +47,7 @@ dependencies {
 
     implementation 'com.pedropathing.ivy:pedro:1.1.1'
     implementation 'com.pedropathing:core:3.0.0-20260828.185437-17'
-    implementation 'com.github.Horizon-36596:zenith:v0.1.0'
+    implementation 'com.github.Horizon-36596:zenith:v0.1.1'
 }
 ```
 
@@ -67,7 +67,7 @@ dependencies {
 
     implementation 'org.solverslib:core:0.3.6'
     implementation 'com.pedropathing:core:3.0.0-20260828.185437-17'
-    implementation 'com.github.Horizon-36596:zenith:v0.1.0'
+    implementation 'com.github.Horizon-36596:zenith:v0.1.1'
 }
 ```
 

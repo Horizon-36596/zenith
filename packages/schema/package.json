@@ -1,6 +1,6 @@
 {
   "name": "@horizon36596/zenith-schema",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The Zenith file formats (link, robot, field, waypoints, auto) as zod schemas, TypeScript types and JSON Schema, with the migrations between format versions.",
   "keywords": [
     "ftc",

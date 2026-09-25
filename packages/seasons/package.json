@@ -1,6 +1,6 @@
 {
   "name": "@horizon36596/zenith-seasons",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The Zenith season registry: turns a field file into the season rules the checks run against.",
   "keywords": [
     "ftc",
