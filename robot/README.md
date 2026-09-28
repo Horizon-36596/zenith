@@ -25,7 +25,7 @@ MIT, copyright Horizon (FTC 36596).
 | Packaging | Android library (AAR), `minSdk` 24 |
 
 The JitPack version is the git tag exactly as it was pushed, leading `v` included. That is how JitPack
-names a build, and it is what Horizon's SimLoop library measured on its first JitPack release.
+names a build, and it was measured on a real JitPack release.
 
 ## Install
 

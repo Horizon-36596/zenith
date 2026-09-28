@@ -247,7 +247,7 @@ gh repo archive Horizon-36596/zenith-dev --yes
 ### 14. Add Zenith to the library site
 
 The landing page is `index.html` in `Horizon-36596/Horizon-36596.github.io`. Add this card inside
-`<main>`, after the SimLoop card:
+`<main>`, alongside the other library cards:
 
 ```html
     <a class="library" href="/zenith/" aria-label="Zenith - read the documentation">
@@ -403,8 +403,7 @@ free tier, so the repository must be public before this works.
    Invoke-WebRequest -UseBasicParsing -Method Head https://jitpack.io/com/github/Horizon-36596/zenith/v0.1.1/zenith-v0.1.1.pom | Select-Object StatusCode
    ```
 
-   `200` means teams can install it. (SimLoop's first build was served the same way, as
-   `com/github/Horizon-36596/simloop/v0.1.0-beta1/simloop-v0.1.0-beta1.aar`.) A `404` after a green build means JitPack published it under a
+   `200` means teams can install it. A `404` after a green build means JitPack published it under a
    different name; the log's file list shows which, and `robot/README.md`
    and `site/docs/robot-runtime.md` then need the real
    coordinate.

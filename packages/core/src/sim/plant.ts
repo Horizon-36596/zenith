@@ -4,7 +4,7 @@ import type { PlantParams } from "./types.js";
 
 /**
  * The simulated chassis, matched to the robot repository's headless sim: four
- * `SimLoop/.../fakehardware/FakeMotor` first-order wheels, `MecanumDrivePlant`'s mounting-sign
+ * first-order wheels, `MecanumDrivePlant`'s mounting-sign
  * bookkeeping (which cancels and so is left out), and `MecanumPoseIntegrator`'s forward kinematics
  * with its roller-slip factor on the lateral velocity. The powers reach the wheels the way Pedro's
  * `Mecanum.applyDrive` and `CachedMotor.setPower` write them.

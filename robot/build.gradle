@@ -3,7 +3,7 @@
  * this file puts the Android Gradle Plugin on the buildscript classpath and gives every project the same
  * repositories.
  *
- * The AGP version is pinned rather than ranged, and it is the one Horizon's SimLoop library builds with.
+ * The AGP version is pinned rather than ranged.
  * The runtime compiles against SolversLib, which is published as an Android library (AAR), so this has to
  * be an Android build; tracking a newer AGP than the FTC SDK's own app buys nothing and can break a
  * consumer's build for a reason that has nothing to do with this library.

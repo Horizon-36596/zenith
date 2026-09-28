@@ -18,7 +18,7 @@ import type { FollowerParams, PlantParams, SimFidelity, SimOptions } from "./typ
 /** The default tick for the preview, in seconds. */
 export const DEFAULT_TICK_S = 0.01;
 
-/** SimLoop's `HeadlessOpModeRunner.TICK_SECONDS`: a Gradle headless sim's 50 Hz loop. */
+/** The tick of a Gradle headless sim's 50 Hz loop, in seconds. */
 export const GRADLE_TICK_S = 0.02;
 
 /**
@@ -30,7 +30,7 @@ export const PERIOD_MARGIN_S = 4;
 /** When the field declares no auto period, the sim stops here. FTC's auto period is 30 s. */
 export const DEFAULT_PERIOD_S = 30;
 
-/** SimLoop's `FakeMotor.EPS`. */
+/** The stop-snap threshold of the robot repository's headless-sim motor model. */
 export const STOP_SNAP_FRACTION = 0.02;
 
 /** `MecanumConfig.powerThreshold`'s default in Pedro's revhub. */

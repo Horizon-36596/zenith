@@ -2,7 +2,7 @@
 # documentation site at /zenith/, the web editor at /zenith/app/ and the JSON Schemas at
 # /zenith/schema/v1/<kind>.json, all from one artifact that scripts/build-pages.mjs puts together.
 #
-# It follows SimLoop's docs-publish.yml. The settings it depends on are not visible from this file,
+# The settings it depends on are not visible from this file,
 # and a deployment fails without them. They are a person's to set, once, and PUBLISHING.md has the
 # exact steps:
 #
