@@ -67,13 +67,11 @@
           "properties": {
             "lengthIn": {
               "type": "number",
-              "exclusiveMinimum": true,
-              "minimum": 0
+              "exclusiveMinimum": 0
             },
             "widthIn": {
               "type": "number",
-              "exclusiveMinimum": true,
-              "minimum": 0
+              "exclusiveMinimum": 0
             },
             "provenance": {
               "type": "string",
@@ -138,8 +136,7 @@
         },
         {
           "type": "number",
-          "exclusiveMinimum": true,
-          "minimum": 0
+          "exclusiveMinimum": 0
         }
       ]
     },
@@ -184,8 +181,7 @@
           "properties": {
             "band": {
               "type": "number",
-              "exclusiveMinimum": true,
-              "minimum": 0
+              "exclusiveMinimum": 0
             },
             "samples": {
               "type": "integer",
@@ -385,13 +381,11 @@
           },
           "widthIn": {
             "type": "number",
-            "exclusiveMinimum": true,
-            "minimum": 0
+            "exclusiveMinimum": 0
           },
           "depthIn": {
             "type": "number",
-            "exclusiveMinimum": true,
-            "minimum": 0
+            "exclusiveMinimum": 0
           },
           "provenance": {
             "$ref": "#/properties/footprint/properties/startIn/properties/provenance"

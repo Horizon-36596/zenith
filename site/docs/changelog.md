@@ -5,6 +5,13 @@ every release. See the [root changelog](https://github.com/Horizon-36596/zenith/
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- Export numeric exclusive bounds in the published JSON Schemas so they validate under the declared
+  2020-12 dialect. Runtime parsers and file format versions are unchanged.
+
 ## 0.1.1 - 2026-09-25
 
 ### Fixed

@@ -109,13 +109,11 @@
       "properties": {
         "xIn": {
           "type": "number",
-          "exclusiveMinimum": true,
-          "minimum": 0
+          "exclusiveMinimum": 0
         },
         "yIn": {
           "type": "number",
-          "exclusiveMinimum": true,
-          "minimum": 0
+          "exclusiveMinimum": 0
         }
       },
       "required": [
@@ -154,13 +152,11 @@
                 },
                 "right": {
                   "type": "number",
-                  "exclusiveMinimum": true,
-                  "minimum": 0
+                  "exclusiveMinimum": 0
                 },
                 "bottom": {
                   "type": "number",
-                  "exclusiveMinimum": true,
-                  "minimum": 0
+                  "exclusiveMinimum": 0
                 }
               },
               "required": [
@@ -221,13 +217,11 @@
       "properties": {
         "autoS": {
           "type": "number",
-          "exclusiveMinimum": true,
-          "minimum": 0
+          "exclusiveMinimum": 0
         },
         "teleopS": {
           "type": "number",
-          "exclusiveMinimum": true,
-          "minimum": 0
+          "exclusiveMinimum": 0
         }
       },
       "required": [

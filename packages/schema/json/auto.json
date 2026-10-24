@@ -118,8 +118,7 @@
               },
               "timeoutS": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0
+                "exclusiveMinimum": 0
               },
               "segments": {
                 "type": "array",
@@ -353,8 +352,7 @@
               },
               "speedFraction": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0,
+                "exclusiveMinimum": 0,
                 "maximum": 1
               },
               "markers": {
@@ -511,8 +509,7 @@
               },
               "timeoutS": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0
+                "exclusiveMinimum": 0
               },
               "expect": {
                 "$ref": "#/properties/steps/items/anyOf/0/properties/expect"
@@ -548,8 +545,7 @@
               },
               "timeoutS": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0
+                "exclusiveMinimum": 0
               },
               "notes": {
                 "type": "string"
