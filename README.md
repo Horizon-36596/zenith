@@ -5,16 +5,16 @@
   </picture>
 </h1>
 
-**Plan an FTC autonomous on the real field, see whether it will work, and run it on the robot without
-editing Java.**
+**Plan an FTC autonomous, check it against your configured robot and field, and run it on the robot
+without editing Java.**
 
 [![Status: beta](https://img.shields.io/badge/status-beta-f5b94a)](https://libraries.horizon36596.org/zenith/changelog/)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-6c4a7a)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-libraries.horizon36596.org%2Fzenith-b13848)](https://libraries.horizon36596.org/zenith/)
 
 Zenith is a PathPlanner-style autonomous path planner for FTC. You draw a routine on the field as
-paths with headings, attach robot commands to points on those paths, and see at once whether the
-robot can do it inside the 30 second period without hitting anything. AI agents edit the same files
+paths with headings, attach robot commands to points on those paths, and check geometry, timing and
+configured rules against the 30 second period. AI agents edit the same files
 through a CLI and an MCP server and get the same checks. Each routine is one readable JSON file in
 your robot repository, and a small runtime on the robot plays it through Pedro Pathing v3 and
 Ivy or SolversLib, so a new auto needs no Java edit.
@@ -43,7 +43,7 @@ checks, the sims, the CLI, agents and MCP, seasons and the FAQ.
 The CLI and the MCP server, from npm:
 
 ```powershell
-npm install --save-dev @horizon36596/zenith-cli @horizon36596/zenith-mcp
+npm install --save-dev --save-exact @horizon36596/zenith-cli @horizon36596/zenith-mcp
 ```
 
 Or point your MCP client at the server with no install, in `.mcp.json` at your robot repository's

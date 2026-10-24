@@ -67,6 +67,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Desktop files and recovery: desktop.md
   - Autonomous paths, explained: paths-explained.md
   - The editor: editor.md
   - Step kinds: step-kinds.md

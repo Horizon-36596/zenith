@@ -503,9 +503,12 @@ pre,
   max-width: none;
 }
 
+/* Keep gutters when removing the desktop reading measure; mobile code blocks extend into them. */
 @media screen and (max-width: 76.1875em) {
   .md-content__inner {
     max-width: none;
+    margin-left: 0.8rem;
+    margin-right: 0.8rem;
   }
 }
 

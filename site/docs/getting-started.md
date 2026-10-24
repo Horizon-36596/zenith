@@ -1,6 +1,6 @@
 # Getting started
 
-There are two ways to run the editor: the Windows desktop app, or the web app in a browser. Both are the same editor. Pick one, take the short tour, then plan a first auto on the starter example.
+There are two ways to run the editor: the Windows desktop app, or the web app in a browser. Both use the same editor. Pick one, take the short tour, then plan a first auto on the starter example. [Desktop files and recovery](desktop.md) explains saving, outside edits and running your project tools.
 
 | | Desktop app | Web app |
 |---|---|---|
@@ -14,8 +14,8 @@ There are two ways to run the editor: the Windows desktop app, or the web app in
 
 1. Open the [Zenith releases page](https://github.com/Horizon-36596/zenith/releases) and find the newest release.
 2. Download one of the two Windows files:
-    - `Zenith-Setup-0.1.0.exe` installs Zenith and adds it to the Start menu.
-    - `Zenith-Portable-0.1.0.exe` runs without installing, for example from a USB stick.
+    - `Zenith-Setup-0.1.1.exe` installs Zenith and adds it to the Start menu.
+    - `Zenith-Portable-0.1.1.exe` runs without installing, for example from a USB stick.
 3. Run the file you downloaded.
 
 The desktop app is not code-signed yet, so the first time you run it Windows SmartScreen shows a "Windows protected your PC" dialog. Click **More info**, check that the app name reads Zenith, then click **Run anyway**. Windows remembers the choice for that file. Code signing is planned for a later release; until then this step is expected, and it is the same for every unsigned download.

@@ -1,6 +1,6 @@
 # Zenith
 
-**Plan an FTC autonomous on the real field, see whether it will work, and run it on the robot without editing Java.**
+**Plan an FTC autonomous, check it against your configured robot and field, and run it on the robot without editing Java.**
 
 Zenith is a PathPlanner-style autonomous path planner for FTC. People draw and edit routines in the editor, and AI agents edit the same files from the command line or over MCP, so both work on one plan and get the same checks. It is built by Horizon (FTC 36596).
 
@@ -8,7 +8,7 @@ Zenith is a PathPlanner-style autonomous path planner for FTC. People draw and e
 
 *The editor with the starter example open: the steps on the left, the field in the middle, the inspector on the right and the problems panel below the field.*
 
-!!! warning "Status: beta, v0.1.0"
+!!! warning "Status: beta, v0.1.1"
     Zenith works end to end: draw, check, preview, save and run. File formats, command names and the
     editor layout may still change before 1.0. Pin the version you use, and read the
     [changelog](changelog.md) before you upgrade.
@@ -16,8 +16,8 @@ Zenith is a PathPlanner-style autonomous path planner for FTC. People draw and e
 ## What it does
 
 - **Draw routines on the field.** Paths, headings, curves and robot commands, in the robot's own coordinate frame, with the robot drawn at its real size, intakes included.
-- **Check them while you edit.** Every change is checked against the field walls, the field elements, the game rules, the 30 second autonomous period and what the robot can physically do. Problems appear as plain sentences, and many have a one-click fix.
-- **Preview them.** A built-in simulator plays the routine on the field as you drag, so you can watch the robot drive before it ever touches the tiles.
+- **Check them while you edit.** Every change is checked against the field walls, the field elements, the game rules, the 30 second autonomous period and the robot limits in your files. Problems appear as plain sentences, and many have a one-click fix.
+- **Preview them.** A built-in simulator plays the routine on the field as you drag. Its result depends on the configured model; check the routine on your real robot before relying on its timing or clearance.
 - **Run them on the robot.** Each routine is one readable JSON file. The Zenith runtime on the robot reads the file and builds the routine at init, with Ivy or SolversLib commands, whichever your robot code uses, so a changed auto needs no Java edits. See [Choosing a command library](command-libraries.md).
 - **Share and review.** Autos live in your robot repository, so they are diffed, reviewed and merged like any other code.
 

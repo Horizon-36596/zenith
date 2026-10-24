@@ -12,7 +12,7 @@ Node.js 22 or newer.
 Install it into your robot project:
 
 ```powershell
-npm install --save-dev @horizon36596/zenith-cli
+npm install --save-dev --save-exact @horizon36596/zenith-cli
 ```
 
 Then run it through npm:
@@ -65,18 +65,19 @@ Auto names use only letters, digits, `.`, `_` and `-`.
 
 ### `--json`
 
-Every verb takes `--json`. With it, the verb prints exactly one JSON document to stdout and nothing
-else there. Without it, output is formatted for a terminal.
+Every verb takes `--json`. Command results use JSON on stdout, while diagnostics belong on stderr.
+Argument and setup errors may leave stdout empty. Without `--json`, output is formatted for a terminal.
 
 - Parse only the `--json` output. The terminal format can change wording between versions. The JSON
   shape is the contract.
-- Check the exit code before you read the JSON. On exit `1`, the JSON is a findings list, not the
-  result you asked for. On exit `2`, where the verb prints JSON at all, it is `{ "error": "..." }`.
+- Check the exit code and use the command-specific result shape below. Handle empty stdout and read
+  stderr before reporting a JSON parse error.
 
 ### No prompts
 
-No verb ever asks a question. If a decision would need input, the verb fails instead. This makes every
-verb safe to run in CI or from an agent.
+Commands run without interactive questions. Check which ones write files: `zenith deploy` writes by
+default, while `zenith deploy --dry-run` previews its actions. Supply the required options before
+running a command from CI or an agent.
 
 ### Exit codes
 
@@ -85,6 +86,9 @@ verb safe to run in CI or from an agent.
 | `0` | ok |
 | `1` | an auto has an `error`-severity finding: a schema, geometry, rules or timing problem in the auto itself |
 | `2` | the verb could not run: bad usage, no project found, an IO error, a failed sim command, or a feature this build does not support |
+
+Invalid options can exit `1` before a command runs, with usage text on stderr even under `--json`.
+Treat a nonzero exit code as failure before interpreting its result.
 
 A build that is missing a core feature a verb depends on exits `2` with a message instead of a stack
 trace, so a script can tell "not supported here" from its own bug.
@@ -357,7 +361,7 @@ Pairs every path step's recorded duration against the plan's geometry and fits t
 `--write`
 :   Write the fitted `kinematics.accelInPerS2` and `kinematics.settleS` into `robot.json`, with
     provenance `CALIBRATED FROM SIM <date> (<n> steps)`. The per-mode scale is reported but not
-    written; `robot.json` has no field for it in 0.1.0.
+    written; `robot.json` has no field for it.
 
 `--date <date>`
 :   The date to record in the provenance. Default: today.

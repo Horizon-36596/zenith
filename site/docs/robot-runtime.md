@@ -26,7 +26,7 @@ the command library your robot code uses next to it.
 | Maven group and artifact (local builds only) | `org.horizon36596:zenith-runtime` |
 
 JitPack names the artifact after the repository and uses the git tag as the version, `v` included, so
-the coordinate is `...:zenith:v0.1.0`, not `...:zenith:0.1.0`.
+the coordinate is `...:zenith:v0.1.1`, not `...:zenith:0.1.1`.
 
 The runtime declares no dependencies of its own. Your project declares its command library and Pedro
 Pathing next to it, at the versions below, so your Pedro pin never moves and a vendored SolversLib never
@@ -94,7 +94,7 @@ Paths are built with the Pedro Pathing **v3** API (`com.pedropathing.api.Paths`)
 pre-release v3 line, not the v1 or v2 API most Pedro tutorials describe. It has no `PathChain`, no
 `PathBuilder` and no `BezierLine`.
 
-Zenith 0.1.0 is built and checked against this snapshot:
+The runtime is built and checked against this snapshot:
 
 | | |
 |---|---|
@@ -267,9 +267,9 @@ The command classes in this example (`ScoreCommand`) stand for your own robot's 
   },
   {
     "name": "score",
-    "summary": "Score whatever the robot is holding at the given level.",
-    "params": { "level": { "type": "integer", "min": 1, "max": 3 } },
-    "estimateS": "1.0",
+    "summary": "Score the requested number of held game pieces.",
+    "params": { "count": { "type": "integer", "min": 1, "max": 4 } },
+    "estimateS": "0.5 + count * 0.5",
     "requires": ["intake"],
     "stationary": true
   }
@@ -282,6 +282,8 @@ The command classes in this example (`ScoreCommand`) stand for your own robot's 
 `zenith validate` rejects an auto that names a command or condition `robot.json` does not declare
 (a `SCHEMA` finding). Keep `robot.json` and your `NamedCommands.register` calls in step: every name
 in one should be in the other. The [file format reference](file-format.md) lists every command key.
+The fragment matches the Java example's `count` argument. Its range and estimate are example values;
+replace them with your command's limits and measured timing.
 
 ## Load an auto on the robot
 
@@ -641,6 +643,7 @@ started. The runtime's groups run members in file order and end each one exactly
 
 ## Determinism
 
-The runtime reads no wall clock and no random source. Every timer reads the robot's `nanoTime()`. Run
-the same auto twice in the headless sim and you get the same result, which is what lets Zenith compare
-a plan against a recorded run. See [Simulation](simulation.md).
+Runtime timers read the robot's `nanoTime()`, whose default is `System.nanoTime()`. A headless
+harness must provide its stepped clock. Repeating a run also needs the same model, initial state,
+inputs and deterministic robot commands. Wall-clock reads or unseeded randomness in your commands
+can still change the result. See [Simulation](simulation.md).

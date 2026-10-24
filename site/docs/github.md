@@ -18,8 +18,8 @@ GitHub mode
 
 ## Signing in
 
-In v0.1.0 you sign in with a **fine-grained personal access token** (PAT) that you paste into the
-app.
+In GitHub mode, sign in with a **fine-grained personal access token** (PAT) that you paste into the
+app. The desktop Git panel has its own credentials; see [Desktop files and recovery](desktop.md#git-and-github).
 
 1. On GitHub, open **Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens**
    and choose **Generate new token**.

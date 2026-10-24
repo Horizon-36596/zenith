@@ -10,8 +10,9 @@ It has two simulators and one quick estimate:
 | [**High-fidelity sim**](#high-fidelity-sim) | the desktop app and `zenith sim` | seconds to minutes | your robot repository's own headless simulator, running your real robot code |
 
 The estimate and the preview come from Zenith and know only your files. The high-fidelity sim runs
-your robot code. When they disagree, trust the high-fidelity sim, and use
-[`zenith calibrate`](#calibrating-the-estimate) to bring the estimate closer.
+your robot code against a model supplied by your team. When they disagree, inspect the trace and
+the model assumptions. [`zenith calibrate`](#calibrating-the-estimate) can fit the estimate to those
+recorded timings; neither simulation replaces measurements from your robot.
 
 ## Playback levels
 
@@ -22,7 +23,7 @@ under the timeline's scrubber:
 |---|---|---|---|
 | **Ideal** (default) | on the planned path exactly, heading exactly as the heading mode says | the estimate | checking the plan itself, the way the public Pedro visualizer draws it |
 | **Instant sim** | the [instant preview sim](#instant-preview-sim)'s robot, with its drift and overshoot | the preview sim | a rough idea of how the real robot drives it |
-| **Full sim** | the recorded poses of a [high-fidelity sim](#high-fidelity-sim) trace | the trace | the closest match to the robot |
+| **Full sim** | the recorded poses of a [high-fidelity sim](#high-fidelity-sim) trace | the trace | inspecting your robot code's behavior in the supplied model |
 
 ![The Playback control, with the Instant sim tooltip open](assets/screenshots/editor-playback-levels.png)
 
@@ -298,5 +299,5 @@ A number fitted from the sim can only be as good as the sim's model of your driv
 fitted from the real robot is a measurement. Recalibrate from the robot when you can.
 
 !!! warning
-    In v0.1.0, `zenith calibrate --write` always writes `CALIBRATED FROM SIM`. If your traces came
+    `zenith calibrate --write` always writes `CALIBRATED FROM SIM`. If your traces came
     from the real robot, change the label to `CALIBRATED FROM ROBOT` by hand.
