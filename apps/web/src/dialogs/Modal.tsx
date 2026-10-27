@@ -6,12 +6,17 @@
  * it, which the browser does not treat as a close, so the frame puts focus back itself.
  */
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { X } from "lucide-react";
+import { RowButton } from "../components/primitives";
+import { focusForInput } from "../components/inputModality";
 import styles from "./Modal.module.css";
 
 export function Modal({
   title,
   children,
   footer,
+  titleAside,
+  closeButton = false,
   onClose,
   width = 520,
   tall = false,
@@ -20,6 +25,13 @@ export function Modal({
   title: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** A small control at the right end of the title row, such as a link to the docs. */
+  titleAside?: ReactNode;
+  /**
+   * One Lucide X at the title row's right end, "Close" with Esc in its tooltip, for a frame with no
+   * Cancel (UI_GUIDE 9.14). A dialog with a Cancel button leaves it off.
+   */
+  closeButton?: boolean;
   onClose: () => void;
   width?: number;
   /**
@@ -48,7 +60,7 @@ export function Modal({
       if (opener === null || !opener.isConnected || opener === document.body) return;
       const active = document.activeElement;
       if (active !== null && active !== document.body && active.closest("dialog[open]") !== null) return;
-      opener.focus();
+      focusForInput(opener);
     };
   }, []);
 
@@ -65,7 +77,17 @@ export function Modal({
       }}
       onClose={onClose}
     >
-      <h2 id={titleId} className={styles.title}>{title}</h2>
+      {titleAside === undefined && !closeButton ? (
+        <h2 id={titleId} className={styles.title}>{title}</h2>
+      ) : (
+        <div className={styles.titleRow}>
+          <h2 id={titleId} className={styles.title}>{title}</h2>
+          {titleAside}
+          {closeButton ? (
+            <RowButton icon={X} label="Close" shortcut="Esc" onClick={onClose} testId={testId === undefined ? undefined : `${testId}-close`} />
+          ) : null}
+        </div>
+      )}
       <div className={tall ? `${styles.body} ${styles.tallBody}` : styles.body}>
         {children}
         {tall ? <div className={styles.fade} aria-hidden /> : null}

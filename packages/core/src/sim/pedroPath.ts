@@ -1,4 +1,5 @@
 import type { Heading, HeadingRange, RangeHeading } from "@horizon36596/zenith-schema";
+import { TURN_IN_PLACE_MAX_IN } from "../turnInPlace.js";
 import { makeSimCurve, RUNTIME_LENGTH_SAMPLES, type SimCurve, type XY } from "./curves.js";
 
 /**
@@ -45,21 +46,96 @@ export interface SimPath {
   readonly endPose: { x: number; y: number; heading: number };
   /** Segments dropped because they had no length, which Pedro's `Line` refuses. */
   readonly droppedSegments: number;
+  /**
+   * Where the runtime holds the robot instead of following, for a path no longer than
+   * `TURN_IN_PLACE_MAX_IN`: `PedroPaths.Built.turn`, the end point with the step's end heading
+   * (`turnHeading`), in [0, 2pi). Null for a path the follower drives.
+   */
+  readonly turn: { x: number; y: number; heading: number } | null;
 }
 
 /**
- * One segment's heading, exactly as `PathBuilder.withHeading` attaches it and Pedro evaluates it.
+ * The heading a turn on the spot holds, as `PedroPaths.turnHeading` works it out without Pedro:
+ * the step's heading mode at the end of its last segment. Tangent reads the last segment's end
+ * direction (`P[n] - P[n-1]`, else its chord, else 0, as `Vector2D.theta` gives a zero vector);
+ * Linear its `toRad`; Facing point the bearing from the end to the point; Piecewise its last range's
+ * mode, a linear range turning the short way from its `fromRad`.
+ */
+export function turnHeading(
+  polygons: readonly (readonly XY[])[],
+  heading: Heading | undefined,
+  fallbackRad: number,
+): number {
+  const last = polygons[polygons.length - 1] ?? [];
+  const end = last[last.length - 1] ?? { x: 0, y: 0 };
+  const before = last[last.length - 2] ?? end;
+  const first = last[0] ?? end;
+  const direction =
+    Math.hypot(end.x - before.x, end.y - before.y) > 1e-9
+      ? { x: end.x - before.x, y: end.y - before.y }
+      : { x: end.x - first.x, y: end.y - first.y };
+  const tangentRad = theta(direction);
+  const of = (mode: RangeHeading): number => {
+    switch (mode.mode) {
+      case "tangent":
+        return normalizeAngle(tangentRad);
+      case "tangentReversed":
+        return normalizeAngle(tangentRad + Math.PI);
+      case "constant":
+        return normalizeAngle(mode.headingRad);
+      case "linear":
+        return normalizeAngle(mode.toRad);
+      case "facePoint":
+        return normalizeAngle(theta({ x: mode.xIn - end.x, y: mode.yIn - end.y }));
+    }
+  };
+  if (heading === undefined) return normalizeAngle(fallbackRad);
+  if (heading.mode !== "piecewise") return of(heading);
+  const range = heading.ranges[heading.ranges.length - 1];
+  if (range === undefined) return normalizeAngle(fallbackRad);
+  const inner = range.heading;
+  if (inner.mode === "linear") return normalizeAngle(inner.fromRad + normalizeSigned(inner.toRad - inner.fromRad));
+  return of(inner);
+}
+
+/** Where one segment starts and ends along its step, as fractions of the runtime's length. */
+export interface SegmentFractions {
+  readonly startFraction: number;
+  readonly endFraction: number;
+}
+
+/**
+ * Each segment's share of the step, as the runtime measures it: `PathBuilder.Built.segmentLengthsIn`
+ * (64 chords on a Bezier, the exact length of a line) over their sum. The runtime shares a `linear`
+ * sweep out by these, and turns a `piecewise` range's ends into segment t with them.
+ */
+export function runtimeSegmentFractions(curves: readonly SimCurve[]): SegmentFractions[] {
+  const total = curves.reduce((sum, curve) => sum + curve.runtimeLengthIn, 0);
+  let travelled = 0;
+  return curves.map((curve) => {
+    const startFraction = total === 0 ? 0 : travelled / total;
+    travelled += curve.runtimeLengthIn;
+    const endFraction = total === 0 ? 1 : travelled / total;
+    return { startFraction, endFraction };
+  });
+}
+
+/**
+ * One segment's heading, exactly as `PathBuilder.withHeading` attaches it and Pedro evaluates it, as
+ * a function of the segment's own parametric t. `heading.ts` reads `linear` and `piecewise` from here
+ * on any path with a Bezier in it (OPT-01, owner ruling 2026-10-08), so the plan, the estimator and
+ * the ideal playback turn the robot where the runtime does.
  *
- * Two places where that differs from `packages/core/src/heading.ts`, both recorded in the ADR:
+ * Where the robot's heading differs from what a file might be read to say, recorded in the ADR:
  *
  * - `linear`: the runtime splits the authored sweep by arc length and hands each piece to
  *   `Path.linear(from, to)`, but Pedro's `Interpolator.linear` takes the short way from `from` to
  *   `to` (`Angle.error`), so a piece over half a turn reverses. It is also linear in the segment's
  *   parametric t, not in arc length.
  * - `facePoint`: the runtime passes only the point, so `offsetRad` is dropped.
- * - `piecewise`: see `piecewiseSegmentHeading`.
+ * - `piecewise`: see `piecewiseSegmentPieces`.
  */
-function segmentHeading(
+export function segmentHeading(
   heading: Heading | undefined,
   curve: SimCurve,
   startFraction: number,
@@ -127,13 +203,58 @@ export function parameterAtFraction(curve: SimCurve, fraction: number): number {
   return 1;
 }
 
+/** One range of a `piecewise` heading as it lands on one segment. */
+export interface PiecewiseSegmentPiece {
+  /** Where the piece ends, in the segment's own t; the last piece ends at 1. */
+  readonly endT: number;
+  /** The range of the heading this piece is cut from, in file order. */
+  readonly rangeIndex: number;
+  /** The heading at the segment's t, in [0, 2pi) like Pedro's. */
+  evaluate(t: number): number;
+}
+
 /**
  * A `piecewise` heading on one segment, the way `PathBuilder.piecewiseFor` builds it: the ranges
  * that cross this segment are clipped to it, their ends are turned from the step's arc-length
  * fractions into this segment's own t through the chord table, and Pedro's `PiecewiseInterpolator`
- * picks the first range whose end is at or past t. A `linear` range turns the short way between its
- * headings at the two clipped ends, linear in the segment's t; every other mode is Pedro's own.
+ * picks the first piece whose end is at or past t (`pieceAt`). A `linear` range turns the short way
+ * between its headings at the two clipped ends, linear in the segment's t; every other mode is
+ * Pedro's own. Empty only when no range reaches the segment, which `rangeProblem` refuses.
  */
+export function piecewiseSegmentPieces(
+  ranges: readonly HeadingRange[],
+  curve: SimCurve,
+  startFraction: number,
+  endFraction: number,
+  fallbackRad: number,
+): PiecewiseSegmentPiece[] {
+  const span = endFraction - startFraction;
+  const pieces: { endT: number; rangeIndex: number; evaluate: (t: number) => number }[] = [];
+  let previousT = 0;
+  for (const [rangeIndex, range] of ranges.entries()) {
+    const from = Math.max(range.startT, startFraction);
+    const to = Math.min(range.endT, endFraction);
+    if (to <= from && !(span <= 0 && range === ranges[ranges.length - 1])) continue;
+    const localFrom = span <= 0 ? 0 : parameterAtFraction(curve, (from - startFraction) / span);
+    const localTo = span <= 0 ? 1 : parameterAtFraction(curve, (to - startFraction) / span);
+    if (localTo <= previousT) continue;
+    pieces.push({
+      endT: localTo,
+      rangeIndex,
+      evaluate: rangeSegmentHeading(range, curve, from, to, localFrom, localTo, fallbackRad),
+    });
+    previousT = localTo;
+  }
+  const last = pieces[pieces.length - 1];
+  if (last !== undefined) last.endT = 1;
+  return pieces;
+}
+
+/** The piece that owns a segment's t: the first whose end is at or past it, as Pedro picks one. */
+export function pieceAt(pieces: readonly PiecewiseSegmentPiece[], t: number): PiecewiseSegmentPiece | undefined {
+  return pieces.find((candidate) => t <= candidate.endT) ?? pieces[pieces.length - 1];
+}
+
 function piecewiseSegmentHeading(
   ranges: readonly HeadingRange[],
   curve: SimCurve,
@@ -141,28 +262,12 @@ function piecewiseSegmentHeading(
   endFraction: number,
   fallbackRad: number,
 ): (t: number) => number {
-  const span = endFraction - startFraction;
-  const pieces: { endT: number; evaluate: (t: number) => number }[] = [];
-  let previousT = 0;
-  for (const range of ranges) {
-    const from = Math.max(range.startT, startFraction);
-    const to = Math.min(range.endT, endFraction);
-    if (to <= from && !(span <= 0 && range === ranges[ranges.length - 1])) continue;
-    const localFrom = span <= 0 ? 0 : parameterAtFraction(curve, (from - startFraction) / span);
-    const localTo = span <= 0 ? 1 : parameterAtFraction(curve, (to - startFraction) / span);
-    if (localTo <= previousT) continue;
-    pieces.push({ endT: localTo, evaluate: rangeSegmentHeading(range, curve, from, to, localFrom, localTo, fallbackRad) });
-    previousT = localTo;
-  }
+  const pieces = piecewiseSegmentPieces(ranges, curve, startFraction, endFraction, fallbackRad);
   if (pieces.length === 0) {
     const fixed = normalizeAngle(fallbackRad);
     return () => fixed;
   }
-  (pieces[pieces.length - 1] as { endT: number }).endT = 1;
-  return (t) => {
-    const piece = pieces.find((candidate) => t <= candidate.endT) ?? (pieces[pieces.length - 1] as (typeof pieces)[number]);
-    return piece.evaluate(t);
-  };
+  return (t) => (pieceAt(pieces, t) as PiecewiseSegmentPiece).evaluate(t);
 }
 
 function rangeSegmentHeading(
@@ -210,11 +315,9 @@ export function buildSimPath(
   const lengths = curves.map((curve) => curve.runtimeLengthIn);
   const total = lengths.reduce((sum, value) => sum + value, 0);
 
-  let travelled = 0;
+  const fractions = runtimeSegmentFractions(curves);
   const segments: SimSegment[] = curves.map((curve, index) => {
-    const startFraction = total === 0 ? 0 : travelled / total;
-    travelled += lengths[index] as number;
-    const endFraction = total === 0 ? 1 : travelled / total;
+    const { startFraction, endFraction } = fractions[index] as SegmentFractions;
     return {
       curve,
       heading: segmentHeading(heading, curve, startFraction, endFraction, fallbackHeadingRad),
@@ -224,7 +327,15 @@ export function buildSimPath(
   const last = segments[segments.length - 1];
   const lastPolygon = polygons[polygons.length - 1];
   const endPoint = last?.curve.end ?? lastPolygon?.[lastPolygon.length - 1] ?? { x: 0, y: 0 };
+  // The runtime measures every segment it was given, before it drops any, and holds instead of
+  // following when the whole step is this short (`PedroPaths.build`).
+  const turnEnd = lastPolygon?.[lastPolygon.length - 1];
+  const turn =
+    total <= TURN_IN_PLACE_MAX_IN && turnEnd !== undefined
+      ? { x: turnEnd.x, y: turnEnd.y, heading: turnHeading(polygons, heading, fallbackHeadingRad) }
+      : null;
   return {
+    turn,
     segments,
     runtimeLengthsIn: lengths,
     runtimeTotalIn: total,

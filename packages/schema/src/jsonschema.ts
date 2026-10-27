@@ -8,13 +8,13 @@ export const JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema
 /**
  * Generates the JSON Schema for one kind from its zod schema.
  *
- * zod-to-json-schema has no 2020-12 target; its 2019-09 output is a subset that validates
- * unchanged under 2020-12 (we use no tuples, so there is no `prefixItems` question), so the
- * dialect and the `$id` are set here rather than by the converter.
+ * zod-to-json-schema has no 2020-12 target. Its draft-7 output uses numeric exclusive bounds and
+ * validates under 2020-12 for these schemas (we use no tuples). Version 3.25.2 emits obsolete boolean
+ * bounds for its 2019-09 target, so use draft 7 and set the dialect and `$id` here.
  */
 export function toJsonSchema(kind: Kind): Record<string, unknown> {
   const generated = zodToJsonSchema(schemaByKind[kind], {
-    target: "jsonSchema2019-09",
+    target: "jsonSchema7",
     definitionPath: "$defs",
     errorMessages: false,
   }) as Record<string, unknown>;

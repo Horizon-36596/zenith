@@ -1,15 +1,20 @@
 /*
- * The canvas's own HTML overlays: the right-click menu and the Play/Pause button. Opaque, bordered
- * and as small as they can be (UI_GUIDE anti-pattern 2); every value is a token.
+ * The canvas's own HTML overlays: the right-click menu, the tool hint line and mirror banner at the
+ * top of the well, and the zoom controls at its bottom-right. Opaque, bordered and as small as they
+ * can be (UI_GUIDE anti-pattern 2); every value is a token.
  *
- * The Play button sits on the field well, which stays dark in both themes, so it takes the fixed
- * --chrome-* ink (UI_GUIDE section 4), as the well's ? does. The menu is a popover like the
- * tooltips, so it keeps the theme.
+ * The overlays on the field well, which stays dark in both themes, take the fixed --chrome-* ink
+ * (UI_GUIDE section 4), as the well's ? does. The menu is a popover like the tooltips, so it keeps
+ * the theme.
+ *
+ * A fit frames the field board (issue #412): `FIT_PADDING` in `view.ts` keeps the board's bottom
+ * edge above the corner readout and the zoom controls' row, whose height is --ctl-h-sm here, and its
+ * top edge just under the well's top.
  */
 
 .menu {
-  position: absolute;
-  z-index: var(--z-canvas-overlay);
+  position: fixed;
+  z-index: var(--z-popover);
   min-width: 200px;
   max-width: 320px;
   padding: var(--space-1) 0;
@@ -30,7 +35,7 @@
   gap: var(--space-4);
   align-items: center;
   width: 100%;
-  height: var(--row-h-compact);
+  min-height: var(--row-h-compact);
   padding: 0 var(--pad-row-x);
   border: 0;
   background: transparent;
@@ -38,6 +43,11 @@
   font: inherit;
   text-align: left;
   cursor: default;
+}
+
+/* A greyed item with a reason grows to show it under the label, so it pads its two lines. */
+.item[data-has-reason="true"] {
+  padding-block: var(--space-1);
 }
 
 .item:hover:not([aria-disabled="true"]),
@@ -51,6 +61,59 @@
   cursor: default;
 }
 
+.itemText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.itemLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The leading column (UI_GUIDE 9.10): an item's 16 px icon, or a choice's check, the same width
+   whether or not this row has one, so every label in the menu starts at one edge. */
+.icon,
+.check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon);
+  flex: none;
+}
+
+.icon {
+  color: var(--text-mid);
+}
+
+.check {
+  color: var(--accent);
+}
+
+.item[aria-disabled="true"] .icon {
+  color: var(--text-disabled);
+}
+
+/* A greyed item's reason starts under its label, past the leading column. */
+.item[data-lead="true"] .reason {
+  padding-left: calc(var(--icon) + var(--space-2));
+}
+
+.reason {
+  font: var(--fs-xs) / var(--lh-xs) var(--font-ui);
+  color: var(--text-lo);
+  white-space: normal;
+}
+
+/* A quiet label over the items of a group, such as "Waypoint scoreNorth" or "Pins". */
+.groupLabel {
+  padding: var(--space-1) var(--pad-row-x) 0;
+  font: var(--fs-xs) / var(--lh-xs) var(--font-ui);
+  color: var(--text-lo);
+}
+
 .shortcut {
   font: var(--fs-xs) / var(--lh-xs) var(--font-mono);
   color: var(--text-lo);
@@ -62,31 +125,81 @@
   background: var(--border-subtle);
 }
 
-.play {
+/* The tool hint line and the mirror banner (issue #412): one line each at the well's top-left. */
+.topLines {
   position: absolute;
   z-index: var(--z-canvas-overlay);
   top: var(--space-2);
   left: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: calc(100% - 2 * var(--space-2) - 120px);
+  pointer-events: none;
+}
+
+.topLine {
+  max-width: 100%;
+  padding: 2px var(--space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--chrome-active);
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--radius-xs);
+  font: var(--fs-xs) / var(--lh-xs) var(--font-ui);
+  color: var(--chrome-text-hi);
+}
+
+.topLine[data-kind="mirror"] {
+  border-color: var(--chrome-border-strong);
+}
+
+/* The zoom controls: Fit, +, - and the zoom percent, one row above the scale bar. */
+.zoom {
+  position: absolute;
+  z-index: var(--z-canvas-overlay);
+  right: var(--space-2);
+  bottom: calc(var(--space-2) + 22px + var(--space-1));
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--chrome-active);
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--radius-xs);
+}
+
+.zoomButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--ctl-h-tool);
-  height: var(--ctl-h-tool);
+  width: var(--ctl-h-sm);
+  height: var(--ctl-h-sm);
   padding: 0;
-  background: var(--chrome-active);
-  border: 1px solid var(--chrome-border);
+  background: transparent;
+  border: 0;
   border-radius: var(--radius-xs);
   color: var(--chrome-text-mid);
   cursor: pointer;
 }
 
-.play:hover {
+.zoomButton:hover {
+  background: var(--chrome-hover);
   color: var(--chrome-text-hi);
-  border-color: var(--chrome-border-strong);
 }
 
-.play:focus-visible {
+.zoomButton:focus-visible {
   box-shadow: 0 0 0 var(--ring-offset) var(--bg-canvas),
               0 0 0 calc(var(--ring-offset) + var(--ring-width)) var(--chrome-ring);
   outline: none;
+}
+
+.zoomPct {
+  min-width: 4ch;
+  padding-inline: var(--space-1);
+  font: var(--fs-xs) / var(--lh-xs) var(--font-mono);
+  color: var(--chrome-text-mid);
+  text-align: right;
 }

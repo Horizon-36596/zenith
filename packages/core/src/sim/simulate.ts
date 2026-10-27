@@ -1,7 +1,10 @@
-import type { Field, Robot, Step } from "@horizon36596/zenith-schema";
-import { commandSeconds } from "../estimate.js";
+import type { ConditionLedgerTest, Field, Robot, Step } from "@horizon36596/zenith-schema";
+import { driftTarget } from "../drift.js";
+import { commandSeconds, envelopeWindowS, stepTimeoutS } from "../estimate.js";
 import { robotLimits } from "../kinematics.js";
 import type { LedgerEntry } from "../ledger.js";
+import { conditionTestOf, evaluateLedgerTest, markedConditions } from "../ledgerConditions.js";
+import type { SeasonState } from "../season.js";
 import type { Plan, PlanStep } from "../types.js";
 import {
   ConditionalCommand,
@@ -15,8 +18,16 @@ import {
   type SimCommand,
 } from "./commands.js";
 import type { XY } from "./curves.js";
-import { copyFollowerState, PedroFollower, type FollowerState, type MotionState } from "./follower.js";
+import {
+  copyFollowerState,
+  PedroFollower,
+  type DrivePowers,
+  type FollowerState,
+  type MotionState,
+} from "./follower.js";
+import { DriftCommand } from "./driftCommand.js";
 import { followerParams, plantParams, runParams } from "./params.js";
+import { holdTurnRad, TURN_SETTLED_RAD, TurnSettle, turnSettled } from "../turnInPlace.js";
 import { buildSimPath, normalizeAngle, normalizeSigned, type SimPath } from "./pedroPath.js";
 import { copyPlantState, MecanumPlant, type PlantState } from "./plant.js";
 import type {
@@ -75,9 +86,43 @@ interface HoldsView {
   entry: LedgerEntry;
 }
 
+/**
+ * What the engine drives and reads its belief from. `MecanumPlant` is the instant sim's own; a live
+ * run (`../live/`) passes one whose motion another program writes each tick.
+ */
+export interface EnginePlant {
+  state: PlantState;
+  motion(): MotionState;
+  drive(powers: DrivePowers): void;
+  update(dt: number): void;
+}
+
+/**
+ * A command a host program runs for real, in place of the instant sim's `estimateS` timer. The
+ * life cycle is the scheduler's (`SimCommand`).
+ */
+export type HostCommand = SimCommand;
+
+/**
+ * What a live run asks the program it runs inside. Either method may be left out: a missing
+ * `command`, or one that returns null, times the command by its `estimateS` as the instant sim
+ * does; a missing `condition` resolves conditions from the ledger as the instant sim does.
+ */
+export interface EngineHost {
+  command?(
+    name: string,
+    args: Readonly<Record<string, string | number | boolean>>,
+    stepId: string,
+  ): HostCommand | null;
+  condition?(name: string, stepId: string): boolean;
+}
+
 /** The per-run context every command reads. */
 interface Context {
+  host: EngineHost | null;
   robot: Robot;
+  /** The routine's alliance, which a quantity condition's `Own` and `Opponent` stand for. */
+  alliance: "RED" | "BLUE";
   options: SimOptions;
   fidelity: SimFidelity;
   unknownCommandS: number;
@@ -110,11 +155,11 @@ interface CheckpointState {
   pendingSettle: number | null;
 }
 
-class Engine implements SimClock {
+export class Engine implements SimClock {
   tick = 0;
   readonly tickS: number;
   readonly fidelity: SimFidelity;
-  readonly plant: MecanumPlant;
+  readonly plant: EnginePlant;
   readonly follower: PedroFollower;
   /** Bumped every time a command gives the follower a new job, so a settle watch can tell. */
   generation = 0;
@@ -131,13 +176,15 @@ class Engine implements SimClock {
   prefixKeys: readonly string[] = [];
   /** Checkpoints at or below this index are already known and not taken again. */
   skipCheckpointsThrough = 0;
+  /** The ids of the steps that have started and not ended, outermost first. */
+  readonly openStepIds: string[] = [];
 
   constructor(
     readonly ctx: Context,
     readonly plan: Plan,
     tickS: number,
     fidelity: SimFidelity,
-    plant: MecanumPlant,
+    plant: EnginePlant,
     follower: PedroFollower,
   ) {
     this.tickS = tickS;
@@ -178,6 +225,12 @@ class Engine implements SimClock {
     this.follower.hold({ x: b.x, y: b.y, heading: b.heading });
   }
 
+  /** `follower.hold(pose)` at a given pose: how the runtime runs a turn on the spot. */
+  holdAt(pose: { x: number; y: number; heading: number }): void {
+    this.generation += 1;
+    this.follower.hold(pose);
+  }
+
   event(kind: string, extra: Omit<SimEvent, "timeS" | "kind">): void {
     this.events.push({ timeS: this.timeS, kind, ...extra });
   }
@@ -196,12 +249,15 @@ class Engine implements SimClock {
     };
     if (stepCtx.unknownReasons.length > 0) record.unknownReason = stepCtx.unknownReasons.join(" ");
     this.records.push(record);
+    this.openStepIds.push(record.id);
     return record;
   }
 
   endRecord(record: SimStepRecord, interrupted: boolean): void {
     record.endS = this.timeS;
     record.interrupted = interrupted;
+    const open = this.openStepIds.lastIndexOf(record.id);
+    if (open >= 0) this.openStepIds.splice(open, 1);
     const view = this.ctx.holds.get(record.id);
     const entry = view?.entry;
     if (entry !== undefined && entry.row !== null) {
@@ -249,6 +305,67 @@ class Engine implements SimClock {
     }
   }
 
+  /**
+   * True once the step named by `SimOptions.stopAfterStepId` has closed and nothing more of it is
+   * pending: its settle watch has fired, been dropped or been replaced. A settle that `driveTick`
+   * will drop on its next pass (the next step gave the follower a new job, or the follower is
+   * idle) counts as dropped now, so the run stops on the tick the step closed, not one later.
+   */
+  stopReached(): boolean {
+    const id = this.ctx.options.stopAfterStepId;
+    if (id === undefined || this.openStepIds.includes(id)) return false;
+    const record = this.records.find((r) => r.id === id && r.parentId === null);
+    if (record === undefined) return false;
+    const pending = this.pendingSettle;
+    if (pending === null || pending.record !== record) return true;
+    return pending.generation !== this.generation || this.follower.state.mode === "IDLE";
+  }
+
+  /**
+   * Cuts the run back to the moment the step named by `stopAfterStepId` was done with: its
+   * `settledS` when its hold settled, else its `endS`. The run may have gone on past it while a
+   * settle watch that never fired was still pending, so everything after is dropped. A step that
+   * started by then and was still open is closed there as interrupted, one that started later is
+   * removed, and so are the checkpoints and settle times beyond it, and the timeout and condition
+   * flags of every step cut off there.
+   */
+  truncateToStop(): boolean {
+    const id = this.ctx.options.stopAfterStepId;
+    const target = this.records.find((r) => r.id === id && r.parentId === null);
+    // A step the period interrupted never closed, so there is nothing to cut back to.
+    if (target === undefined || target.interrupted) return false;
+    const stopS = target.settledS ?? target.endS;
+    const keep = Math.min(this.poses.length, Math.round(stopS / this.tickS) + 1);
+    this.poses.length = keep;
+    this.truthPoses.length = Math.min(this.truthPoses.length, keep);
+    this.velocities.length = keep;
+    this.tick = keep - 1;
+    const limit = stopS + 1e-9;
+    this.records = this.records.filter((r) => r.startS <= limit);
+    for (const record of this.records) {
+      if (record.endS > limit || this.openStepIds.includes(record.id)) {
+        record.endS = stopS;
+        record.interrupted = true;
+        // A timeout or condition that ended it did so after the cut, with its event dropped below.
+        record.timedOut = false;
+        record.conditionFired = false;
+      }
+      if (record.settledS !== undefined && record.settledS > limit) delete record.settledS;
+    }
+    this.events = this.events.filter((e) => e.timeS <= limit);
+    this.ledgerRows = this.ledgerRows.filter((row) => row.timeS <= limit);
+    this.checkpoints = this.checkpoints.filter((c) => (c.state as CheckpointState).tick < keep);
+    return true;
+  }
+
+  /** True when `stopAfterStepId` names a top-level step that is not the routine's last. */
+  stopsBeforeEnd(): boolean {
+    const id = this.ctx.options.stopAfterStepId;
+    if (id === undefined) return false;
+    const index = this.plan.steps.findIndex((step) => step.id === id);
+    return index >= 0 && index < this.plan.steps.length - 1;
+  }
+
   /** Phase 3: record the pose the tick started from. */
   recordTick(): void {
     const t = this.timeS;
@@ -292,7 +409,7 @@ class StepCommand implements SimCommand {
 }
 
 /** The routine's own `SequentialCommandGroup`, which also takes the checkpoints. */
-class TopSequence implements SimCommand {
+export class TopSequence implements SimCommand {
   private index = 0;
   constructor(
     private readonly engine: Engine,
@@ -330,6 +447,10 @@ class TopSequence implements SimCommand {
 /** `FollowPath`, built when it starts the way the runtime's `DeferredCommand` builds a `current` leg. */
 class FollowCommand implements SimCommand {
   path: SimPath | null = null;
+  /** For a turn on the spot, when the hold is done (`TurnSettle`), as `TurnInPlace` asks it. */
+  private settle: TurnSettle | null = null;
+  /** The command has ended, done or cut short, so a wait watching it beside it can end too. */
+  ended = false;
   constructor(
     private readonly engine: Engine,
     private readonly step: PlanStep,
@@ -337,6 +458,7 @@ class FollowCommand implements SimCommand {
     private readonly speedFraction: number,
   ) {}
   initialize(): void {
+    this.ended = false;
     const authored = this.step.step as Extract<Step, { kind: "path" }>;
     const polygons: XY[][] = (this.step.segments ?? []).map((segment) =>
       segment.pointsIn.map((point) => ({ x: point.xIn, y: point.yIn })),
@@ -347,31 +469,113 @@ class FollowCommand implements SimCommand {
       first[0] = { x: b.x, y: b.y };
     }
     this.path = buildSimPath(polygons, authored.heading, this.step.startPose.headingRad);
-    this.engine.follow(this.path, this.speedFraction);
+    // A path this short is a turn on the spot (`TurnInPlace` in the runtime): the follower holds
+    // the end point at the end heading rather than following, until the robot has settled there.
+    this.settle = this.path.turn === null ? null : new TurnSettle(this.path.turn);
+    if (this.path.turn !== null) this.engine.holdAt(this.path.turn);
+    else this.engine.follow(this.path, this.speedFraction);
   }
   execute(): void {}
   isFinished(): boolean {
+    // Heading and position both: the runtime holds every path of 2 in or less, so a short drive
+    // with no heading change is settled on heading from the first loop and must still arrive. A
+    // hold that comes to rest just outside the tolerances ends once it has been still a while.
+    if (this.settle !== null) return this.settle.done(this.engine.belief(), this.engine.timeS);
     return !this.engine.follower.following;
   }
   end(interrupted: boolean): void {
+    this.ended = true;
     if (interrupted) {
       this.engine.holdHere();
       return;
     }
     const record = this.stepCtx.record;
-    if (record !== null && this.engine.follower.holdEnd) {
+    if (record !== null && (this.engine.follower.holdEnd || (this.path?.turn ?? null) !== null)) {
       this.engine.pendingSettle = { record, generation: this.engine.generation };
     }
   }
 }
 
-/** The `WaitUntilCommand` an `endCondition` races the path against, fired by arc length. */
+/**
+ * The `WaitUntilCommand` an `endCondition` races the path against, fired by arc length. The robot
+ * reads the condition every loop whatever the follower is doing, so it also ends a turn on the
+ * spot (`Parallel.race(TurnInPlace, WaitUntilCommand)` in the runtime): there the fraction is of
+ * the turn done rather than of the arc length.
+ */
 class ConditionTrigger implements SimCommand {
   private fired = false;
+  /** Where a turn on the spot started, for `turnProgress`. */
+  private turnStart: { x: number; y: number; heading: number } | null = null;
   constructor(
     private readonly engine: Engine,
     private readonly follow: FollowCommand,
     private readonly fraction: number | null,
+    private readonly stepCtx: StepContext,
+    private readonly condition: string,
+    /**
+     * A wait beside the path rather than the path's own end condition: it also fires when the path
+     * ends before its fire point, cut short by its own end condition or Timeout, or ending on the
+     * tick it reaches a fire point at its very end. The ledger has the path collect what it collects
+     * by its end, and a wait that never fired would hold its group to the end of the period.
+     */
+    private readonly firesWhenPathEnds = false,
+  ) {}
+  initialize(): void {
+    this.fired = false;
+    const b = this.engine.belief();
+    this.turnStart = { x: b.x, y: b.y, heading: b.heading };
+  }
+  execute(): void {}
+  /**
+   * How much of a turn on the spot is done, 0 to 1: the share of its heading change made so far,
+   * or, for a hold with no heading change past the settle tolerance (a short drive), the share of
+   * the move to the held point; 1 once the turn has settled within its tolerances. APPROX: the
+   * ledger's pieces are taken as arriving evenly over the turn, as they are taken as evenly spaced
+   * along a path.
+   */
+  private turnProgress(held: { x: number; y: number; heading: number }): number {
+    const start = this.turnStart;
+    const b = this.engine.belief();
+    if (start === null || turnSettled(held, b)) return 1;
+    const turnRad = Math.abs(holdTurnRad(start.heading, held.heading));
+    if (turnRad >= TURN_SETTLED_RAD) return 1 - Math.abs(holdTurnRad(b.heading, held.heading)) / turnRad;
+    const moveIn = Math.hypot(held.x - start.x, held.y - start.y);
+    return moveIn < 1e-9 ? 1 : 1 - Math.hypot(held.x - b.x, held.y - b.y) / moveIn;
+  }
+  isFinished(): boolean {
+    if (this.fired) return true;
+    const path = this.follow.path;
+    const pathEnded = this.firesWhenPathEnds && this.follow.ended;
+    const reached =
+      pathEnded ||
+      (this.fraction !== null &&
+        path !== null &&
+        (path.turn !== null
+          ? this.turnProgress(path.turn) + 1e-9 >= this.fraction
+          : this.engine.follower.following &&
+            this.engine.follower.distanceAlongIn() + 1e-9 >= this.fraction * path.runtimeTotalIn));
+    if (reached) {
+      this.fired = true;
+      if (this.stepCtx.record !== null) this.stepCtx.record.conditionFired = true;
+      this.engine.event("conditionFired", {
+        ...(this.stepCtx.record === null ? {} : { stepId: this.stepCtx.record.id }),
+        detail: this.condition,
+      });
+    }
+    return this.fired;
+  }
+  end(): void {}
+}
+
+/**
+ * The `WaitUntilCommand` a live run races a path against, or waits on: the host's condition,
+ * read once per tick, exactly as `WaitUntilCommand` reads its `BooleanSupplier`.
+ */
+class HostConditionWait implements SimCommand {
+  private fired = false;
+  constructor(
+    private readonly engine: Engine,
+    private readonly read: () => boolean,
     private readonly stepCtx: StepContext,
     private readonly condition: string,
   ) {}
@@ -381,17 +585,14 @@ class ConditionTrigger implements SimCommand {
   execute(): void {}
   isFinished(): boolean {
     if (this.fired) return true;
-    const path = this.follow.path;
-    if (this.fraction === null || path === null || !this.engine.follower.following) return false;
-    if (this.engine.follower.distanceAlongIn() + 1e-9 >= this.fraction * path.runtimeTotalIn) {
-      this.fired = true;
-      if (this.stepCtx.record !== null) this.stepCtx.record.conditionFired = true;
-      this.engine.event("conditionFired", {
-        ...(this.stepCtx.record === null ? {} : { stepId: this.stepCtx.record.id }),
-        detail: this.condition,
-      });
-    }
-    return this.fired;
+    if (!this.read()) return false;
+    this.fired = true;
+    if (this.stepCtx.record !== null) this.stepCtx.record.conditionFired = true;
+    this.engine.event("conditionFired", {
+      ...(this.stepCtx.record === null ? {} : { stepId: this.stepCtx.record.id }),
+      detail: this.condition,
+    });
+    return true;
   }
   end(): void {}
 }
@@ -448,14 +649,21 @@ class TimeoutRace extends RaceCommand {
 interface MarkerSpec {
   distanceOf: (total: number) => number;
   name: string;
-  seconds: number;
+  /** The subsystems `robot.json` says the command needs, as the runtime's requirements. */
+  requires: readonly string[];
+  /** Builds the marker's command as it fires. */
+  make: () => SimCommand;
 }
 
-/** `PathMarkers.Runner`: fires each marker's command once the follower has come far enough. */
+/**
+ * `PathMarkers.Runner`: fires each marker's command once the follower has come far enough. A marker
+ * that starts ends, interrupted, any running marker that needs one of its subsystems, as the runtime's
+ * runner does.
+ */
 class MarkerRunner implements SimCommand {
   private fired: boolean[] = [];
   private sorted: { distanceIn: number; spec: MarkerSpec }[] = [];
-  private running: SimCommand[] = [];
+  private running: { command: SimCommand; requires: readonly string[] }[] = [];
   private furthestIn = 0;
   private seenFollowing = false;
   constructor(
@@ -469,7 +677,9 @@ class MarkerRunner implements SimCommand {
   }
   initialize(): void {
     const total = this.total();
-    const withDistance = this.markers.map((spec) => ({ distanceIn: spec.distanceOf(total), spec }));
+    // A turn on the spot drives nowhere, so the runtime fires every one of its markers as it starts.
+    const turn = (this.follow.path?.turn ?? null) !== null;
+    const withDistance = this.markers.map((spec) => ({ distanceIn: turn ? 0 : spec.distanceOf(total), spec }));
     // A stable insertion sort, as the runtime's, so ties fire in file order.
     const sorted: { distanceIn: number; spec: MarkerSpec }[] = [];
     for (const item of withDistance) {
@@ -484,10 +694,18 @@ class MarkerRunner implements SimCommand {
     this.seenFollowing = false;
     this.fireDue();
   }
+  /**
+   * `MarkerProgress.update`: a follower that stopped following after this path was seen counts as
+   * the whole path driven, and one not yet seen as none of it. Only a path that finished reaches the
+   * first case: an end condition races this runner along with the path, so it ends the runner on the
+   * loop it cuts the path short (see `buildStep`).
+   */
   private distanceAlongIn(): number {
-    if (this.engine.follower.following) this.seenFollowing = true;
-    else if (this.seenFollowing) return this.total();
-    return this.engine.follower.distanceAlongIn();
+    if (this.engine.follower.following) {
+      this.seenFollowing = true;
+      return this.engine.follower.distanceAlongIn();
+    }
+    return this.seenFollowing ? this.total() : 0;
   }
   private fireDue(): void {
     for (let i = 0; i < this.sorted.length; i += 1) {
@@ -499,17 +717,25 @@ class MarkerRunner implements SimCommand {
         ...(this.stepCtx.record === null ? {} : { stepId: this.stepCtx.record.id }),
         command: item.spec.name,
       });
-      const command: SimCommand = new TimedCommand(this.engine, item.spec.seconds);
+      const command: SimCommand = item.spec.make();
+      const requires = item.spec.requires;
+      for (let r = this.running.length - 1; r >= 0; r -= 1) {
+        const other = this.running[r] as { command: SimCommand; requires: readonly string[] };
+        if (other.requires.some((subsystem) => requires.includes(subsystem))) {
+          other.command.end(true);
+          this.running.splice(r, 1);
+        }
+      }
       command.initialize();
       if (command.isFinished()) command.end(false);
-      else this.running.push(command);
+      else this.running.push({ command, requires });
     }
   }
   execute(): void {
     this.furthestIn = Math.max(this.furthestIn, this.distanceAlongIn());
     this.fireDue();
     for (let i = this.running.length - 1; i >= 0; i -= 1) {
-      const command = this.running[i] as SimCommand;
+      const command = (this.running[i] as { command: SimCommand }).command;
       command.execute();
       if (command.isFinished()) {
         command.end(false);
@@ -521,7 +747,7 @@ class MarkerRunner implements SimCommand {
     return false;
   }
   end(): void {
-    for (let i = this.running.length - 1; i >= 0; i -= 1) (this.running[i] as SimCommand).end(true);
+    for (let i = this.running.length - 1; i >= 0; i -= 1) (this.running[i] as { command: SimCommand }).command.end(true);
     this.running = [];
   }
 }
@@ -530,26 +756,30 @@ class MarkerRunner implements SimCommand {
 // Conditions
 // ------------------------------------------------------------------------------------------------
 
-type ConditionClass = "full" | "empty" | "unknown";
+type ConditionClass = "full" | "empty" | "quantity" | "unknown";
 
 function conditionClass(ctx: Context, condition: string): ConditionClass {
   if (ctx.fullConditions.includes(condition)) return "full";
   if (ctx.emptyConditions.includes(condition)) return "empty";
-  return "unknown";
+  return quantityTest(ctx, condition) === null ? "unknown" : "quantity";
 }
 
-/** The declared conditions whose `ledger` key reads `kind`, when the robot file marks any. */
-function markedConditions(robot: Robot, kind: "full" | "empty"): string[] {
-  const conditions: unknown = (robot as unknown as Record<string, unknown>)["conditions"];
-  if (!Array.isArray(conditions)) return [];
-  const names: string[] = [];
-  for (const entry of conditions) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const record = entry as Record<string, unknown>;
-    if (record["ledger"] === kind && typeof record["name"] === "string") names.push(record["name"]);
-  }
-  return names;
+/** The `{ quantity, min, max }` test `robot.json` gives a condition, when it gives one. */
+function quantityTest(ctx: Context, condition: string): ConditionLedgerTest | null {
+  const test = conditionTestOf(ctx.robot, condition);
+  return test === null || typeof test === "string" ? null : test;
 }
+
+/** How a quantity condition reads against one ledger state, or null when the ledger cannot say. */
+function quantityReads(ctx: Context, condition: string, state: SeasonState | null): boolean | null {
+  const test = quantityTest(ctx, condition);
+  const season = ctx.options.season;
+  if (test === null || state === null || season === undefined) return null;
+  return evaluateLedgerTest(test, state, season, ctx.robot, ctx.alliance);
+}
+
+const NO_QUANTITY = (condition: string): string =>
+  `"${condition}" reads a number the ledger keeps, and no ledger that keeps it was given, so it is taken as never reading true.`;
 
 const NOT_SEEN = (condition: string): string =>
   `The instant sim cannot see "${condition}", so it is taken as never reading true.`;
@@ -572,7 +802,8 @@ function readsTrue(
 }
 
 /**
- * Where along a path its `endCondition` fires, as a fraction of arc length, or null for never.
+ * Where along a path its `endCondition` fires, as a fraction of arc length (of the turn done, for a
+ * turn on the spot), or null for never.
  * APPROX: the ledger says how many pieces a step collects or releases, not where; they are taken
  * as evenly spaced, each at the middle of its share of the path.
  */
@@ -597,6 +828,17 @@ function endConditionFraction(
   if (cls === "unknown") {
     stepCtx.unknownReasons.push(NOT_SEEN(condition));
     return null;
+  }
+  if (cls === "quantity") {
+    // The ledger changes a quantity once per step, so the condition either holds as the path
+    // starts, becomes true by its end, or never does on it.
+    const atStart = quantityReads(ctx, condition, view?.entry.before ?? null);
+    if (atStart === null) {
+      stepCtx.unknownReasons.push(NO_QUANTITY(condition));
+      return null;
+    }
+    if (atStart) return 0;
+    return quantityReads(ctx, condition, view?.entry.after ?? null) === true ? 1 : null;
   }
   const before = view?.before ?? null;
   const after = view?.after ?? null;
@@ -625,6 +867,14 @@ function waitSeconds(ctx: Context, step: PlanStep, condition: string, stepCtx: S
     stepCtx.unknownReasons.push(NOT_SEEN(condition));
     return null;
   }
+  if (cls === "quantity") {
+    const reads = quantityReads(ctx, condition, ctx.holds.get(step.id)?.entry.before ?? null);
+    if (reads === null) {
+      stepCtx.unknownReasons.push(NO_QUANTITY(condition));
+      return null;
+    }
+    return reads ? 0 : null;
+  }
   const value = readsTrue(ctx, cls, holds);
   if (value === null) {
     stepCtx.unknownReasons.push(NO_LEDGER(condition));
@@ -633,12 +883,21 @@ function waitSeconds(ctx: Context, step: PlanStep, condition: string, stepCtx: S
   return value ? 0 : null;
 }
 
-/** Which side a branch takes. With nothing to go on, the `then` side, and the step says so. */
+/**
+ * Which side a branch takes: the side the ledger took when it could read the condition, so the
+ * preview and the ledger always follow the same arm. With nothing to go on, the `then` side, and
+ * the step says so.
+ */
 function branchSide(ctx: Context, step: PlanStep, condition: string, stepCtx: StepContext): boolean {
-  const holds = ctx.holds.get(step.id)?.before ?? null;
+  const view = ctx.holds.get(step.id);
+  const holds = view?.before ?? null;
   const custom = ctx.options.conditions?.({ kind: "branch", stepId: step.id, condition, holds });
   if (custom !== undefined && custom !== null) return Boolean(custom);
-  const value = readsTrue(ctx, conditionClass(ctx, condition), holds);
+  const decided = view?.entry.branch ?? null;
+  if (decided !== null && decided.known) return decided.then;
+  const cls = conditionClass(ctx, condition);
+  const value =
+    cls === "quantity" ? quantityReads(ctx, condition, view?.entry.before ?? null) : readsTrue(ctx, cls, holds);
   if (value === null) {
     stepCtx.unknownReasons.push(
       `The instant sim cannot tell how "${condition}" reads, so it takes the then side.`,
@@ -673,7 +932,92 @@ function commandTiming(ctx: Context, name: string, args: Readonly<Record<string,
   return { seconds, reason: null };
 }
 
-function buildStep(engine: Engine, step: PlanStep, parentId: string | null): SimCommand {
+/**
+ * A command step's own body in the instant sim: a timer on its seconds, or, for a command that
+ * drives the robot to the pose the plan takes from the next path's rejoin pose, the drift
+ * (`driftCommand.ts`), which moves the robot there in the same time. Only the instant sim's own
+ * plant drifts; a live run, whose plant another program writes, keeps the timer.
+ */
+function commandBody(engine: Engine, step: PlanStep, seconds: number, stepCtx: StepContext): SimCommand {
+  const target = engine.ctx.host === null ? driftTarget(step, engine.ctx.robot) : null;
+  if (target === null || seconds <= 0) return new TimedCommand(engine, seconds);
+  const timeoutS = stepTimeoutS(step.step);
+  const driftS = timeoutS === undefined ? seconds : Math.min(seconds, Math.round(timeoutS * 1000) / 1000);
+  stepCtx.unknownReasons.push(
+    "The sim moves the robot from where the step starts to the next path's rejoin pose over the step's time, a guess at where it goes, not a prediction.",
+  );
+  return new DriftCommand(engine, seconds, driftS, target);
+}
+
+/**
+ * A named command: the host's own when it runs one, otherwise a timer on its `estimateS`. The host
+ * is asked as the command is built, once per place the file names it, so a command in a marker and
+ * the same command in a step are two objects, as they are on the robot.
+ */
+function namedCommand(
+  engine: Engine,
+  name: string,
+  args: Readonly<Record<string, string | number | boolean>> | undefined,
+  stepId: string,
+  stepCtx: StepContext | null,
+): SimCommand {
+  const hosted = engine.ctx.host?.command?.(name, args ?? {}, stepId) ?? null;
+  if (hosted !== null) return hosted;
+  const timing = commandTiming(engine.ctx, name, args);
+  if (timing.reason !== null && stepCtx !== null) stepCtx.unknownReasons.push(timing.reason);
+  return new TimedCommand(engine, timing.seconds);
+}
+
+/** Each path step's follower, by step id, so a wait beside it in a parallel group can watch it. */
+const followsOf = new WeakMap<Engine, Map<string, FollowCommand>>();
+
+/**
+ * A `wait until` inside a parallel group whose condition a path beside it makes true: it fires where
+ * along that path the ledger's pieces make it true, as the path's own `endCondition` would, or when
+ * that path ends, whichever comes first.
+ *
+ * The ledger runs a group's members one after another, so the wait's own "before" already holds
+ * what the path beside it collects. Read as is, a race of a sweep and "wait until hopperFull" ended
+ * on its first tick, with the sweep not driven (W2-18 of the 0.1.2 sweep).
+ *
+ * `groups` are the parallel groups the wait is inside, outermost first. The wait may sit anywhere
+ * in one, inside a sequence or a nested group; the path it watches is a direct member of the
+ * nearest of them that has one making the condition true. A path deeper inside a sibling member,
+ * such as in a sequence beside the wait, is not watched, and the wait reads as before. Null too
+ * when the condition already holds as that group starts.
+ */
+function siblingTrigger(
+  engine: Engine,
+  step: PlanStep,
+  groups: readonly PlanStep[],
+  condition: string,
+  stepCtx: StepContext,
+): SimCommand | null {
+  const ctx = engine.ctx;
+  if (groups.length === 0 || ctx.options.conditions !== undefined) return null;
+  const cls = conditionClass(ctx, condition);
+  if (cls !== "full" && cls !== "empty") return null;
+  for (let at = groups.length - 1; at >= 0; at -= 1) {
+    const group = groups[at] as PlanStep;
+    const first = group.children?.[0];
+    const atGroupStart = readsTrue(ctx, cls, first === undefined ? null : (ctx.holds.get(first.id)?.before ?? null));
+    if (atGroupStart !== false) continue;
+    for (const sibling of group.children ?? []) {
+      if (sibling.id === step.id || sibling.step.kind !== "path") continue;
+      const follow = followsOf.get(engine)?.get(sibling.id);
+      if (follow === undefined) continue;
+      if (readsTrue(ctx, cls, ctx.holds.get(sibling.id)?.after ?? null) !== true) continue;
+      const scratch: StepContext = { record: null, unknownReasons: [] };
+      const fraction = endConditionFraction(ctx, sibling, condition, scratch);
+      if (fraction === null) continue;
+      return new ConditionTrigger(engine, follow, fraction, stepCtx, condition, true);
+    }
+  }
+  return null;
+}
+
+/** `groups`: the parallel groups `step` is inside, outermost first, for `siblingTrigger`. */
+function buildStep(engine: Engine, step: PlanStep, parentId: string | null, groups: readonly PlanStep[] = []): SimCommand {
   const ctx = engine.ctx;
   const stepCtx: StepContext = { record: null, unknownReasons: [] };
   const authored = step.step;
@@ -687,56 +1031,110 @@ function buildStep(engine: Engine, step: PlanStep, parentId: string | null): Sim
         stepCtx,
         authored.speedFraction ?? ctx.defaultSpeedFraction,
       );
+      let follows = followsOf.get(engine);
+      if (follows === undefined) followsOf.set(engine, (follows = new Map()));
+      follows.set(step.id, follow);
       let drive: SimCommand = follow;
+      // The end condition races the path and its markers together, as `AutoBuilder` builds it, so a
+      // path cut short ends the marker runner on the loop the condition fires.
+      let cut: SimCommand | null = null;
       if (authored.endCondition !== undefined) {
         const condition = authored.endCondition.condition;
-        const fraction = endConditionFraction(ctx, step, condition, stepCtx);
-        drive = new RaceCommand([follow, new ConditionTrigger(engine, follow, fraction, stepCtx, condition)]);
+        const read = ctx.host?.condition;
+        if (read !== undefined) {
+          const trigger = new HostConditionWait(engine, () => read.call(ctx.host, condition, step.id), stepCtx, condition);
+          cut = trigger;
+        } else {
+          const fraction = endConditionFraction(ctx, step, condition, stepCtx);
+          cut = new ConditionTrigger(engine, follow, fraction, stepCtx, condition);
+        }
       }
       const markers = authored.markers ?? [];
       if (markers.length > 0) {
         const specs: MarkerSpec[] = markers.map((marker) => {
           const at = marker.at;
+          // A distance from either end stays on the path, as the generated code clamps it, so a path
+          // shortened after its marker was set never puts the marker past either end (W2-11).
           const distanceOf =
             "t" in at
               ? (total: number) => at.t * total
               : "distanceIn" in at
-                ? () => at.distanceIn
-                : (total: number) => total - at.distanceFromEndIn;
+                ? (total: number) => Math.min(total, at.distanceIn)
+                : (total: number) => Math.max(0, total - at.distanceFromEndIn);
+          const name = marker.command.name;
+          const args = marker.command.args;
           return {
             distanceOf,
-            name: marker.command.name,
-            seconds: commandTiming(ctx, marker.command.name, marker.command.args).seconds,
+            name,
+            requires: ctx.robot.commands.find((command) => command.name === name)?.requires ?? [],
+            make: () => namedCommand(engine, name, args, step.id, null),
           };
         });
         drive = new DeadlineCommand(drive, [new MarkerRunner(engine, follow, specs, stepCtx)]);
       }
+      if (cut !== null) drive = new RaceCommand([drive, cut]);
       body = drive;
       break;
     }
     case "command": {
+      // A host that runs its own commands (live/) answers first, as namedCommand does.
+      const hosted = ctx.host?.command?.(authored.name, authored.args ?? {}, step.id) ?? null;
+      if (hosted !== null) {
+        body = hosted;
+        break;
+      }
       const timing = commandTiming(ctx, authored.name, authored.args);
-      if (timing.reason !== null) stepCtx.unknownReasons.push(timing.reason);
-      body = new TimedCommand(engine, timing.seconds);
+      // A command with no estimate of its own runs for its envelope's window when it declares one,
+      // the same number the estimate uses (spec 13 section 10). The sim still cannot say where it
+      // leaves the robot, so the step stays marked as one the sim does not predict.
+      const windowS = commandSeconds(authored.name, authored.args, ctx.robot) === null ? envelopeWindowS(authored) : null;
+      if (windowS !== null) {
+        const which = authored.envelope?.actualDurationS === undefined ? "maxDurationS" : "what-if actualDurationS";
+        stepCtx.unknownReasons.push(
+          `"${authored.name}" has no estimate of its own, so it runs for its envelope's ${which} of ${String(windowS)} s; the instant sim cannot tell where it leaves the robot.`,
+        );
+      } else if (timing.reason !== null) {
+        stepCtx.unknownReasons.push(timing.reason);
+      }
+      body = commandBody(engine, step, windowS ?? timing.seconds, stepCtx);
       break;
     }
     case "wait": {
-      if (authored.until !== undefined) {
-        const seconds = waitSeconds(ctx, step, authored.until, stepCtx);
-        body = new WaitUntilCommand(engine, seconds, stepCtx, authored.until);
+      const read = ctx.host?.condition;
+      if (authored.until !== undefined && read !== undefined) {
+        const condition = authored.until;
+        body = new HostConditionWait(engine, () => read.call(ctx.host, condition, step.id), stepCtx, condition);
+      } else if (authored.until !== undefined) {
+        const beside = siblingTrigger(engine, step, groups, authored.until, stepCtx);
+        body = beside ?? new WaitUntilCommand(engine, waitSeconds(ctx, step, authored.until, stepCtx), stepCtx, authored.until);
       } else {
         // `WaitRobotTime(Math.round(seconds * 1000))`: whole milliseconds.
         body = new TimedCommand(engine, Math.round((authored.seconds ?? 0) * 1000) / 1000);
       }
       break;
     }
+    case "transfer": {
+      // Planner-only: the robot runtime runs a transfer as a wait of zero seconds, and so does the
+      // sim. Its effect is the ledger's, which the conditions read.
+      body = new TimedCommand(engine, 0);
+      break;
+    }
     case "sequence": {
-      body = new SequenceCommand((step.children ?? []).map((child) => buildStep(engine, child, step.id)));
+      body = new SequenceCommand((step.children ?? []).map((child) => buildStep(engine, child, step.id, groups)));
       break;
     }
     case "parallel": {
       const children = step.children ?? [];
-      const members = children.map((child) => buildStep(engine, child, step.id));
+      // The paths first, so a wait anywhere in the group on a condition a path beside it makes true
+      // finds that path's follower (`siblingTrigger`). The members keep their order.
+      const inside = [...groups, step];
+      const members: SimCommand[] = [];
+      children.forEach((child, index) => {
+        if (child.step.kind === "path") members[index] = buildStep(engine, child, step.id, inside);
+      });
+      children.forEach((child, index) => {
+        if (child.step.kind !== "path") members[index] = buildStep(engine, child, step.id, inside);
+      });
       if (authored.mode === "all") body = new ParallelAllCommand(members);
       else if (authored.mode === "race") body = new RaceCommand(members);
       else {
@@ -761,16 +1159,22 @@ function buildStep(engine: Engine, step: PlanStep, parentId: string | null): Sim
       const children = step.children ?? [];
       const thenCount = authored.then.length;
       const thenSide = new SequenceCommand(
-        children.slice(0, thenCount).map((child) => buildStep(engine, child, step.id)),
+        children.slice(0, thenCount).map((child) => buildStep(engine, child, step.id, groups)),
       );
       const elseChildren = children.slice(thenCount);
       const elseSide: SimCommand =
         authored.else === undefined || authored.else.length === 0
           ? new InstantCommand()
-          : new SequenceCommand(elseChildren.map((child) => buildStep(engine, child, step.id)));
+          : new SequenceCommand(elseChildren.map((child) => buildStep(engine, child, step.id, groups)));
       const condition = authored.condition;
-      const side = branchSide(ctx, step, condition, stepCtx);
-      body = new ConditionalCommand(() => side, thenSide, elseSide);
+      const read = ctx.host?.condition;
+      if (read !== undefined) {
+        // `ConditionalCommand` reads its supplier as it starts, so a live run asks the host then.
+        body = new ConditionalCommand(() => read.call(ctx.host, condition, step.id), thenSide, elseSide);
+      } else {
+        const side = branchSide(ctx, step, condition, stepCtx);
+        body = new ConditionalCommand(() => side, thenSide, elseSide);
+      }
       break;
     }
   }
@@ -823,17 +1227,33 @@ function hash(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
 }
 
-function stepKey(step: PlanStep, holds: ReadonlyMap<string, HoldsView>): string {
+/**
+ * What a step's key is made of: everything about it that the run reads, with its children's parts
+ * nested as they are. The whole tree is stringified once, in `stepKey`. Stringifying each child on
+ * its own and embedding that string in its parent escaped every quote again at each level, so the
+ * key doubled per level of nesting and about 30 nested groups threw `RangeError: Invalid string
+ * length` (issue #389).
+ */
+function stepKeyParts(step: PlanStep, holds: ReadonlyMap<string, HoldsView>): object {
   const view = holds.get(step.id);
-  return JSON.stringify({
+  return {
     id: step.id,
     step: step.step,
     start: step.startPose,
     segments: step.segments?.map((segment) => segment.pointsIn) ?? null,
     before: view?.before ?? null,
     after: view?.after ?? null,
-    children: step.children?.map((child) => stepKey(child, holds)) ?? null,
-  });
+    // A condition may read any number the ledger keeps, and a transfer earlier in the routine
+    // changes them without changing this step, so the whole state is part of the key.
+    ledgerBefore: view?.entry.before ?? null,
+    ledgerAfter: view?.entry.after ?? null,
+    branch: view?.entry.branch ?? null,
+    children: step.children?.map((child) => stepKeyParts(child, holds)) ?? null,
+  };
+}
+
+function stepKey(step: PlanStep, holds: ReadonlyMap<string, HoldsView>): string {
+  return JSON.stringify(stepKeyParts(step, holds));
 }
 
 function prefixKeys(
@@ -843,7 +1263,15 @@ function prefixKeys(
   options: SimOptions,
   holds: ReadonlyMap<string, HoldsView>,
 ): string[] {
-  const { ledger: _ledger, season: _season, conditions: _conditions, ...plain } = options;
+  // `stopAfterStepId` only says where a run ends, so it stays out of the key and a stopped run's
+  // checkpoints serve any later run.
+  const {
+    ledger: _ledger,
+    season: _season,
+    conditions: _conditions,
+    stopAfterStepId: _stopAfterStepId,
+    ...plain
+  } = options;
   let key = hash(
     JSON.stringify({ robot, field, options: plain, start: plan.startPose, auto: plan.auto.start }),
   );
@@ -859,14 +1287,29 @@ function prefixKeys(
 // Running
 // ------------------------------------------------------------------------------------------------
 
-interface Setup {
+export interface EngineSetup {
   engine: Engine;
   maxTimeS: number;
   periodS: number | null;
   members: SimCommand[];
 }
 
-function setup(plan: Plan, robot: Robot, field: Field, options: SimOptions): Setup {
+/**
+ * How an engine is built for a live run: its plant, its host, and no checkpoints. Internal to the
+ * package; `../live/` is the only other caller.
+ */
+export interface LiveEngineParts {
+  plant: (start: { x: number; y: number; heading: number }) => EnginePlant;
+  host: EngineHost;
+}
+
+export function setup(
+  plan: Plan,
+  robot: Robot,
+  field: Field,
+  options: SimOptions,
+  live: LiveEngineParts | null = null,
+): EngineSetup {
   const run = runParams(field, options);
   const limits = robotLimits(robot);
   const plant = plantParams(robot, field, run.fidelity, options);
@@ -879,7 +1322,9 @@ function setup(plan: Plan, robot: Robot, field: Field, options: SimOptions): Set
   const start = plan.startPose;
   const holds = holdsByStep(plan, options);
   const ctx: Context = {
+    host: live?.host ?? null,
     robot,
+    alliance: plan.auto.alliance,
     options,
     fidelity: run.fidelity,
     unknownCommandS: options.unknownCommandS ?? 0,
@@ -897,10 +1342,13 @@ function setup(plan: Plan, robot: Robot, field: Field, options: SimOptions): Set
     plan,
     run.tickS,
     run.fidelity,
-    new MecanumPlant(plant, start.xIn, start.yIn, start.headingRad),
+    live === null
+      ? new MecanumPlant(plant, start.xIn, start.yIn, start.headingRad)
+      : live.plant({ x: start.xIn, y: start.yIn, heading: start.headingRad }),
     follower,
   );
-  engine.prefixKeys = prefixKeys(plan, robot, field, options, holds);
+  if (live === null) engine.prefixKeys = prefixKeys(plan, robot, field, options, holds);
+  else engine.skipCheckpointsThrough = Number.POSITIVE_INFINITY;
   const members = plan.steps.map((step) => buildStep(engine, step, null));
   return { engine, maxTimeS: run.maxTimeS, periodS: run.periodS, members };
 }
@@ -920,10 +1368,17 @@ function runLoop(engine: Engine, root: SimCommand, maxTimeS: number, midTick: bo
     const done = root.isFinished();
     if (done) root.end(false);
     engine.recordTick();
-    if (done) return true;
+    // A settle watch that never fired can hold the run past the named step until the routine ends
+    // or the time runs out, so those two end the run the same way a stop does: cut back.
+    if (done) return !engine.stopsBeforeEnd() || !engine.truncateToStop();
+    if (engine.stopReached()) {
+      engine.truncateToStop();
+      return false;
+    }
     if ((engine.tick + 1) * engine.tickS > maxTimeS + 1e-9) {
       root.end(true);
       engine.event("periodEnded", { detail: "The routine had not finished when the time ran out." });
+      engine.truncateToStop();
       return false;
     }
     engine.plant.update(engine.tickS);
@@ -931,7 +1386,7 @@ function runLoop(engine: Engine, root: SimCommand, maxTimeS: number, midTick: bo
   }
 }
 
-function finish(engine: Engine, plan: Plan, completed: boolean, periodS: number | null): SimTrace {
+export function finish(engine: Engine, plan: Plan, completed: boolean, periodS: number | null): SimTrace {
   const capabilities = ["steps", "poses", "velocities", "events"];
   if (engine.ctx.options.ledger !== undefined) capabilities.push("ledger");
   if (engine.fidelity === "gradle") capabilities.push("truthPoses");
@@ -989,7 +1444,17 @@ export function resimulate(
   fromStepIndex?: number,
 ): SimRun {
   const { engine, maxTimeS, periodS, members } = setup(plan, robot, field, options);
-  const limit = Math.min(fromStepIndex ?? plan.steps.length, plan.steps.length - 1);
+  // Never resume past the step a run stops after: the stop is detected as that step closes, which a
+  // run starting later has already passed.
+  const stopIndex =
+    options.stopAfterStepId === undefined
+      ? -1
+      : plan.steps.findIndex((step) => step.id === options.stopAfterStepId);
+  const limit = Math.min(
+    fromStepIndex ?? plan.steps.length,
+    plan.steps.length - 1,
+    stopIndex < 0 ? plan.steps.length : stopIndex,
+  );
   let checkpoint: SimCheckpoint | null = null;
   for (const candidate of previous.checkpoints) {
     if (candidate.stepIndex > limit) break;

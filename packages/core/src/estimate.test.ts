@@ -1,8 +1,11 @@
 import { parseAuto, parseRobot, SCHEMA_ID, type Auto } from "@horizon36596/zenith-schema";
 import { describe, expect, it } from "vitest";
-import { commandSeconds, estimate, totalBound } from "./estimate.js";
-import { plan } from "./plan.js";
+import { checkTimeBudget } from "./checks/schedule.js";
+import { commandSeconds, estimate, jointTurnS, sampleCapInPerS, totalBound, transitionProfile } from "./estimate.js";
+import { lateralAccelLimitInPerS2, robotLimits, velocityCapInPerS } from "./kinematics.js";
+import { flattenSteps, plan } from "./plan.js";
 import { resolve } from "./resolve.js";
+import { idealTrajectory } from "./sim/ideal.js";
 import { testField, testRobot, testWaypoints } from "./testing/fixtures.js";
 import type { StepEstimate } from "./types.js";
 
@@ -65,11 +68,25 @@ describe("estimate", () => {
     expect(sideways.steps[0]?.strafeFraction).toBeCloseTo(1, 6);
     expect(sideways.steps[0]?.strafeCostS as number).toBeGreaterThan(0);
     expect(sideways.nominalS as number).toBeGreaterThan(tangent.nominalS as number);
-    // The cost in seconds is the difference against the same leg driven nose-first.
-    expect(sideways.steps[0]?.strafeCostS as number).toBeCloseTo(
-      (sideways.nominalS as number) - (tangent.nominalS as number),
-      6,
-    );
+    // The cost in seconds is the difference against the same leg driven nose-first, like for like:
+    // the sideways leg opens with a quarter turn in place from the start heading, which the
+    // nose-first leg, already facing along it, does not need, so the turn is part of the cost.
+    const turnS = sideways.steps[0]?.turnS ?? 0;
+    expect(turnS).toBeCloseTo(Math.PI / 2 / robotLimits(testRobot).maxAngularVelRadPerS, 9);
+    expect(sideways.steps[0]?.strafeCostS as number).toBeCloseTo((sideways.nominalS as number) - (tangent.nominalS as number), 6);
+  });
+
+  it("counts the turn a nose-first leg would need first in the strafe cost (0.1.2 UX sweep W2-3)", () => {
+    // Starting facing +x, a constant +x heading on a northward leg needs no turn on the spot; the
+    // nose-first leg turns a quarter turn first, which a short leg does not win back.
+    const leg = (heading: unknown): unknown[] => [
+      { id: "s", kind: "path", segments: [{ kind: "line", from: "current", to: { xIn: 0, yIn: -48 } }], heading },
+    ];
+    const sideways = timeOf(leg({ mode: "constant", headingRad: 0 }));
+    const noseFirst = timeOf(leg({ mode: "tangent" }));
+    expect(sideways.steps[0]?.strafeFraction).toBeCloseTo(1, 6);
+    expect(noseFirst.nominalS as number).toBeGreaterThan(sideways.nominalS as number);
+    expect(sideways.steps[0]?.strafeCostS).toBe(0);
   });
 
   it("reads a command's duration out of its estimateS expression", () => {
@@ -275,6 +292,160 @@ describe("the velocity carried into a group's members", () => {
   });
 });
 
+/**
+ * Issue #153 (sweep finding N8): where a tangent path starts facing a different way from how the
+ * last one ended, the robot turns before it drives. The ideal level always played that turn, but the
+ * estimate did not time it, so the headline and TIME_BUDGET read a 32 s routine as 25.8 s.
+ */
+describe("the turn at a path joint", () => {
+  /** Clicks on the field the way the editor's Add path tool makes them: tangent lines from "current". */
+  const zigzag = (legs: number, startHeadingRad = 0): Auto =>
+    parseAuto({
+      $schema: SCHEMA_ID.auto,
+      formatVersion: 2,
+      name: "zigzag",
+      alliance: "RED",
+      start: { pose: { xIn: -60, yIn: -20, headingRad: startHeadingRad } },
+      steps: Array.from({ length: legs }, (_, index) => ({
+        id: `path${String(index + 1)}`,
+        kind: "path",
+        segments: [
+          { kind: "line", from: "current", to: { xIn: -60 + 5 * (index + 1), yIn: index % 2 === 0 ? 20 : -20 } },
+        ],
+        heading: { mode: "tangent" },
+      })),
+    });
+
+  const planOf = (source: Auto) => plan(resolve(source, testWaypoints), testRobot, testField);
+  const turnsOf = (result: ReturnType<typeof estimate>): number =>
+    Object.values(result.byStepId).reduce((sum, row) => sum + (row.turnS ?? 0), 0);
+
+  it("for the 20-click zigzag of 21 tangent paths, equals the ideal run within 0.01 s", () => {
+    const planned = planOf(zigzag(21));
+    const result = estimate(planned, testRobot);
+    const ideal = idealTrajectory(planned, result);
+    expect(planned.steps).toHaveLength(21);
+    expect(Math.abs((result.nominalS as number) - ideal.totalS)).toBeLessThan(0.01);
+    // Every joint turns, and so does the first path, which leaves the start pose facing another way.
+    for (const step of result.steps) expect(step.turnS as number).toBeGreaterThan(0);
+  });
+
+  it("raises a TIME_BUDGET warning for an auto that passes 30 s only once its turns are counted", () => {
+    const result = estimate(planOf(zigzag(18)), testRobot);
+    const withoutTurnsS = (result.nominalS as number) - turnsOf(result);
+    expect(withoutTurnsS).toBeLessThan(30);
+    expect(result.nominalS as number).toBeGreaterThan(30);
+    const findings = checkTimeBudget(result, testField);
+    expect(findings.map((finding) => `${finding.severity} ${finding.code} ${finding.stepId}`)).toEqual([
+      "warning TIME_BUDGET total",
+    ]);
+  });
+
+  it("leaves a straight chain with no heading gaps exactly as it was", () => {
+    const leg = (id: string, xIn: number): unknown => ({
+      id,
+      kind: "path",
+      segments: [{ kind: "line", from: "current", to: { xIn, yIn: -60 } }],
+      heading: { mode: "tangent" },
+    });
+    const result = estimate(
+      planOf(
+        parseAuto({
+          $schema: SCHEMA_ID.auto,
+          formatVersion: 2,
+          name: "straight",
+          alliance: "RED",
+          start: { pose: { xIn: -60, yIn: -60, headingRad: 0 } },
+          steps: [leg("leg1", -40), leg("leg2", -20), { id: "pause", kind: "wait", seconds: 0.5 }, leg("leg3", 0), leg("leg4", 20)],
+        }),
+      ),
+      testRobot,
+    );
+    // The total this chain had before joint turns were counted, pinned to the last digit.
+    expect(result.nominalS as number).toBeCloseTo(4.84773058123, 9);
+    expect(turnsOf(result)).toBe(0);
+    for (const row of Object.values(result.byStepId)) expect(row.turnS ?? 0).toBe(0);
+  });
+
+  it("times a turn in place at maxAngularVelRadPerS, inside the step's nominal and its band", () => {
+    const steps = [
+      {
+        id: "east",
+        kind: "path",
+        segments: [{ kind: "line", from: { xIn: 0, yIn: -60, headingRad: 0 }, to: { xIn: 30, yIn: -60 } }],
+        heading: { mode: "tangent" },
+      },
+      {
+        id: "north",
+        kind: "path",
+        segments: [{ kind: "line", from: "current", to: { xIn: 30, yIn: -30 } }],
+        heading: { mode: "tangent" },
+      },
+    ];
+    const result = timeOf(steps);
+    const north = result.byStepId["north"] as StepEstimate;
+    const expectedS = Math.PI / 2 / robotLimits(testRobot).maxAngularVelRadPerS;
+    expect(north.turnS as number).toBeCloseTo(expectedS, 9);
+    expect(result.byStepId["east"]?.turnS ?? 0).toBe(0);
+    // The same leg on its own, starting where the robot already faces north, is the step less its turn.
+    const alone = estimate(
+      plan(
+        resolve(
+          parseAuto({
+            $schema: SCHEMA_ID.auto,
+            formatVersion: 1,
+            name: "estimate-fixture",
+            alliance: "RED",
+            start: { pose: { xIn: 30, yIn: -60, headingRad: Math.PI / 2 } },
+            steps: [steps[1]],
+          }),
+          testWaypoints,
+        ),
+        testRobot,
+        testField,
+      ),
+      testRobot,
+    );
+    expect(alone.byStepId["north"]?.turnS ?? 0).toBe(0);
+    expect(north.nominalS as number).toBeCloseTo((alone.byStepId["north"]?.nominalS as number) + expectedS, 9);
+    expect(north.lowS as number).toBeCloseTo((north.nominalS as number) * 0.8, 9);
+    expect(north.highS as number).toBeCloseTo((north.nominalS as number) * 1.2, 9);
+  });
+
+  it("does not count a literal-pose gap, which the ideal level drives across itself", () => {
+    const result = timeOf([
+      {
+        id: "east",
+        kind: "path",
+        segments: [{ kind: "line", from: { xIn: 0, yIn: -60, headingRad: 0 }, to: { xIn: 30, yIn: -60 } }],
+        heading: { mode: "tangent" },
+      },
+      {
+        id: "elsewhere",
+        kind: "path",
+        segments: [{ kind: "line", from: { xIn: 40, yIn: -50 }, to: { xIn: 40, yIn: -20 } }],
+        heading: { mode: "tangent" },
+      },
+    ]);
+    expect(result.byStepId["elsewhere"]?.turnS ?? 0).toBe(0);
+  });
+
+  it("gives the shared helper's turn for two poses on the same spot, and none otherwise", () => {
+    const limits = robotLimits(testRobot);
+    expect(jointTurnS({ xIn: 0, yIn: 0, headingRad: 0 }, { xIn: 0, yIn: 0, headingRad: -Math.PI / 2 }, limits)).toBeCloseTo(
+      Math.PI / 2 / limits.maxAngularVelRadPerS,
+      12,
+    );
+    // The short way round: from just under pi to just over minus pi is a small turn.
+    expect(jointTurnS({ xIn: 0, yIn: 0, headingRad: 3.1 }, { xIn: 0, yIn: 0, headingRad: -3.1 }, limits)).toBeCloseTo(
+      (2 * Math.PI - 6.2) / limits.maxAngularVelRadPerS,
+      12,
+    );
+    expect(jointTurnS({ xIn: 0, yIn: 0, headingRad: 0 }, { xIn: 0, yIn: 0, headingRad: 0.0005 }, limits)).toBe(0);
+    expect(jointTurnS({ xIn: 0, yIn: 0, headingRad: 0 }, { xIn: 5, yIn: 0, headingRad: 1 }, limits)).toBe(0);
+  });
+});
+
 describe("totalBound", () => {
   const base = { steps: [], nominalS: 1, lowS: 1, highS: 1, bandFraction: 0.2, assumptions: [], explain: [] };
   const row = (unknown: boolean, nominalS: number | null) =>
@@ -288,5 +459,221 @@ describe("totalBound", () => {
   });
   it("is a lower bound when a step has no duration at all, even beside a condition-ended path", () => {
     expect(totalBound({ ...base, hasUnknown: true, byStepId: { a: row(true, 2), b: row(true, null) } })).toBe("lower");
+  });
+});
+
+describe("sampleCapInPerS", () => {
+  /**
+   * The caps exactly as `profileSamples` computed them inline before they were factored out for the
+   * optimizer's heading dynamic program. Kept here word for word, so the factored function is held
+   * to the same floating-point operations in the same order and `estimate()` stays byte-identical.
+   */
+  const inline = (speedFraction: number, phiRad: number, headingRatePerIn: number, curvaturePerIn: number): number => {
+    const limits = robotLimits(testRobot);
+    let cap = speedFraction * velocityCapInPerS(limits, phiRad);
+    if (headingRatePerIn > 1e-9) cap = Math.min(cap, limits.maxAngularVelRadPerS / headingRatePerIn);
+    if (curvaturePerIn > 1e-9) cap = Math.min(cap, Math.sqrt(lateralAccelLimitInPerS2(limits) / curvaturePerIn));
+    return cap;
+  };
+
+  it("is bit for bit the cap profileSamples computed inline, over a fixed grid", () => {
+    const limits = robotLimits(testRobot);
+    const fractions = [0.3, 0.8, 1];
+    const phis = [-Math.PI, -2, -Math.PI / 2, -0.4, 0, 1e-10, 0.4, Math.PI / 2, 2.5, Math.PI];
+    const rates = [0, 1e-10, 1e-9, 2e-9, 0.01, 0.1, 0.5, 3];
+    for (const speedFraction of fractions) {
+      for (const phiRad of phis) {
+        for (const headingRatePerIn of rates) {
+          for (const curvaturePerIn of rates) {
+            const factored = sampleCapInPerS(limits, speedFraction, phiRad, headingRatePerIn, curvaturePerIn);
+            expect(Object.is(factored, inline(speedFraction, phiRad, headingRatePerIn, curvaturePerIn))).toBe(true);
+          }
+        }
+      }
+    }
+  });
+});
+
+/** Issue #374: the code review of main 1fb0d62 on the estimate and TIME_BUDGET. */
+describe("issue #374", () => {
+  const planOf = (steps: unknown[]) => plan(resolve(auto(steps), testWaypoints), testRobot, testField);
+  const budget = (steps: unknown[]) => {
+    const planned = planOf(steps);
+    const result = estimate(planned, testRobot);
+    return { result, planned, findings: checkTimeBudget(result, testField, flattenSteps(planned.steps)) };
+  };
+  const severities = (findings: readonly { severity: string; code: string }[]): string[] =>
+    findings.filter((finding) => finding.code === "TIME_BUDGET").map((finding) => finding.severity);
+
+  it("finding 1: a race ends by the timeout of a member that has no estimate", () => {
+    const { result, findings } = budget([
+      {
+        id: "race",
+        kind: "parallel",
+        mode: "race",
+        steps: [
+          { id: "listen", kind: "wait", until: "hopperFull", timeoutS: 1 },
+          { id: "long", kind: "wait", seconds: 60 },
+        ],
+      },
+    ]);
+    expect(result.steps[0]?.nominalS).toBe(1);
+    expect(result.nominalS).toBe(1);
+    expect(severities(findings)).not.toContain("error");
+    expect(severities(findings)).not.toContain("warning");
+  });
+
+  it("finding 2: a branch arm with an unknown step keeps the time of its known steps", () => {
+    const { result, findings } = budget([
+      {
+        id: "maybe",
+        kind: "branch",
+        condition: "hopperFull",
+        then: [
+          { id: "thenWait", kind: "wait", seconds: 40 },
+          { id: "listen", kind: "wait", until: "hopperFull" },
+        ],
+        else: [{ id: "elseWait", kind: "wait", seconds: 40 }],
+      },
+    ]);
+    expect(result.steps[0]?.nominalS).toBe(40);
+    expect(result.steps[0]?.unknown).toBe(true);
+    expect(result.nominalS).toBe(40);
+    expect(severities(findings)).toContain("error");
+  });
+
+  it("finding 2: a branch with an unknown arm still costs the longer known arm", () => {
+    const { result } = budget([
+      {
+        id: "maybe",
+        kind: "branch",
+        condition: "hopperFull",
+        then: [{ id: "listen", kind: "wait", until: "hopperFull" }],
+        else: [{ id: "elseWait", kind: "wait", seconds: 5 }],
+      },
+    ]);
+    expect(result.steps[0]?.nominalS).toBe(5);
+    expect(result.steps[0]?.unknown).toBe(true);
+  });
+
+  const collect = {
+    id: "collect",
+    kind: "path",
+    segments: [{ kind: "line", from: { xIn: 0, yIn: -60, headingRad: 0 }, to: { xIn: 60, yIn: -60 } }],
+    heading: { mode: "tangent" },
+    endCondition: { condition: "hopperFull" },
+  };
+
+  it("finding 3: a path that ends on a condition is left out of the optimistic end", () => {
+    const { result, findings } = budget([{ id: "pause", kind: "wait", seconds: 37 }, collect]);
+    // The band's low end is over the period only because of the path, which may stop at once.
+    expect(result.lowS as number).toBeGreaterThan(30);
+    expect(37 * (1 - result.bandFraction)).toBeLessThan(30);
+    expect(severities(findings)).toEqual(["warning", "info"]);
+    const note = findings.find((finding) => finding.severity === "info");
+    expect(note?.stepIds).toEqual(["collect"]);
+    expect(note?.message).toContain("upper bound");
+  });
+
+  it("finding 3: the known steps alone over the optimistic end are still an error", () => {
+    const { findings } = budget([{ id: "pause", kind: "wait", seconds: 40 }, collect]);
+    const error = findings.find((finding) => finding.severity === "error");
+    expect(error?.message).toContain("32.0 s");
+    expect(severities(findings)).toEqual(["error", "info"]);
+  });
+
+  it("finding 3: without a condition path the optimistic end is the band's low end, as before", () => {
+    const { result, findings } = budget([{ id: "pause", kind: "wait", seconds: 40 }]);
+    expect(findings[0]?.message).toContain(`${(result.lowS as number).toFixed(1)} s`);
+  });
+
+  it("finding 4: a race that a known member caps is an upper bound, not a lower one", () => {
+    const planned = planOf([
+      {
+        id: "race",
+        kind: "parallel",
+        mode: "race",
+        steps: [
+          { id: "pause", kind: "wait", seconds: 10 },
+          { id: "listen", kind: "wait", until: "hopperFull" },
+        ],
+      },
+    ]);
+    const result = estimate(planned, testRobot);
+    expect(result.nominalS).toBe(10);
+    expect(totalBound(result, planned)).toBe("upper");
+  });
+
+  it("finding 4: a race that a member's timeout caps is an upper bound", () => {
+    const planned = planOf([
+      {
+        id: "race",
+        kind: "parallel",
+        mode: "race",
+        steps: [
+          { id: "listen", kind: "wait", until: "hopperFull", timeoutS: 1 },
+          { id: "pause", kind: "wait", seconds: 60 },
+        ],
+      },
+    ]);
+    expect(totalBound(estimate(planned, testRobot), planned)).toBe("upper");
+  });
+
+  it("finding 4: an open step outside a race keeps the total a lower bound", () => {
+    const planned = planOf([
+      { id: "listen", kind: "wait", until: "hopperFull" },
+      {
+        id: "race",
+        kind: "parallel",
+        mode: "race",
+        steps: [
+          { id: "pause", kind: "wait", seconds: 10 },
+          { id: "other", kind: "wait", until: "hopperFull" },
+        ],
+      },
+    ]);
+    expect(totalBound(estimate(planned, testRobot), planned)).toBe("lower");
+  });
+
+  it("finding 5: a transition shorter than one profile interval takes time", () => {
+    const limits = robotLimits(testRobot);
+    const short = transitionProfile({ xIn: 0, yIn: 0, headingRad: 0 }, { xIn: 1, yIn: 0, headingRad: 0 }, limits);
+    const shortS = short.timesS[short.timesS.length - 1] as number;
+    // From rest to rest over 1 in: accelerate, then brake, never near the speed cap.
+    const accel = limits.accelInPerS2;
+    const decel = limits.forwardDecelInPerS2;
+    const peak = Math.sqrt((2 * 1 * accel * decel) / (accel + decel));
+    expect(shortS).toBeCloseTo(peak / accel + peak / decel, 9);
+    expect(short.timesS[0]).toBe(0);
+    const longer = transitionProfile({ xIn: 0, yIn: 0, headingRad: 0 }, { xIn: 3, yIn: 0, headingRad: 0 }, limits);
+    expect(shortS).toBeLessThan(longer.timesS[longer.timesS.length - 1] as number);
+  });
+
+  it("finding 5: a transition's time is continuous across a multiple of the sample spacing", () => {
+    const limits = robotLimits(testRobot);
+    const accel = limits.accelInPerS2;
+    const decel = limits.forwardDecelInPerS2;
+    const closedForm = (lengthIn: number): number => {
+      const peak = Math.sqrt((2 * lengthIn * accel * decel) / (accel + decel));
+      return peak / accel + peak / decel;
+    };
+    const seconds = [2, 2.01, 2.5, 4].map((lengthIn) => {
+      const profile = transitionProfile({ xIn: 0, yIn: 0, headingRad: 0 }, { xIn: lengthIn, yIn: 0, headingRad: 0 }, limits);
+      return profile.timesS[profile.timesS.length - 1] as number;
+    });
+    for (let index = 1; index < seconds.length; index += 1) {
+      expect(seconds[index] as number).toBeGreaterThan(seconds[index - 1] as number);
+    }
+    // Rest to rest over a few inches never nears the speed cap, so each is close to the triangle.
+    [2, 2.01, 2.5, 4].forEach((lengthIn, index) => {
+      expect(Math.abs((seconds[index] as number) - closedForm(lengthIn))).toBeLessThan(0.02 * closedForm(lengthIn));
+    });
+  });
+
+  it("finding 5: a short transition that turns is held to the heading rate", () => {
+    const limits = robotLimits(testRobot);
+    const turning = transitionProfile({ xIn: 0, yIn: 0, headingRad: 0 }, { xIn: 1, yIn: 0, headingRad: Math.PI / 2 }, limits);
+    const seconds = turning.timesS[turning.timesS.length - 1] as number;
+    expect(seconds).toBeGreaterThanOrEqual(Math.PI / 2 / limits.maxAngularVelRadPerS - 1e-9);
   });
 });

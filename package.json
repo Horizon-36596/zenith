@@ -1,9 +1,9 @@
 {
   "name": "zenith",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
-  "description": "A PathPlanner-style autonomous planner for FTC that humans and agents share.",
+  "description": "An autonomous path planner for FTC that people and coding agents share.",
   "license": "MIT",
   "author": "Horizon (FTC 36596)",
   "packageManager": "pnpm@10.10.0",
@@ -11,7 +11,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node scripts/check-purity.mjs && node scripts/check-version.mjs && vitest run",
+    "test": "node scripts/check-purity.mjs && node scripts/check-case.mjs && node scripts/check-version.mjs && node --test scripts/changelog-section.test.mjs && node scripts/check-brand.mjs && vitest run",
+    "test:rules": "pnpm --filter @horizon36596/zenith-cloud run test:rules",
+    "cloud:cleanup": "tsx packages/cloud/src/cleanup/cli.ts",
     "build": "tsc -b && pnpm --filter @horizon36596/zenith-schema run gen:json && pnpm --filter @horizon36596/zenith-web run build && pnpm --filter @horizon36596/zenith-desktop run build",
     "lint": "tsc -b",
     "version:stamp": "node scripts/stamp-version.mjs",

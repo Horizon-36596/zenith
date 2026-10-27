@@ -5,8 +5,8 @@
  *
  * - the snap toggle, and Ctrl inverting it for one drag;
  * - Alt turning off only the grid and the 15 degree heading, with the wall snap still acting;
- * - Shift constraining a point to one axis, turning a heading in 45 degree steps, and breaking
- *   Bezier handle mirroring;
+ * - Shift holding a path end to a ray from its anchor and the start to one axis, turning a heading
+ *   in 45 degree steps, and breaking Bezier handle mirroring;
  * - the drag bubble naming the snap that is acting;
  * - the heading arrows turning only the heading mode, never the point (spec 11 section 3);
  * - smooth and corner nodes, from S and C and from the context menu.
@@ -119,16 +119,30 @@ test.describe("snap", () => {
     expect(perimeter).toBe(0);
   });
 
-  test("Shift constrains a point drag to the axis it moved furthest on", async ({ page }) => {
+  test("Shift locks a dragged start to the axis it moved furthest on", async ({ page }) => {
+    // The start, (-36, -36), is not a path end, so it keeps the axis rule.
+    await dragWorld(page, { xIn: -36, yIn: -36 }, { xIn: -20.3, yIn: -32.9 }, { keys: ["Shift"], release: false });
+    const bubble = await bubbleText(page);
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
+    const start = await editor<Pose>(page, "s.auto.start.pose");
+    expect(start.yIn).toBe(-36);
+    expect(start.xIn).toBeCloseTo(-20.5, 0);
+    expect(bubble).toMatch(/axis x \(Shift\)/);
+  });
+
+  test("Shift holds a path end to a ray from the other end of its segment", async ({ page }) => {
     await select(page, "hop");
+    // hop runs from (36, 12) to (36, 40), 90 degrees. The pointer, at about 72 degrees from the
+    // anchor and 10 in east of the line, is still nearest the line's own bearing, so the end keeps x.
     await dragWorld(page, { xIn: 36, yIn: 40 }, { xIn: 46.3, yIn: 43.1 }, { keys: ["Shift"], release: false });
     const bubble = await bubbleText(page);
     await page.mouse.up();
     await page.keyboard.up("Shift");
     const to = (await seg(page, "hop", 0)).to;
-    expect(to.yIn).toBe(40);
-    expect(to.xIn).toBeCloseTo(46.5, 0);
-    expect(bubble).toMatch(/axis x \(Shift\)/);
+    expect(to.xIn).toBeCloseTo(36, 6);
+    expect(to.yIn).toBeCloseTo(43, 0);
+    expect(bubble).toMatch(/line 90° · length \(Shift\)/);
   });
 });
 
@@ -256,7 +270,7 @@ test.describe("Bezier nodes", () => {
     expect(still.yIn).toBeCloseTo(swung.yIn, 6);
   });
 
-  test("the point's context menu offers smooth and corner, each with its shortcut", async ({ page }) => {
+  test("the point's context menu offers the one of Make smooth and Make corner that changes it, with its shortcut", async ({ page }) => {
     await selectNode(page);
     const at = await worldToScreen(page, NODE.xIn, NODE.yIn);
     await page.mouse.click(at.x, at.y, { button: "right" });
@@ -265,14 +279,18 @@ test.describe("Bezier nodes", () => {
     await shot(page, "04-context-menu-point");
     const smooth = menu.locator('[data-action="canvas.node.smooth"]');
     const corner = menu.locator('[data-action="canvas.node.corner"]');
+    await expect(smooth).toContainText("Make smooth");
     await expect(smooth).toContainText("S");
-    await expect(corner).toContainText("C");
-    // The node is a corner, so Corner is the one that is unavailable.
-    await expect(corner).toBeDisabled();
+    // The node is a corner, so Make corner, which would change nothing, is not offered (issue #412).
+    await expect(corner).toHaveCount(0);
     await smooth.click();
     await expect(menu).toHaveCount(0);
     const incoming = (await seg(page, "curve", 0)).control?.[1] as Pose;
     const outgoing = (await seg(page, "curve", 1)).control?.[0] as Pose;
     expect(collinear(incoming, NODE, outgoing)).toBeLessThan(1e-6);
+    // Smooth now, its menu offers Make corner instead.
+    await page.mouse.click(at.x, at.y, { button: "right" });
+    await expect(menu.locator('[data-action="canvas.node.corner"]')).toContainText("Make corner");
+    await expect(menu.locator('[data-action="canvas.node.smooth"]')).toHaveCount(0);
   });
 });

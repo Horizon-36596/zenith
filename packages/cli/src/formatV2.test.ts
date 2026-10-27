@@ -1,14 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { FINDING_HELP } from "@horizon36596/zenith-core";
+import { autoSkeleton, FINDING_HELP } from "@horizon36596/zenith-core";
 import { parseField } from "@horizon36596/zenith-schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runValidate } from "./commands/validate.js";
 import { fieldImageFor, imageSizePx } from "./fieldImage.js";
 import { loadProject } from "./project.js";
-import { autoSkeleton } from "./skeletons.js";
 import { makeProject, simpleAuto, TEST_FIELD, writeAuto } from "./testSupport.js";
 
 /** Items 1, 4 and 5 as the CLI sees them: v1 and v2 in, v2 out, `--explain`, the field image. */
@@ -67,7 +65,7 @@ describe("format version 2 in the CLI", () => {
   });
 
   it("writes a new auto at the current formatVersion", () => {
-    expect(JSON.parse(autoSkeleton("fresh")) as { formatVersion: number }).toMatchObject({ formatVersion: 3 });
+    expect(JSON.parse(autoSkeleton("fresh")) as { formatVersion: number }).toMatchObject({ formatVersion: 4 });
   });
 });
 
@@ -122,10 +120,13 @@ describe("validate --explain", () => {
 });
 
 describe("the field image for render", () => {
-  const webp = fileURLToPath(new URL("../../../apps/web/public/fields/biobuzz/biobuzz-dark.webp", import.meta.url));
+  /** The header of a 1080 by 1080 extended WebP (`VP8X`): all `imageSizePx` reads. */
+  const webp = new Uint8Array(30);
+  webp.set([0x52, 0x49, 0x46, 0x46, 22, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x58, 10, 0, 0, 0]);
+  webp.set([0x37, 0x04, 0x00, 0x37, 0x04, 0x00], 24);
 
-  it("reads the size of the BIOBUZZ WebP images and of a PNG", () => {
-    expect(imageSizePx(readFileSync(webp))).toEqual({ widthPx: 1080, heightPx: 1080 });
+  it("reads the size of a WebP image and of a PNG", () => {
+    expect(imageSizePx(webp)).toEqual({ widthPx: 1080, heightPx: 1080 });
     const png = new Uint8Array(24);
     png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
     png.set([0, 0, 4, 0, 0, 0, 2, 0], 16);
@@ -136,7 +137,7 @@ describe("the field image for render", () => {
   it("embeds a picture beside the field file and skips an app asset or a missing file", () => {
     makeProject(root);
     mkdirSync(join(root, "autos/field/img"), { recursive: true });
-    writeFileSync(join(root, "autos/field/img/field.webp"), readFileSync(webp));
+    writeFileSync(join(root, "autos/field/img/field.webp"), webp);
     const project = loadProject(root);
     const local = parseField({
       ...TEST_FIELD,
@@ -147,7 +148,7 @@ describe("the field image for render", () => {
     expect(image?.href.startsWith("data:image/webp;base64,")).toBe(true);
     expect(image).toMatchObject({ widthPx: 1080, heightPx: 1080 });
 
-    const app = parseField({ ...local, image: { ...local.image, src: "app:fields/biobuzz/biobuzz-dark.webp" } });
+    const app = parseField({ ...local, image: { ...local.image, src: "app:fields/example.webp" } });
     expect(fieldImageFor(project, app, "autos/field/field.json")).toBeUndefined();
     const missing = parseField({ ...local, image: { ...local.image, src: "img/none.webp" } });
     expect(fieldImageFor(project, missing, "autos/field/field.json")).toBeUndefined();

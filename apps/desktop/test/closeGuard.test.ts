@@ -58,3 +58,47 @@ describe("CloseGuard", () => {
     expect(guard.onClose()).toBe(true);
   });
 });
+
+describe("CloseGuard for a page that stopped", () => {
+  function stopped(holdsEdits: boolean) {
+    const window = { isDestroyed: vi.fn(() => false), close: vi.fn(), askPage: vi.fn(), holdsEdits: vi.fn(() => holdsEdits), askMain: vi.fn() };
+    const quit = vi.fn();
+    const guard = new CloseGuard(window, quit);
+    return { guard, window, quit };
+  }
+
+  it("asks main's own question at once when the page stops, and Reload keeps the window", () => {
+    const { guard, window } = stopped(true);
+    guard.pageListening();
+    guard.pageStopped();
+    expect(window.askMain).toHaveBeenCalledTimes(1);
+    // A close while that question is open waits for it.
+    expect(guard.onClose()).toBe(false);
+    expect(window.askMain).toHaveBeenCalledTimes(1);
+    guard.answer(false);
+    expect(window.close).not.toHaveBeenCalled();
+  });
+
+  it("asks main before closing a stopped page that left edits, and closes on its yes", () => {
+    const { guard, window } = stopped(true);
+    expect(guard.onClose()).toBe(false);
+    expect(window.askMain).toHaveBeenCalledTimes(1);
+    expect(window.askPage).not.toHaveBeenCalled();
+    guard.answer(true);
+    expect(window.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds a quit for those edits too", () => {
+    const { guard, quit } = stopped(true);
+    expect(guard.onBeforeQuit()).toBe(false);
+    guard.answer(true);
+    expect(quit).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes a stopped page with no edits at once", () => {
+    const { guard, window } = stopped(false);
+    expect(guard.onClose()).toBe(true);
+    expect(guard.onBeforeQuit()).toBe(true);
+    expect(window.askMain).not.toHaveBeenCalled();
+  });
+});

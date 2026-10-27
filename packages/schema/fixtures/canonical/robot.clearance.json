@@ -1,0 +1,72 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/robot.json",
+  "formatVersion": 1,
+  "name": "Clearance fixture",
+  "frame": {
+    "forward": "+x",
+    "left": "+y",
+    "headingZero": "+x",
+    "headingPositive": "ccw"
+  },
+  "footprint": {
+    "startIn": {
+      "lengthIn": 18,
+      "widthIn": 18,
+      "provenance": "PLACEHOLDER: test fixture"
+    },
+    "expandedIn": {
+      "lengthIn": 18,
+      "widthIn": 18,
+      "provenance": "PLACEHOLDER: test fixture"
+    },
+    "centreOfRotationIn": {
+      "xIn": 0,
+      "yIn": 0,
+      "provenance": "PLACEHOLDER: test fixture"
+    },
+    "heightIn": {
+      "value": 16,
+      "provenance": "PLACEHOLDER: test fixture"
+    },
+    "clearanceIn": {
+      "value": 1.5,
+      "provenance": "SET BY HAND: test fixture, the clearance a team chose for its robot"
+    }
+  },
+  "kinematics": {
+    "maxForwardVelInPerS": {
+      "value": 60,
+      "provenance": "PLACEHOLDER: test fixture"
+    },
+    "maxStrafeVelInPerS": {
+      "value": 50,
+      "provenance": "PLACEHOLDER: test fixture"
+    },
+    "forwardDecelInPerS2": {
+      "value": 60,
+      "provenance": "PLACEHOLDER: test fixture"
+    },
+    "strafeDecelInPerS2": {
+      "value": 40,
+      "provenance": "PLACEHOLDER: test fixture"
+    },
+    "accelInPerS2": {
+      "value": 60,
+      "provenance": "PLACEHOLDER: test fixture"
+    },
+    "maxAngularVelRadPerS": {
+      "value": 6,
+      "provenance": "PLACEHOLDER: test fixture"
+    },
+    "defaultPathSpeedFraction": {
+      "value": 0.8,
+      "provenance": "SET BY HAND: test fixture"
+    },
+    "follower": {
+      "library": "pedro",
+      "version": "3.0.0-20260828.185437-17",
+      "holdEnd": true
+    }
+  },
+  "commands": []
+}

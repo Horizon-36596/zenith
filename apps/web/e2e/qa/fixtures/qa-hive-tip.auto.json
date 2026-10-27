@@ -1,0 +1,19 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 4,
+  "name": "qa-hive-tip",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "alliance": "RED",
+  "start": { "pose": { "xIn": -40, "yIn": -63, "headingRad": 1.5708 }, "holds": { "pollen": 4 } },
+  "steps": [
+    {
+      "id": "toHive",
+      "kind": "path",
+      "segments": [{ "kind": "line", "from": "current", "to": { "xIn": -14, "yIn": -46 } }],
+      "heading": { "mode": "constant", "headingRad": 1.5708 }
+    },
+    { "id": "scoreFour", "kind": "transfer", "from": "robot", "to": "hiveRedUpCell", "expectedCount": 4 },
+    { "id": "watch", "kind": "wait", "seconds": 5 }
+  ]
+}

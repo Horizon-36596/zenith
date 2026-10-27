@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { canonicalize, flattenSteps } from "@horizon36596/zenith-core";
 import { parseRobot, type PathStep } from "@horizon36596/zenith-schema";
 import { loadAutoAndPlan } from "../autoLoad.js";
@@ -74,6 +74,13 @@ export function runCalibrate(options: CalibrateOptions): number {
     const loaded = loadAutoAndPlan(autoPath, project);
     if (!loaded.ok) {
       skipped.push({ file: fileName, reason: `${trace.auto}.auto.json does not load` });
+      continue;
+    }
+    // The fit is against, and --write updates, the project's robot; a trace from an auto that names
+    // its own robot was driven by that robot's kinematics, so it would skew the fit.
+    const ownRobot = loaded.loaded.auto.robot;
+    if (ownRobot !== undefined && resolve(project.root, ownRobot) !== resolve(project.root, project.link.robot)) {
+      skipped.push({ file: fileName, reason: `${trace.auto}.auto.json uses its own robot (${ownRobot}), not ${project.link.robot}` });
       continue;
     }
     const planSteps = flattenSteps(loaded.loaded.plan.steps);

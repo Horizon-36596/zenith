@@ -7,8 +7,9 @@
  * Main cannot see the editor's state, so it asks the page. The page answers through the shared
  * Save / Discard / Cancel dialog (apps/web/src/app/unsaved.ts), or at once when nothing is unsaved,
  * and main then closes for real or keeps the window. A page that never said it listens (still
- * loading, crashed, or a build without the bridge) cannot answer, so its window closes as before
- * rather than refusing to close at all.
+ * loading, crashed, or a build without the bridge) cannot answer. Its window still asks when the
+ * main process holds unsaved edits the page sent before it stopped (crashRecovery.ts), through main's
+ * own native question; otherwise it closes as before rather than refusing to close at all.
  *
  * Kept free of Electron so the decisions can be tested without a window.
  */
@@ -18,6 +19,10 @@ export interface GuardedWindow {
   close(): void;
   /** Asks the page whether it may close. */
   askPage(): void;
+  /** True when main holds unsaved edits for a page that can no longer answer (crashRecovery.ts). */
+  holdsEdits?(): boolean;
+  /** Asks in main's own native question, for a page that stopped; answered with `answer`. */
+  askMain?(): void;
 }
 
 export class CloseGuard {
@@ -40,15 +45,36 @@ export class CloseGuard {
     this.listening = true;
   }
 
-  /** The page went away (navigation, reload or a crash); until it subscribes again, closing is free. */
+  /**
+   * The page went away (navigation, reload or a crash); until it subscribes again, closing is free,
+   * unless main holds edits for it, when main asks instead.
+   */
   pageGone(): void {
     this.listening = false;
     this.asking = false;
   }
 
+  /**
+   * The page crashed or could not load: main asks now, in its own question, whether to reload or
+   * close, and that question's answer comes back through `answer` like the page's would.
+   */
+  pageStopped(): void {
+    this.listening = false;
+    this.asking = true;
+    this.window.askMain?.();
+  }
+
   /** From the window's `close` event: true to let it close, false to prevent it for now. */
   onClose(): boolean {
-    if (this.approved || !this.listening) return true;
+    if (this.approved) return true;
+    if (!this.listening) {
+      if (this.window.holdsEdits?.() !== true || this.window.askMain === undefined) return true;
+      if (!this.asking) {
+        this.asking = true;
+        this.window.askMain();
+      }
+      return false;
+    }
     if (!this.asking) {
       this.asking = true;
       this.window.askPage();
@@ -58,7 +84,8 @@ export class CloseGuard {
 
   /** From `before-quit`: true to let the quit go on, false to hold it while the page is asked. */
   onBeforeQuit(): boolean {
-    if (this.approved || !this.listening || this.window.isDestroyed()) return true;
+    if (this.approved || this.window.isDestroyed()) return true;
+    if (!this.listening && this.window.holdsEdits?.() !== true) return true;
     this.quitting = true;
     return this.onClose();
   }

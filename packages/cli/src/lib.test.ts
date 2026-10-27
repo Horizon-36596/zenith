@@ -19,6 +19,7 @@ describe("the CLI library entry", () => {
     "AUTO_NAME_PATTERN",
     "loadAutoAndPlan",
     "tryCore",
+    "isEntryPoint",
   ] as const;
 
   it("exports what the desktop app reuses, and index.ts re-exports the same values", () => {

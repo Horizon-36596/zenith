@@ -22,6 +22,8 @@
 package org.horizon36596.zenith.solverslib;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.seattlesolvers.solverslib.command.Command;
 import com.seattlesolvers.solverslib.command.CommandGroupBase;
@@ -74,5 +76,20 @@ class EndConditionTest {
         robot.holdingPiece = true;
         robot.run(routine, 50);
         assertEquals(Arrays.asList("path0 start", "path0 interrupted"), robot.log);
+    }
+
+    @Test
+    void anUnknownConditionOnAPathFromCurrentIsRefusedAtInit() {
+        // The path is built only when its step starts, from the live pose; its end condition is not.
+        String auto = "{\"formatVersion\": 2, \"name\": \"typo\","
+                + " \"start\": {\"pose\": {\"xIn\": 0, \"yIn\": 0}},"
+                + " \"steps\": [{\"id\": \"go\", \"kind\": \"path\", \"endCondition\": {\"condition\": \"holdingPeice\"},"
+                + " \"segments\": [{\"kind\": \"line\", \"from\": \"current\","
+                + " \"to\": {\"xIn\": 24, \"yIn\": 0}}], \"heading\": {\"mode\": \"tangent\"}}]}";
+        AutoSpec spec = AutoSpec.parse(Json.parse(auto, "typo.auto.json"), "typo", Collections.<String, Pose2d>emptyMap());
+        IllegalArgumentException problem = assertThrows(IllegalArgumentException.class,
+                () -> AutoBuilder.build(spec, robot));
+        assertTrue(problem.getMessage().startsWith("step \"go\": "), problem.getMessage());
+        assertTrue(problem.getMessage().contains("holdingPeice"), problem.getMessage());
     }
 }

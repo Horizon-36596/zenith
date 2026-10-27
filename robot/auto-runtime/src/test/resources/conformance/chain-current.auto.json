@@ -1,0 +1,31 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 4,
+  "name": "chain-current",
+  "title": "Later paths of a path chain that start from current, the end of the path before them",
+  "alliance": "RED",
+  "start": { "pose": { "ref": "a" } },
+  "steps": [
+    {
+      "id": "chain",
+      "kind": "path",
+      "segments": [
+        { "kind": "line", "from": { "ref": "a" }, "to": { "ref": "b" } },
+        { "kind": "line", "from": "current", "to": { "ref": "c" } },
+        { "kind": "bezier", "from": "current", "control": [{ "xIn": -12, "yIn": -12 }], "to": { "ref": "d" } }
+      ],
+      "heading": { "mode": "constant", "headingRad": 0 },
+      "markers": [{ "at": { "t": 0.5 }, "command": { "name": "instant", "args": { "at": "secondPath" } } }]
+    },
+    {
+      "id": "back",
+      "kind": "path",
+      "segments": [
+        { "kind": "line", "from": "current", "to": { "ref": "c" } },
+        { "kind": "line", "from": "current", "to": { "ref": "b" } }
+      ],
+      "heading": { "mode": "constant", "headingRad": 0 }
+    },
+    { "id": "after", "kind": "command", "name": "instant", "args": { "tag": "after" } }
+  ]
+}

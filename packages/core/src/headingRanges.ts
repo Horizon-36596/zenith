@@ -1,4 +1,6 @@
 import type { Heading, HeadingRange, RangeHeading } from "@horizon36596/zenith-schema";
+import type { PathGeometry } from "./geometry/path.js";
+import { linearHeadingPieces, pedroSigned } from "./heading.js";
 
 /**
  * Pure edits on a `piecewise` heading's ranges (site/docs/file-format.md, "Piecewise heading"): turn a
@@ -16,7 +18,7 @@ type Piecewise = Extract<Heading, { mode: "piecewise" }>;
 export const MIN_RANGE_T = 0.02;
 
 /** Keeps t readable in the file: boundaries land on four decimals. */
-const roundT = (t: number): number => Math.round(t * 10000) / 10000;
+export const roundRangeT = (t: number): number => Math.round(t * 10000) / 10000;
 
 /** The heading a range holds at `t`, for a mode that does not need the geometry, else null. */
 function fixedHeadingAt(range: HeadingRange, t: number): number | null {
@@ -33,10 +35,33 @@ function fixedHeadingAt(range: HeadingRange, t: number): number | null {
 /**
  * The same heading as one range from 0 to 1, or the heading itself when it is piecewise already.
  * A step with no heading starts as one tangent range, the editor's default mode.
+ *
+ * A `linear` heading over several segments shares its sweep out by segment and turns each share the
+ * short way (`linearHeadingPieces`), while one linear range turns the whole sweep the short way. The
+ * two agree unless the sweep is more than half a turn; then, given the step's `path`, the heading
+ * becomes one linear range per segment, each holding that segment's share, so the robot turns
+ * exactly as before (issue #375). Without the path it stays one range.
  */
-export function toPiecewise(heading: Heading | undefined): Piecewise {
+export function toPiecewise(heading: Heading | undefined, path?: PathGeometry): Piecewise {
   if (heading?.mode === "piecewise") return heading;
   const inner: RangeHeading = heading ?? { mode: "tangent" };
+  if (inner.mode === "linear" && path !== undefined && path.curves.length > 1) {
+    const sweep = inner.toRad - inner.fromRad;
+    if (pedroSigned(sweep) !== sweep) {
+      const ranges: HeadingRange[] = [];
+      for (const piece of linearHeadingPieces(inner, path)) {
+        const startT = ranges.length === 0 ? 0 : (ranges[ranges.length - 1] as HeadingRange).endT;
+        const endT = roundRangeT(piece.endT);
+        if (endT <= startT) continue;
+        ranges.push({ startT, endT, heading: { mode: "linear", fromRad: piece.fromRad, toRad: piece.toRad } });
+      }
+      const last = ranges[ranges.length - 1];
+      if (last !== undefined) {
+        last.endT = 1;
+        return { mode: "piecewise", ranges };
+      }
+    }
+  }
   return { mode: "piecewise", ranges: [{ startT: 0, endT: 1, heading: inner }] };
 }
 
@@ -47,12 +72,18 @@ export function rangeContaining(heading: Piecewise, t: number): number {
 
 /**
  * Splits the range that holds `t` into two at `t`. Both halves keep the range's mode; a `linear`
- * range is cut at the heading it passes through at `t`, so the robot turns exactly as before until
- * either half is changed. Returns the heading unchanged when either half would be narrower than
+ * range is cut at the heading it passes through at `t`, measured along the short way it turns (as
+ * `rangeHeadingFunction` turns it), so the robot turns exactly as before until either half is
+ * changed. Returns the heading unchanged when either half would be narrower than
  * `MIN_RANGE_T`.
+ *
+ * `along: "sweep"` cuts a `linear` range at the heading its written sweep passes through instead,
+ * the long way when the range asks for over half a turn. That is the HEADING warning's one-click
+ * split (`splitHeadingRange` in fix.ts): its halves each turn under half a turn, so the robot turns
+ * the long way the file wrote rather than the short way it turned before.
  */
-export function splitRange(heading: Piecewise, t: number): Piecewise {
-  const at = roundT(t);
+export function splitRange(heading: Piecewise, t: number, along: "turn" | "sweep" = "turn"): Piecewise {
+  const at = roundRangeT(t);
   const index = rangeContaining(heading, at);
   if (index < 0) return heading;
   const range = heading.ranges[index] as HeadingRange;
@@ -60,7 +91,10 @@ export function splitRange(heading: Piecewise, t: number): Piecewise {
   let left: RangeHeading = range.heading;
   let right: RangeHeading = range.heading;
   if (range.heading.mode === "linear") {
-    const middle = fixedHeadingAt(range, at) as number;
+    const span = range.endT - range.startT;
+    const local = span <= 0 ? 1 : (at - range.startT) / span;
+    const sweep = range.heading.toRad - range.heading.fromRad;
+    const middle = range.heading.fromRad + (along === "sweep" ? sweep : pedroSigned(sweep)) * local;
     left = { mode: "linear", fromRad: range.heading.fromRad, toRad: middle };
     right = { mode: "linear", fromRad: middle, toRad: range.heading.toRad };
   }
@@ -84,7 +118,7 @@ export function moveBoundary(heading: Piecewise, index: number, t: number): Piec
   const lower = before.startT + MIN_RANGE_T;
   const upper = after.endT - MIN_RANGE_T;
   if (lower > upper) return heading;
-  const at = roundT(Math.min(upper, Math.max(lower, t)));
+  const at = roundRangeT(Math.min(upper, Math.max(lower, t)));
   const ranges = heading.ranges.map((range, position) => {
     if (position === index) return { ...range, endT: at };
     if (position === index + 1) return { ...range, startT: at };

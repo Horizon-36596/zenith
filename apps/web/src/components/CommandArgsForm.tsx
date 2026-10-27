@@ -3,10 +3,62 @@
  * (site/docs/file-format.md). The registry is the only source of the fields, their types and
  * their ranges, so the editor never guesses what a command takes.
  */
-import type { CommandSpec } from "@horizon36596/zenith-schema";
+import type { CommandParam, CommandSpec } from "@horizon36596/zenith-schema";
 import { CheckboxField, NumberField, SelectField, TextField } from "./fields";
 
 export type Args = Record<string, string | number | boolean>;
+
+/** A raw key in sentence case: `count` is Count, `preloadCount` is Preload count, `arm_state` is Arm state. */
+export function sentenceCase(key: string): string {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLowerCase();
+  return words === "" ? key : `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
+
+/**
+ * What an argument's row is called: the label robot.json gives it when it has one, otherwise its key
+ * in sentence case (issue #410). The raw key stays in the row's hint (`argHint`).
+ */
+export function argLabel(key: string, param: object): string {
+  const label = (param as { label?: unknown }).label;
+  return typeof label === "string" && label.trim() !== "" ? label.trim() : sentenceCase(key);
+}
+
+/**
+ * The row hint (W2-19 of the 0.1.2 sweep): what the argument means, from the sentence of the
+ * command's summary that names it, what it takes and its range, from robot.json's schema for it, and
+ * the raw key, which is what robot.json and the robot's code call it.
+ */
+export function argHint(key: string, param?: CommandParam, summary?: string): string {
+  const parts: string[] = [];
+  const named = new RegExp(`\\b${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+  const said = (summary ?? "").match(/[^.!?]+[.!?]?/g)?.map((sentence) => sentence.trim()).find((sentence) => named.test(sentence));
+  if (said !== undefined) parts.push(said.endsWith(".") ? said : `${said}.`);
+  if (param !== undefined) parts.push(takes(param));
+  parts.push(`The argument's key in robot.json: ${key}.`);
+  return parts.join(" ");
+}
+
+/** What an argument takes, in words: "A whole number from 1 to 4, 1 by default." */
+function takes(param: CommandParam): string {
+  const fallback = param.default === undefined ? "" : `, ${String(param.default)} by default`;
+  if (param.type === "enum") return `One of ${param.values.join(", ")}${fallback}.`;
+  if (param.type === "boolean") return `On or off${fallback === "" ? "" : `, ${param.default === true ? "on" : "off"} by default`}.`;
+  if (param.type === "string") return `Text${fallback}.`;
+  const kind = param.type === "integer" ? "A whole number" : "A number";
+  const range =
+    param.min !== undefined && param.max !== undefined
+      ? ` from ${String(param.min)} to ${String(param.max)}`
+      : param.min !== undefined
+        ? ` of at least ${String(param.min)}`
+        : param.max !== undefined
+          ? ` of at most ${String(param.max)}`
+          : "";
+  return `${kind}${range}${fallback}.`;
+}
 
 export function CommandArgsForm({
   spec,
@@ -50,7 +102,8 @@ export function CommandArgsForm({
           return (
             <SelectField
               key={name}
-              label={name}
+              label={argLabel(name, param)}
+              rowHint={argHint(name, param, spec.summary)}
               value={value}
               testId={testId}
               options={param.values.map((option) => ({ value: option, label: option }))}
@@ -65,7 +118,8 @@ export function CommandArgsForm({
           return (
             <CheckboxField
               key={name}
-              label={name}
+              label={argLabel(name, param)}
+              rowHint={argHint(name, param, spec.summary)}
               checked={typeof current === "boolean" ? current : (param.default ?? false)}
               onChange={(next) => {
                 set(name, next);
@@ -78,7 +132,8 @@ export function CommandArgsForm({
           return (
             <TextField
               key={name}
-              label={name}
+              label={argLabel(name, param)}
+              rowHint={argHint(name, param, spec.summary)}
               testId={testId}
               value={typeof current === "string" ? current : (param.default ?? "")}
               onChange={(next) => {
@@ -94,7 +149,8 @@ export function CommandArgsForm({
         return (
           <NumberField
             key={name}
-            label={name}
+            label={argLabel(name, param)}
+              rowHint={argHint(name, param, spec.summary)}
             testId={testId}
             value={value}
             step={param.type === "integer" ? 1 : 0.1}

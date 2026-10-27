@@ -1,16 +1,18 @@
 /**
  * Closing the window, or quitting, with unsaved edits asks Save, Discard or Cancel first (QA-12),
- * and a clean close asks nothing. Each test starts its own copy of the built app, since two of them
+ * and a clean close asks nothing. With the read-only example open, Save is "Save a copy…", and the
+ * close waits for the Save As dialog and the write (sweep D4). Each test starts its own copy of the built app, since two of them
  * end it. Windowless, as every desktop test is (ZENITH_HEADLESS=1): the close is requested from the
  * main process, the way the title bar's X, Alt+F4 and the taskbar request it.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { seedFirstRunDone } from "./firstRunDone";
 
 const pkg = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const require = createRequire(import.meta.url);
@@ -30,9 +32,7 @@ test.beforeEach(async () => {
   pid = app.process().pid;
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
-  await page.evaluate(() => {
-    localStorage.setItem("zenith.ui", JSON.stringify({ tour: { seen: true, coreDone: true, fullDone: false } }));
-  });
+  await seedFirstRunDone(page);
   await page.reload();
   await page.waitForSelector("[data-titlebar]");
   await app.evaluate(({ BrowserWindow }) => {
@@ -122,4 +122,39 @@ test("a close with nothing unsaved asks nothing and closes", async () => {
   const closed = page.waitForEvent("close", { timeout: 15_000 });
   await requestClose();
   await closed;
+});
+
+/** Answers the next native Save As dialogs with `path`, or as cancelled when it is null. */
+async function answerSaveAs(path: string | null): Promise<void> {
+  await app.evaluate(({ dialog }, chosen) => {
+    const answer = async () => (chosen === null ? { canceled: true, filePath: "" } : { canceled: false, filePath: chosen });
+    (dialog as unknown as { showSaveDialog: typeof answer }).showSaveDialog = answer;
+  }, path);
+}
+
+test("Save a copy on the example writes the file first, and only then closes", async () => {
+  await makeAnEdit();
+  const copy = join(profile, "my-copy.auto.json");
+  await answerSaveAs(copy);
+  const closed = page.waitForEvent("close", { timeout: 15_000 });
+  await requestClose();
+  await expect(page.getByTestId("unsaved-save")).toHaveText("Save a copy…");
+  await expect(page.getByTestId("unsaved-dialog")).toContainText("read only");
+  await page.getByTestId("unsaved-save").click().catch((error: unknown) => {
+    if (!page.isClosed()) throw error;
+  });
+  await closed;
+  expect(existsSync(copy)).toBe(true);
+  expect((JSON.parse(readFileSync(copy, "utf8")) as { $schema?: string }).$schema).toContain("auto");
+});
+
+test("cancelling Save a copy's dialog keeps the window and the edit", async () => {
+  await makeAnEdit();
+  await answerSaveAs(null);
+  await requestClose();
+  await page.getByTestId("unsaved-save").click();
+  await expect(page.getByTestId("unsaved-dialog")).toHaveCount(0);
+  await expect(page.getByTestId("status")).toContainText("stayed open");
+  expect(await windowCount()).toBe(1);
+  await expect(unsaved()).toHaveCount(1);
 });

@@ -1,0 +1,85 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "members",
+      "fieldPath": "uid",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "keyGrants",
+      "fieldPath": "uid",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "keyRequests",
+      "fieldPath": "uid",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "timeRequests",
+      "fieldPath": "ownerTeamId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "timeRequests",
+      "fieldPath": "teamId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    { "collectionGroup": "revisions", "fieldPath": "content", "indexes": [] },
+    { "collectionGroup": "revisions", "fieldPath": "robot", "indexes": [] },
+    { "collectionGroup": "revisions", "fieldPath": "field", "indexes": [] },
+    { "collectionGroup": "revisions", "fieldPath": "waypoints", "indexes": [] },
+    { "collectionGroup": "revisions", "fieldPath": "gitSha", "indexes": [] },
+    { "collectionGroup": "shares", "fieldPath": "projection", "indexes": [] },
+    { "collectionGroup": "proposals", "fieldPath": "diff", "indexes": [] },
+    { "collectionGroup": "autos", "fieldPath": "title", "indexes": [] },
+    { "collectionGroup": "activity", "fieldPath": "detail", "indexes": [] },
+    { "collectionGroup": "shares", "fieldPath": "keyWraps", "indexes": [] },
+    { "collectionGroup": "shares", "fieldPath": "ownerWrap", "indexes": [] },
+    { "collectionGroup": "shares", "fieldPath": "linkWrap", "indexes": [] },
+    { "collectionGroup": "shares", "fieldPath": "prevKeys", "indexes": [] },
+    { "collectionGroup": "shares", "fieldPath": "manifest", "indexes": [] },
+    { "collectionGroup": "proposals", "fieldPath": "fromWrap", "indexes": [] },
+    { "collectionGroup": "proposals", "fieldPath": "ownerWrap", "indexes": [] },
+    { "collectionGroup": "proposals", "fieldPath": "sig", "indexes": [] },
+    { "collectionGroup": "teams", "fieldPath": "encKey", "indexes": [] },
+    { "collectionGroup": "teamKeys", "fieldPath": "prev", "indexes": [] },
+    { "collectionGroup": "teamKeys", "fieldPath": "pairSpki", "indexes": [] },
+    { "collectionGroup": "teamKeys", "fieldPath": "pairPrivate", "indexes": [] },
+    { "collectionGroup": "teamKeys", "fieldPath": "signSpki", "indexes": [] },
+    { "collectionGroup": "teamKeys", "fieldPath": "signPrivate", "indexes": [] },
+    { "collectionGroup": "teamKeys", "fieldPath": "sig", "indexes": [] },
+    { "collectionGroup": "recovery", "fieldPath": "spki", "indexes": [] },
+    { "collectionGroup": "recovery", "fieldPath": "privateKey", "indexes": [] },
+    { "collectionGroup": "recovery", "fieldPath": "teamKey", "indexes": [] },
+    { "collectionGroup": "recovery", "fieldPath": "check", "indexes": [] },
+    { "collectionGroup": "keyGrants", "fieldPath": "wrap", "indexes": [] },
+    { "collectionGroup": "keyGrants", "fieldPath": "proof", "indexes": [] },
+    { "collectionGroup": "keyGrants", "fieldPath": "signature", "indexes": [] },
+    { "collectionGroup": "keyGrants", "fieldPath": "approval", "indexes": [] },
+    { "collectionGroup": "devices", "fieldPath": "encSpki", "indexes": [] },
+    { "collectionGroup": "devices", "fieldPath": "signSpki", "indexes": [] },
+    { "collectionGroup": "devices", "fieldPath": "fingerprint", "indexes": [] },
+    { "collectionGroup": "bugReports", "fieldPath": "whatHappened", "indexes": [] },
+    { "collectionGroup": "bugReports", "fieldPath": "expected", "indexes": [] },
+    { "collectionGroup": "bugReports", "fieldPath": "steps", "indexes": [] },
+    { "collectionGroup": "bugReports", "fieldPath": "setup", "indexes": [] },
+    { "collectionGroup": "bugReports", "fieldPath": "autoFile", "indexes": [] }
+  ]
+}

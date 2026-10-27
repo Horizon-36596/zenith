@@ -1,0 +1,818 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://libraries.horizon36596.org/zenith/schema/v1/projection.json",
+  "title": "Zenith projection file, formatVersion 1",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "formatVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "kind": {
+      "type": "string",
+      "const": "projection"
+    },
+    "level": {
+      "type": "string",
+      "enum": [
+        "view",
+        "propose"
+      ]
+    },
+    "season": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "alliance": {
+      "type": "string",
+      "enum": [
+        "RED",
+        "BLUE"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "startPose": {
+      "type": "object",
+      "properties": {
+        "xIn": {
+          "type": "number"
+        },
+        "yIn": {
+          "type": "number"
+        },
+        "headingRad": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "xIn",
+        "yIn",
+        "headingRad"
+      ],
+      "additionalProperties": false
+    },
+    "boundingBox": {
+      "type": "object",
+      "properties": {
+        "lengthIn": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "widthIn": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "centreOffsetIn": {
+          "type": "object",
+          "properties": {
+            "xIn": {
+              "type": "number"
+            },
+            "yIn": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "xIn",
+            "yIn"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "lengthIn",
+        "widthIn",
+        "centreOffsetIn"
+      ],
+      "additionalProperties": false
+    },
+    "trajectory": {
+      "type": "object",
+      "properties": {
+        "rateHz": {
+          "type": "number",
+          "const": 10
+        },
+        "positionQuantumIn": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "headingQuantumRad": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "poses": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "minItems": 1,
+          "maxItems": 3000
+        }
+      },
+      "required": [
+        "rateHz",
+        "positionQuantumIn",
+        "headingQuantumRad",
+        "poses"
+      ],
+      "additionalProperties": false
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "endS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "label": {
+            "type": "string",
+            "enum": [
+              "drive",
+              "score",
+              "collect",
+              "wait",
+              "park",
+              "other"
+            ]
+          }
+        },
+        "required": [
+          "startS",
+          "endS",
+          "label"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "elementId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "take",
+              "score"
+            ]
+          },
+          "atS": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "elementId",
+          "action",
+          "atS"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    },
+    "envelopes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "endS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "polygon": {
+            "type": "array",
+            "items": {
+              "$ref": "#/properties/boundingBox/properties/centreOffsetIn"
+            },
+            "minItems": 3,
+            "maxItems": 200
+          }
+        },
+        "required": [
+          "startS",
+          "endS",
+          "polygon"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    },
+    "totalS": {
+      "type": "number",
+      "minimum": 0
+    },
+    "structure": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^s[1-9][0-9]{0,5}$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "path"
+                  },
+                  "timeoutS": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "segments": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "line"
+                            },
+                            "from": {
+                              "$ref": "#/properties/startPose"
+                            },
+                            "to": {
+                              "$ref": "#/properties/startPose"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "bezier"
+                            },
+                            "from": {
+                              "$ref": "#/properties/startPose"
+                            },
+                            "control": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/properties/boundingBox/properties/centreOffsetIn"
+                              },
+                              "minItems": 1,
+                              "maxItems": 3
+                            },
+                            "to": {
+                              "$ref": "#/properties/startPose"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "from",
+                            "control",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 200
+                  },
+                  "heading": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "const": "tangent"
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "const": "tangentReversed"
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "const": "constant"
+                          },
+                          "headingRad": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "headingRad"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "const": "linear"
+                          },
+                          "fromRad": {
+                            "type": "number"
+                          },
+                          "toRad": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "fromRad",
+                          "toRad"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "const": "facePoint"
+                          },
+                          "xIn": {
+                            "type": "number"
+                          },
+                          "yIn": {
+                            "type": "number"
+                          },
+                          "offsetRad": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "xIn",
+                          "yIn"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "const": "piecewise"
+                          },
+                          "ranges": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "startT": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "endT": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "heading": {
+                                  "anyOf": [
+                                    {
+                                      "$ref": "#/properties/structure/properties/steps/items/anyOf/0/properties/heading/anyOf/0"
+                                    },
+                                    {
+                                      "$ref": "#/properties/structure/properties/steps/items/anyOf/0/properties/heading/anyOf/1"
+                                    },
+                                    {
+                                      "$ref": "#/properties/structure/properties/steps/items/anyOf/0/properties/heading/anyOf/2"
+                                    },
+                                    {
+                                      "$ref": "#/properties/structure/properties/steps/items/anyOf/0/properties/heading/anyOf/3"
+                                    },
+                                    {
+                                      "$ref": "#/properties/structure/properties/steps/items/anyOf/0/properties/heading/anyOf/4"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "startT",
+                                "endT",
+                                "heading"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1,
+                            "maxItems": 200
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "ranges"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "speedFraction": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1
+                  },
+                  "markers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "t": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                }
+                              },
+                              "required": [
+                                "t"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "distanceIn": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "distanceIn"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "distanceFromEndIn": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "distanceFromEndIn"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "token": {
+                          "type": "string",
+                          "pattern": "^cmd[1-9][0-9]{0,5}$"
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "token"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 200
+                  },
+                  "endCondition": {
+                    "type": "object",
+                    "properties": {
+                      "token": {
+                        "type": "string",
+                        "pattern": "^cond[1-9][0-9]{0,5}$"
+                      }
+                    },
+                    "required": [
+                      "token"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "segments"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^s[1-9][0-9]{0,5}$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "command"
+                  },
+                  "token": {
+                    "$ref": "#/properties/structure/properties/steps/items/anyOf/0/properties/markers/items/properties/token"
+                  },
+                  "estimateS": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "stationary": {
+                    "type": "boolean"
+                  },
+                  "movesRobot": {
+                    "type": "boolean"
+                  },
+                  "timeoutS": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "token",
+                  "estimateS",
+                  "stationary",
+                  "movesRobot"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^s[1-9][0-9]{0,5}$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "wait"
+                  },
+                  "seconds": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "until": {
+                    "$ref": "#/properties/structure/properties/steps/items/anyOf/0/properties/endCondition"
+                  },
+                  "timeoutS": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^s[1-9][0-9]{0,5}$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "sequence"
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/structure/properties/steps/items"
+                    },
+                    "maxItems": 200
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "steps"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^s[1-9][0-9]{0,5}$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "parallel"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "race",
+                      "deadline"
+                    ]
+                  },
+                  "deadline": {
+                    "type": "string",
+                    "pattern": "^s[1-9][0-9]{0,5}$"
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/structure/properties/steps/items"
+                    },
+                    "maxItems": 200
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "mode",
+                  "steps"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^s[1-9][0-9]{0,5}$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "branch"
+                  },
+                  "condition": {
+                    "$ref": "#/properties/structure/properties/steps/items/anyOf/0/properties/endCondition"
+                  },
+                  "then": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/structure/properties/steps/items"
+                    },
+                    "maxItems": 200
+                  },
+                  "else": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/structure/properties/steps/items"
+                    },
+                    "maxItems": 200
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "condition",
+                  "then"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "$ref": "#/properties/structure/properties/steps/items/anyOf/0/properties/markers/items/properties/token"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "command",
+              "marker"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "propertyNames": {
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "startS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "endS": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "token",
+          "kind",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 1000
+    }
+  },
+  "required": [
+    "$schema",
+    "formatVersion",
+    "kind",
+    "level",
+    "season",
+    "alliance",
+    "startPose",
+    "boundingBox",
+    "trajectory",
+    "phases",
+    "claims",
+    "envelopes",
+    "totalS"
+  ],
+  "additionalProperties": false
+}

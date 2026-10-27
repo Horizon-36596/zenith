@@ -44,8 +44,9 @@ function attempt<T>(what: string, run: () => T): Attempt<T> {
   }
 }
 
-export const safeResolve = (auto: Auto, waypoints?: Waypoints): Attempt<ResolvedAuto> =>
-  attempt("Resolving the auto", () => resolve(auto, waypoints));
+/** `robot` lets a path rejoin after a command that moves the robot (`core.resolve`). */
+export const safeResolve = (auto: Auto, waypoints?: Waypoints, robot?: Robot): Attempt<ResolvedAuto> =>
+  attempt("Resolving the auto", () => resolve(auto, waypoints, robot));
 
 export const safePlan = (resolved: ResolvedAuto, robot: Robot, field: Field): Attempt<Plan> =>
   attempt("Planning the auto", () => plan(resolved, robot, field));

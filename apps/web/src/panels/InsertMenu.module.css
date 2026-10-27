@@ -45,11 +45,12 @@
   color: var(--text-lo);
 }
 
+/*
+ * Fixed to the window and placed from the button (InsertMenu.tsx), so no panel clips it and its
+ * bottom never passes the window. When it holds more than shows, its foot fades and it scrolls.
+ */
 .menu {
-  position: absolute;
-  left: var(--pad-row-x);
-  right: var(--pad-row-x);
-  top: calc(var(--row-h) + var(--space-3));
+  position: fixed;
   z-index: var(--z-popover);
   display: flex;
   flex-direction: column;
@@ -62,9 +63,9 @@
   box-shadow: var(--shadow-popover);
 }
 
-.menu[data-up="true"] {
-  top: auto;
-  bottom: calc(var(--row-h) + var(--space-3));
+.menu[data-more="true"] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
 }
 
 .heading,
@@ -81,7 +82,10 @@
   margin-top: var(--space-3);
 }
 
+/* The menu is a capped, scrolling flex column, so a row must keep its full height and let the menu
+   scroll; left to shrink, a row with wrapped help is squeezed and its text runs into the next row. */
 .item {
+  flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -122,10 +126,19 @@
   color: inherit;
 }
 
+/* The kind's help wraps rather than being cut with an ellipsis; each one is a sentence or two. */
 .itemHint {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+/* A robot command's summary, whole and wrapped rather than cut to one line. */
+.itemSummary {
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-size: var(--fs-xs);
   line-height: var(--lh-xs);
   color: var(--text-lo);
@@ -282,4 +295,17 @@
   border: 1px solid var(--border-subtle);
   color: var(--text-disabled);
   cursor: default;
+}
+
+/* "Planner only" on the Transfer kind, in both modes: the one kind that changes the plan and not the robot. */
+.chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: calc(var(--ctl-h-sm) - var(--space-1));
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--bg-hover);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
 }

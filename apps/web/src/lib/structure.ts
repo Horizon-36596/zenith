@@ -13,8 +13,13 @@ import {
   continuityGaps,
   effectiveId,
   finish,
+  holdIds,
   insertStepAfter as insertStepAfterInCore,
   repairContinuity as repairContinuityInCore,
+  releaseIds,
+  repointDanglingDeadlines,
+  stepDrives,
+  tidyPinnedIds,
   unwrapStep as unwrapStepInCore,
   updateStep,
   wrapStepsWithId,
@@ -96,6 +101,11 @@ function editList(
  * Wraps sibling steps in a new sequence, parallel group or branch, at the position of the first of
  * them and in their document order, and returns the new group's id. Sequence and parallel go
  * through core's `wrapStepsWithId`; a branch puts the steps in its then arm.
+ *
+ * A branch is wrapped as a sequence by core first and then turned into the branch, so it gets the
+ * same rules (issue #312): the steps have to be one unbroken run in one list, the steps after them
+ * keep their ids, and when one of them was the deadline of the parallel group around them, the
+ * deadline passes to the new branch.
  */
 export function wrapSteps(
   auto: Auto,
@@ -110,13 +120,22 @@ export function wrapSteps(
   if (condition === undefined || id === undefined) {
     throw new EditError("robot.json declares no conditions, so there is nothing to branch on.");
   }
-  const result = editList(auto.steps, "step", new Set(ids), (members) => [
-    { id, kind: "branch", condition, then: members },
-  ]);
-  if (!result.done) {
-    throw new EditError("Only steps that sit side by side in the same list can be wrapped together.");
-  }
-  return { auto: finish({ ...auto, steps: result.steps }), id };
+  const wrapped = wrapStepsWithId(auto, ids, "sequence");
+  const replaced = updateStep(wrapped.auto.steps, "step", wrapped.id, (sequence) =>
+    sequence.kind === "sequence" ? { id, kind: "branch", condition, then: sequence.steps } : undefined,
+  );
+  if (!replaced.found) throw new EditError(`No step with id ${JSON.stringify(wrapped.id)}.`);
+  const steps = renameDeadline(replaced.steps, wrapped.id, id);
+  return { auto: finish({ ...wrapped.auto, steps }), id };
+}
+
+/** Every parallel group whose deadline is `from` names `to` instead. */
+function renameDeadline(steps: readonly Step[], from: string, to: string): Step[] {
+  return steps.map((step) => {
+    const own = step.kind === "parallel" && step.deadline === from ? { ...step, deadline: to } : step;
+    const lists = childLists(own);
+    return lists.length === 0 ? own : withChildLists(own, lists.map((list) => renameDeadline(list, from, to)));
+  });
 }
 
 /** Why a step cannot be unwrapped, or null when it can. */
@@ -133,10 +152,17 @@ export function unwrapBlockedReason(step: Step): string | null {
 /**
  * Replaces a group with its own steps, in place. Sequence and parallel go through core's
  * `unwrapStep`; a branch with no else arm is replaced by its then arm.
+ *
+ * As core does for a group (issue #401), a deadline that named the branch passes to the step of
+ * its then arm that decided when it ended: its last step that drives, else its last step. With no
+ * then arm left, the deadline passes on as when its step is removed. A deadline that named a
+ * positional step after the branch follows that step to its new number.
  */
 export function unwrapStep(auto: Auto, id: string): Auto {
+  const held = holdIds(auto.steps);
+  const key = held.idOf(id);
   let group: Step | undefined;
-  const result = editList(auto.steps, "step", new Set([id]), ([found]) => {
+  const result = editList(held.steps, "step", new Set([key]), ([found]) => {
     group = found;
     return found?.kind === "branch" ? found.then : found === undefined ? [] : [found];
   });
@@ -144,7 +170,11 @@ export function unwrapStep(auto: Auto, id: string): Auto {
   const reason = unwrapBlockedReason(group);
   if (reason !== null) throw new EditError(reason);
   if (group.kind !== "branch") return unwrapStepInCore(auto, id);
-  return finish({ ...auto, steps: result.steps });
+  const then = group.then;
+  const successor = [...then].reverse().find((member) => stepDrives(member)) ?? then[then.length - 1];
+  const passed = successor?.id === undefined ? result.steps : renameDeadline(result.steps, key, successor.id);
+  // A deadline passed to a positional step pins it; `tidyPinnedIds` gives that pin an id inside the rule.
+  return finish({ ...auto, steps: tidyPinnedIds(auto.steps, repointDanglingDeadlines(releaseIds(passed), "step")) });
 }
 
 /** Every resolved step, children included, in document order. */
@@ -195,6 +225,17 @@ function locate(steps: readonly Step[], prefix: string, id: string): Hop[] | nul
   return null;
 }
 
+/** The id of the step at `hops` (an address `locate` gave), or null when there is none there. */
+function idAt(steps: readonly Step[], prefix: string, hops: readonly Hop[]): string | null {
+  const [head, ...rest] = hops;
+  const step = head === undefined ? undefined : steps[head.index];
+  if (head === undefined || step === undefined) return null;
+  const own = effectiveId(step, head.index, prefix);
+  if (rest.length === 0) return own;
+  const lists = childLists(step);
+  return idAt(lists[head.list] ?? [], childPrefix(own, lists.length, head.list), rest);
+}
+
 /** Rebuilds the forest with the list at `parent` (a hop path to a list) replaced by `edit(list)`. */
 function editAt(steps: readonly Step[], parent: readonly Hop[], edit: (list: Step[]) => Step[]): Step[] {
   const [head, ...rest] = parent;
@@ -216,9 +257,90 @@ const samePrefix = (a: readonly Hop[], b: readonly Hop[], length: number): boole
   a.slice(0, length).every((hop, at) => hop.index === b[at]?.index && hop.list === b[at]?.list);
 
 /**
+ * A deadline an edit passed on because the step it named left the group: the parallel group's id
+ * after the edit, the step its deadline named before, and the step that is its deadline now.
+ */
+export interface RepointedDeadline {
+  groupId: string;
+  deadline: string;
+  newDeadline: string;
+}
+
+/**
+ * The deadlines `repointDanglingDeadlines` passed on between `before` and `after`, in document
+ * order. The two forests have the same shape, because repointing a deadline only changes that one
+ * key and at most gives the new deadline member an id. A stale key a group in
+ * all or race mode lost is not listed: that group never used it.
+ */
+function repointedDeadlines(before: readonly Step[], after: readonly Step[], prefix: string): RepointedDeadline[] {
+  return before.flatMap((step, index) => {
+    const kept = after[index];
+    if (kept === undefined) return [];
+    const id = effectiveId(step, index, prefix);
+    const own: RepointedDeadline[] =
+      step.kind === "parallel" &&
+      step.deadline !== undefined &&
+      kept.kind === "parallel" &&
+      kept.deadline !== undefined &&
+      kept.deadline !== step.deadline
+        ? [{ groupId: id, deadline: step.deadline, newDeadline: kept.deadline }]
+        : [];
+    const lists = childLists(step);
+    const keptLists = childLists(kept);
+    const inside = lists.flatMap((list, listIndex) =>
+      repointedDeadlines(list, keptLists[listIndex] ?? [], childPrefix(id, lists.length, listIndex)),
+    );
+    return [...own, ...inside];
+  });
+}
+
+/**
+ * Removes each step in `roots`, with everything inside it, as core's `removeStep` does for one, and
+ * says which deadlines that passed on. A deadline group that loses the step its deadline named
+ * passes the deadline to its first remaining step that drives, or its first step when none drives,
+ * so it stays a group the checks accept.
+ */
+export function removeStepsReportingDeadlines(
+  auto: Auto,
+  roots: readonly string[],
+): { auto: Auto; repointedDeadlines: RepointedDeadline[] } {
+  // Every id means the step it named before the first removal, and a deadline that named a
+  // positional sibling follows it to its new number (issue #401).
+  const held = holdIds(auto.steps);
+  let steps: Step[] = held.steps;
+  for (const id of roots) {
+    const result = updateStep(steps, "step", held.idOf(id), () => "remove");
+    if (!result.found) throw new EditError(`No step with id ${JSON.stringify(id)}.`);
+    steps = result.steps;
+  }
+  return tidyDeadlines(auto, releaseIds(steps), held.nameOf);
+}
+
+/**
+ * Finishes an edit made with `holdIds`, after `releaseIds`: passes on each deadline whose step
+ * left its group, and lists those by the ids they had before the edit. Passing a deadline to a
+ * positional step pins it, and `tidyPinnedIds` gives that pin an id inside the rule (`grp.2` to
+ * `grp2`), as core's `removeStep` and `moveStep` do.
+ */
+function tidyDeadlines(
+  auto: Auto,
+  steps: Step[],
+  nameOf: (id: string) => string,
+): { auto: Auto; repointedDeadlines: RepointedDeadline[] } {
+  const kept = tidyPinnedIds(auto.steps, repointDanglingDeadlines(steps, "step"));
+  const passed = repointedDeadlines(steps, kept, "step").map((entry) => ({ ...entry, deadline: nameOf(entry.deadline) }));
+  return { auto: finish({ ...auto, steps: kept }), repointedDeadlines: passed };
+}
+
+/**
  * Moves `sourceId` before or after `targetId`, or into `targetId` as the first step of its first
  * list when `targetId` is a group, wherever either sits in the tree. Works on addresses rather
  * than ids so a step with a positional id is not lost when the move renumbers its siblings.
+ *
+ * A deadline group whose deadline member was moved out of it passes its deadline to its first
+ * remaining step that drives, or its first step when none drives, as core's `moveStep` does, so it
+ * never stays a deadline group with no deadline (issues #160 and #144). A deadline whose member
+ * moves about inside its own group, or is renumbered by the move, follows that member (issue #401).
  */
 export function moveStepRelative(
   auto: Auto,
@@ -226,9 +348,24 @@ export function moveStepRelative(
   targetId: string,
   position: DropPosition,
 ): Auto {
-  if (sourceId === targetId) return auto;
-  const source = locate(auto.steps, "step", sourceId);
-  const target = locate(auto.steps, "step", targetId);
+  return moveStepReportingDeadlines(auto, sourceId, targetId, position).auto;
+}
+
+/**
+ * `moveStepRelative`, also saying which deadlines the move passed on, and the id the moved step has
+ * where it landed (`movedId`, which differs from `sourceId` for a positional step), for the status
+ * line.
+ */
+export function moveStepReportingDeadlines(
+  auto: Auto,
+  sourceId: string,
+  targetId: string,
+  position: DropPosition,
+): { auto: Auto; repointedDeadlines: RepointedDeadline[]; movedId?: string } {
+  if (sourceId === targetId) return { auto, repointedDeadlines: [] };
+  const held = holdIds(auto.steps);
+  const source = locate(held.steps, "step", held.idOf(sourceId));
+  const target = locate(held.steps, "step", held.idOf(targetId));
   if (source === null) throw new EditError(`No step with id ${JSON.stringify(sourceId)}.`);
   if (target === null) throw new EditError(`No step with id ${JSON.stringify(targetId)}.`);
   const sourceTail = source[source.length - 1] as Hop;
@@ -243,11 +380,11 @@ export function moveStepRelative(
   const sourceParent = source.slice(0, -1);
   const sourceLast = source[source.length - 1] as Hop;
   let moved: Step | undefined;
-  let steps = editAt(auto.steps, sourceParent, (list) => {
+  let steps = editAt(held.steps, sourceParent, (list) => {
     moved = list[sourceLast.index];
     return list.filter((_, index) => index !== sourceLast.index);
   });
-  if (moved === undefined) return auto;
+  if (moved === undefined) return { auto, repointedDeadlines: [] };
 
   // Removing the source shifts every later sibling at its level down by one, and that includes
   // the target or one of the target's ancestors when they share the source's parent list.
@@ -282,5 +419,8 @@ export function moveStepRelative(
       return [...list.slice(0, at), step, ...list.slice(at)];
     });
   }
-  return finish({ ...auto, steps });
+  const landed = locate(steps, "step", held.idOf(sourceId));
+  const result = tidyDeadlines(auto, releaseIds(steps), held.nameOf);
+  const movedId = landed === null ? null : idAt(result.auto.steps, "step", landed);
+  return movedId === null ? result : { ...result, movedId };
 }

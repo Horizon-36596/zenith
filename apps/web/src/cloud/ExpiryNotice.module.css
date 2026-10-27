@@ -1,0 +1,77 @@
+/* The expiry warning: non-modal, over the bottom right of the window like the import notice, above the panels and under every popover. */
+.notice {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-8);
+  z-index: var(--z-popover);
+  width: min(420px, calc(100vw - 2 * var(--space-4)));
+  max-height: min(360px, 60vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--sev-warn);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+}
+
+.icon {
+  flex: none;
+  margin-top: var(--space-1);
+  color: var(--sev-warn);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-hi);
+}
+
+.sub {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+}
+
+.list {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-3);
+  list-style: none;
+  overflow-y: auto;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.line + .line {
+  margin-top: var(--space-1);
+}
+
+.words {
+  flex: 1;
+}
+
+/* The desktop panel holds the corner too: the notice stands beside it, not over it, in a window
+   wide enough for both (16 + 460 + 16 + 420 + 16 px). In a narrower one, beside the panel would put
+   the notice off the screen, so it stays in the corner. */
+@media (min-width: 928px) {
+  body:has([data-testid="desktop-panel"]) .notice {
+    right: calc(460px + 2 * var(--space-4));
+  }
+}

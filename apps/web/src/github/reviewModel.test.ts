@@ -6,9 +6,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { loadAuto, loadField, loadRobot, loadWaypoints, removeStep, setPose } from "@horizon36596/zenith-core";
+import { canonicalize, loadAuto, loadField, loadRobot, loadWaypoints, removeStep, setPose } from "@horizon36596/zenith-core";
+import { lineAnchor } from "@horizon36596/zenith-github";
 import type { Auto, Field, Robot, Waypoints } from "@horizon36596/zenith-schema";
-import { buildReviewModel } from "./reviewModel";
+import { anchorRows, buildReviewModel } from "./reviewModel";
 
 const read = (path: string): string =>
   readFileSync(fileURLToPath(new URL(`../../../../examples/starter/${path}`, import.meta.url)), "utf8");
@@ -111,5 +112,33 @@ describe("buildReviewModel", () => {
     expect(result.findings.map((finding) => finding.code)).toEqual(
       headOnly.findings.map((finding) => finding.code),
     );
+  });
+});
+
+describe("each side's own waypoints (issue #407)", () => {
+  const original = loadAuto(JSON.parse(read("autos/first-auto.auto.json")));
+  const raw = JSON.parse(read("autos/waypoints.json")) as { waypoints: Record<string, { yIn: number }> };
+  (raw.waypoints["scoreSouth"] as { yIn: number }).yIn = -48;
+  const movedWaypoints = loadWaypoints(raw);
+
+  it("draws the base against its own waypoints when the pull request moved one", () => {
+    const shared = buildReviewModel({ base: original, head: original, robot, field, waypoints });
+    const split = buildReviewModel({ base: original, head: original, robot, field, waypoints, baseWaypoints: movedWaypoints });
+
+    expect(shared.totals.deltaS).toBe(0);
+    expect(split.totals.headS).toBe(shared.totals.headS);
+    expect(split.totals.baseS).not.toBeCloseTo(shared.totals.baseS as number, 3);
+  });
+});
+
+describe("anchorRows (issue #407)", () => {
+  it("links a removed step to its line in the base text, on the diff's left side", async () => {
+    const head = removeStep(base, "park");
+    const rows = buildReviewModel({ base, head, robot, field, waypoints }).rows;
+    const baseText = canonicalize("auto", base);
+    await anchorRows(rows, "autos/first-auto.auto.json", canonicalize("auto", head), baseText);
+
+    const removed = rows.find((row) => row.stepId === "park");
+    expect(removed?.anchor).toMatch(new RegExp(`L${String(lineAnchor(baseText, "park"))}$`));
   });
 });

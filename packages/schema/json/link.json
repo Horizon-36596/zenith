@@ -55,6 +55,10 @@
         "preselectTeleOp": {
           "type": "string",
           "minLength": 1
+        },
+        "opModeBase": {
+          "type": "string",
+          "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)*$"
         }
       },
       "required": [
@@ -73,6 +77,33 @@
         "trace": {
           "type": "string",
           "minLength": 1
+        },
+        "server": {
+          "type": "object",
+          "properties": {
+            "prepare": {
+              "type": "string",
+              "minLength": 1
+            },
+            "args": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cwd": {
+              "$ref": "#/properties/sim/properties/server/properties/args"
+            },
+            "watch": {
+              "type": "array",
+              "items": {
+                "$ref": "#/properties/sim/properties/server/properties/args"
+              }
+            }
+          },
+          "required": [
+            "prepare",
+            "args"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -98,6 +129,22 @@
         "dir"
       ],
       "additionalProperties": false
+    },
+    "javaDir": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      ]
     }
   },
   "required": [

@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { seedFirstRunDone } from "./firstRunDone";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const pkg = join(here, "..");
@@ -62,9 +63,7 @@ test.beforeAll(async () => {
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
   // The first-run tour has its own web tests; here it would only sit over the buttons being driven.
-  await page.evaluate(() => {
-    localStorage.setItem("zenith.ui", JSON.stringify({ tour: { seen: true, coreDone: true, fullDone: false } }));
-  });
+  await seedFirstRunDone(page);
   await page.reload();
   await page.waitForLoadState("domcontentloaded");
 });
@@ -167,7 +166,39 @@ test("the app opens from zenith://, isolated, and draws the example on the canva
       process: typeof page.process,
     };
   });
-  expect(isolation).toEqual({ bridge: "object", apiVersion: 1, node: "undefined", process: "undefined" });
+  expect(isolation).toEqual({ bridge: "object", apiVersion: 3, node: "undefined", process: "undefined" });
+
+  // The sign-in bridge answers over IPC: each provider on, or off with a sentence saying why.
+  const providers = await page.evaluate(() => {
+    const page = globalThis as unknown as {
+      zenithDesktop: { cloudSignIn: { providers(): Promise<Record<string, { available: boolean; reason: string | null }>> } };
+    };
+    return page.zenithDesktop.cloudSignIn.providers();
+  });
+  expect(Object.keys(providers).sort()).toEqual(["github", "google", "microsoft"]);
+  for (const availability of Object.values(providers)) {
+    expect(availability.available ? availability.reason : typeof availability.reason).toBe(availability.available ? null : "string");
+  }
+
+  // The desktop chrome is in (the title bar drags the window), and nothing draws a border round
+  // the whole window edge (the owner ruled the gradient edge out).
+  const titleBar = page.locator("[data-titlebar]");
+  await expect(titleBar).toHaveCSS("-webkit-app-region", "drag");
+  const frame = await page.evaluate(() => {
+    // The page's own window; this project's TypeScript has no DOM library.
+    const view = globalThis as unknown as {
+      document: { documentElement: unknown };
+      getComputedStyle(element: unknown, pseudo: string): { content: string; backgroundImage: string };
+    };
+    return ["::before", "::after"].map((pseudo) => {
+      const style = view.getComputedStyle(view.document.documentElement, pseudo);
+      return { content: style.content, background: style.backgroundImage };
+    });
+  });
+  expect(frame).toEqual([
+    { content: "none", background: "none" },
+    { content: "none", background: "none" },
+  ]);
 
   await dismissTour();
   await menu("project.example");
@@ -219,6 +250,11 @@ test("the toolbar's Deploy shows what would change and writes nothing until conf
   await expect(panel).toHaveAttribute("data-kind", "deploy");
   await expect(page.getByTestId("desktop-deploy-list")).toContainText("TeamCode/src/main/assets/autos/robot.json");
   await expect(page.getByTestId("desktop-deploy-confirm")).toBeEnabled();
+  expect(() => readFileSync(join(repo, "TeamCode", "src", "main", "assets", "autos", "robot.json"))).toThrow();
+  // The panel took focus when it opened, so Esc closes it, as it closes a sheet.
+  await expect(panel).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
   expect(() => readFileSync(join(repo, "TeamCode", "src", "main", "assets", "autos", "robot.json"))).toThrow();
 });
 

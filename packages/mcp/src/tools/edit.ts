@@ -1,45 +1,72 @@
 import { existsSync } from "node:fs";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
+  addEnvelopeCorner,
   addMarker,
   addSegment,
   addStep,
+  appendPath,
   insertStepAfter,
+  joinAt,
+  joinSteps,
   moveStep,
   newAutoFromTemplate,
+  removeEnvelopeCorner,
   removeMarker,
+  removePath,
   removeSegment,
   removeStep,
   renameStep,
   repairContinuity,
   setCommandArgs,
+  setEnvelope,
+  setEnvelopeCorner,
   setHeadingMode,
   setMarkerAt,
   setMeta,
   setPose,
+  setRejoinFrom,
+  setRoute,
   setSpeed,
   setStart,
   setTimeout as setStepTimeout,
+  stepAfter,
   unwrapStep,
   wrapStepsWithId,
+  type ChainEdit,
   type IntoGroup,
 } from "@horizon36596/zenith-core";
-import type { Auto, CommandCall, Heading, Marker, MarkerAt, Segment, Step } from "@horizon36596/zenith-schema";
+import type {
+  Auto,
+  CommandCall,
+  Envelope,
+  EnvelopePoint,
+  Heading,
+  Marker,
+  MarkerAt,
+  RejoinPose,
+  Segment,
+  Step,
+} from "@horizon36596/zenith-schema";
 import { z } from "zod";
 import { loadCurrent, writeEditResult } from "../editIo.js";
-import { relativeToRoot, resolveAutoPath, resolveProject } from "../project.js";
+import { robotAndFieldFor } from "../findings.js";
+import { relativeToRoot, resolveAutoPath, resolveProject, type Project } from "../project.js";
 import { guarded } from "../result.js";
 import {
   autoMetaSchema,
   autoRefField,
   intoGroupSchema,
   commandArgsSchema,
+  envelopePointSchema,
+  envelopeSchema,
   headingSchema,
   markerAtSchema,
   markerSchema,
   poseInputSchema,
   poseTargetSchema,
   projectField,
+  rejoinPoseSchema,
   segmentSchema,
   startInputSchema,
   stepInputSchema,
@@ -72,7 +99,9 @@ export function registerEditTools(server: McpServer): void {
         "Adds a step to the auto: after the step named afterId (searched anywhere in the tree, " +
         "including inside a sequence, parallel or branch group), into a group at an index (pass " +
         "into), or at the end of the top-level list when neither is given. A step given no id is " +
-        "assigned one automatically — read the response's auto.steps to see it. To add a path in the " +
+        "assigned one automatically — read the response's auto.steps to see it. A step given an id " +
+        "follows the zenith.edit.renameStep rule (a letter, then letters, digits, _ or -, at most 64 " +
+        "characters); any other id is refused with the reason. To add a path in the " +
         "middle that continues from the step before it, use zenith.edit.insertAfter instead.",
       inputSchema: {
         auto: autoRefField,
@@ -144,7 +173,10 @@ export function registerEditTools(server: McpServer): void {
       title: "Rename a step",
       description:
         "Gives the step named id a new explicit id. If it is a child of a parallel group whose " +
-        "deadline names the old id, the deadline is updated to the new id too.",
+        "deadline names the old id, the deadline is updated to the new id too. The new id starts " +
+        "with a letter and holds only letters, digits, _ and -, at most 64 characters, like a " +
+        "waypoint name; any other id is refused with the reason. An old id outside that rule can be " +
+        "renamed to one inside it.",
       inputSchema: { auto: autoRefField, id: stepIdField, newId: z.string().min(1), project: projectField },
     },
     guarded(({ auto, id, newId, project }) => {
@@ -205,7 +237,8 @@ export function registerEditTools(server: McpServer): void {
         "Inserts step right after afterId and, when it is a path, starts it where that step ends " +
         "(from current, or the pose written out inside a parallel group). Returns id, the new step's " +
         "id, and continuityGapStepId: the following path step that now starts away from where the " +
-        "robot is, or null. Offer zenith.edit.repairContinuity on it.",
+        "robot is, or null. Offer zenith.edit.repairContinuity on it. A step given an id follows the " +
+        "zenith.edit.renameStep rule; any other id is refused with the reason.",
       inputSchema: {
         auto: autoRefField,
         afterId: stepIdField,
@@ -249,19 +282,23 @@ export function registerEditTools(server: McpServer): void {
       description:
         "Sets one point of one segment of a path step to a literal pose: a segment endpoint " +
         '("from" or "to", replacing whatever was there — an inline pose, a waypoint ref, or ' +
-        '"current") or one Bezier control point.',
+        '"current") or one Bezier control point. A control point is written without a heading, ' +
+        "which the runtime ignores. With joint true, a point where two segments of the path meet " +
+        "moves as one point, as it does in the editor: the other end of the joint (the next " +
+        "segment's from, or the previous segment's to) gets the same pose, so no CONTINUITY gap opens.",
       inputSchema: {
         auto: autoRefField,
         stepId: stepIdField,
         target: poseTargetSchema,
         pose: poseInputSchema,
+        joint: z.boolean().optional(),
         project: projectField,
       },
     },
-    guarded(({ auto, stepId, target, pose, project }) => {
+    guarded(({ auto, stepId, target, pose, joint, project }) => {
       const proj = resolveProject(project);
       const { path, auto: current } = loadCurrent(proj, auto);
-      const updated = setPose(current, stepId, target, pose);
+      const updated = setPose(current, stepId, target, pose, { joint: joint === true, waypoints: proj.waypoints });
       return writeEditResult(proj, path, updated);
     }),
   );
@@ -278,6 +315,27 @@ export function registerEditTools(server: McpServer): void {
       const proj = resolveProject(project);
       const { path, auto: current } = loadCurrent(proj, auto);
       return writeEditResult(proj, path, setHeadingMode(current, stepId, cast<Heading>(heading)));
+    }),
+  );
+
+  server.registerTool(
+    "zenith.edit.setRoute",
+    {
+      title: "Set a path step's route",
+      description:
+        "Replaces a path step's segments and heading together and nothing else: markers, endCondition, timeoutS, speedFraction, envelope, expect, notes and rejoinFrom are kept as written. The new route must keep both ends of the step exactly: its first segment's from must equal the step's first from, and its last segment's to must equal the step's last to, each as written (a \"current\" stays \"current\", a ref stays that ref). A route that moves an end is refused with a message that names both, and nothing is written. This is how a route from zenith.optimize is applied: pass the result's step.segments and step.heading. Every later step that starts from \"current\" starts where it did.",
+      inputSchema: {
+        auto: autoRefField,
+        stepId: stepIdField,
+        segments: z.array(segmentSchema).min(1).describe("The new route, in order. At least one segment."),
+        heading: headingSchema,
+        project: projectField,
+      },
+    },
+    guarded(({ auto, stepId, segments, heading, project }) => {
+      const proj = resolveProject(project);
+      const { path, auto: current } = loadCurrent(proj, auto);
+      return writeEditResult(proj, path, setRoute(current, stepId, cast<Segment[]>(segments), cast<Heading>(heading)));
     }),
   );
 
@@ -332,6 +390,112 @@ export function registerEditTools(server: McpServer): void {
       const proj = resolveProject(project);
       const { path, auto: current } = loadCurrent(proj, auto);
       return writeEditResult(proj, path, removeSegment(current, stepId, segmentIndex));
+    }),
+  );
+
+  // The path chain edits of issue #185: each keeps the chain joined, and its markers and piecewise
+  // ranges keep their distance along the part that did not change. The result says what moved.
+  const chainResult = (proj: Project, path: string, edit: ChainEdit) =>
+    writeEditResult(proj, path, edit.auto, {
+      movedMarkers: edit.movedMarkers,
+      movedRanges: edit.movedRanges,
+      droppedWaypoints: edit.droppedWaypoints,
+    });
+
+  server.registerTool(
+    "zenith.edit.appendSegment",
+    {
+      title: "Add a segment to the end of a path step, joined",
+      description:
+        'Adds a straight segment to the end of a path step that starts from "current" (the end of ' +
+        "the segment before it, so the joint cannot tear) and runs 24 in along the way the robot " +
+        "faces there, cut short so the footprint stays on the field. Markers and piecewise heading " +
+        "ranges keep their distance from the step's start: their t is rescaled, and movedMarkers and " +
+        "movedRanges say how many moved. Use zenith.edit.setPose afterwards to put the new end where it belongs.",
+      inputSchema: { auto: autoRefField, stepId: stepIdField, project: projectField },
+    },
+    guarded(({ auto, stepId, project }) => {
+      const proj = resolveProject(project);
+      const { path, auto: current } = loadCurrent(proj, auto);
+      // The auto's own robot/field when it names one: the segment is cut to the field it runs on.
+      const context = { waypoints: proj.waypoints, ...robotAndFieldFor(current, proj) };
+      return chainResult(proj, path, appendPath(current, stepId, context));
+    }),
+  );
+
+  server.registerTool(
+    "zenith.edit.removeSegmentJoined",
+    {
+      title: "Remove a segment from a path step, keeping it joined",
+      description:
+        "Removes the segment at segmentIndex and keeps the path joined, unlike " +
+        'zenith.edit.removeSegment: the segment after it starts from "current", or, when the first ' +
+        "segment goes, from where the first one started. Markers and piecewise heading ranges keep " +
+        "their distance along the unchanged part; droppedWaypoints names any waypoint the step no " +
+        "longer follows. A path step needs at least one segment.",
+      inputSchema: {
+        auto: autoRefField,
+        stepId: stepIdField,
+        segmentIndex: z.number().int().nonnegative(),
+        project: projectField,
+      },
+    },
+    guarded(({ auto, stepId, segmentIndex, project }) => {
+      const proj = resolveProject(project);
+      const { path, auto: current } = loadCurrent(proj, auto);
+      return chainResult(proj, path, removePath(current, stepId, segmentIndex, { waypoints: proj.waypoints }));
+    }),
+  );
+
+  server.registerTool(
+    "zenith.edit.joinSegmentsAt",
+    {
+      title: "Join the two segments that meet at a point",
+      description:
+        "Merges the two segments of a path step that meet at point nodeIndex into one: point 0 is " +
+        "where the step starts and point n where its n-th segment ends, so nodeIndex 1 joins " +
+        "segments 0 and 1. Two lines stay a line; otherwise the result is a Bezier that keeps the " +
+        "outer control points, at most three. Markers and piecewise heading ranges keep their distance " +
+        "along the unchanged part; droppedWaypoints names any waypoint the step no longer follows.",
+      inputSchema: {
+        auto: autoRefField,
+        stepId: stepIdField,
+        nodeIndex: z.number().int().positive(),
+        project: projectField,
+      },
+    },
+    guarded(({ auto, stepId, nodeIndex, project }) => {
+      const proj = resolveProject(project);
+      const { path, auto: current } = loadCurrent(proj, auto);
+      return chainResult(proj, path, joinAt(current, stepId, nodeIndex, { waypoints: proj.waypoints }));
+    }),
+  );
+
+  server.registerTool(
+    "zenith.edit.joinSteps",
+    {
+      title: "Join a path step with the next one into one chain",
+      description:
+        "Joins the path step nextStepId (by default the step straight after stepId) onto the end of " +
+        "stepId, as one path step whose segments are the first's followed by the second's; the " +
+        'second\'s first segment starts from "current". Two different headings become a piecewise ' +
+        "heading with one range per old step, split at the joint; a piecewise one keeps its ranges, " +
+        "rescaled into its part. Markers keep their distance along their own step. Refused, with the " +
+        "reason, when the two are not path steps one after the other, when the second starts away " +
+        "from where the first ends, or when they differ in speedFraction, endCondition or timeoutS.",
+      inputSchema: {
+        auto: autoRefField,
+        stepId: stepIdField,
+        nextStepId: z.string().min(1).optional(),
+        project: projectField,
+      },
+    },
+    guarded(({ auto, stepId, nextStepId, project }) => {
+      const proj = resolveProject(project);
+      const { path, auto: current } = loadCurrent(proj, auto);
+      const second = nextStepId ?? stepAfter(current, stepId);
+      if (second === null) throw new Error(`Nothing comes after ${stepId} in its list, so there is no path to join it with.`);
+      return chainResult(proj, path, joinSteps(current, stepId, second, { waypoints: proj.waypoints }));
     }),
   );
 
@@ -425,6 +589,124 @@ export function registerEditTools(server: McpServer): void {
       const proj = resolveProject(project);
       const { path, auto: current } = loadCurrent(proj, auto);
       return writeEditResult(proj, path, setStepTimeout(current, stepId, timeoutS));
+    }),
+  );
+
+  server.registerTool(
+    "zenith.edit.setEnvelope",
+    {
+      title: "Set or remove a step's envelope",
+      description:
+        "Gives a path, command or wait step a planner-only envelope, replacing any it had: while the step " +
+        "runs, for at most maxDurationS, the robot's bounding box is declared to stay inside polygon (3 to 32 " +
+        "corners, in order round the outside, in field inches). A command or wait with no estimate of its own " +
+        "is then timed by maxDurationS instead of being left unknown, or by actualDurationS, an optional what-if " +
+        "at most maxDurationS, when it is set. provenance is required. Omit envelope, " +
+        "or pass null, to remove it. A sequence, parallel group or branch cannot carry one. The runtime " +
+        "ignores envelopes. A polygon whose edges cross or fold back is written but reported as ENVELOPE_SHAPE.",
+      inputSchema: {
+        auto: autoRefField,
+        stepId: stepIdField,
+        envelope: envelopeSchema.nullable().optional(),
+        project: projectField,
+      },
+    },
+    guarded(({ auto, stepId, envelope, project }) => {
+      const proj = resolveProject(project);
+      const { path, auto: current } = loadCurrent(proj, auto);
+      return writeEditResult(proj, path, setEnvelope(current, stepId, cast<Envelope | null>(envelope ?? null)));
+    }),
+  );
+
+  server.registerTool(
+    "zenith.edit.setEnvelopeCorner",
+    {
+      title: "Move one corner of a step's envelope",
+      description:
+        "Moves the corner at cornerIndex (0-based) of the envelope on step stepId to corner, in field " +
+        "inches. The step must already have an envelope (zenith.edit.setEnvelope).",
+      inputSchema: {
+        auto: autoRefField,
+        stepId: stepIdField,
+        cornerIndex: z.number().int().nonnegative(),
+        corner: envelopePointSchema,
+        project: projectField,
+      },
+    },
+    guarded(({ auto, stepId, cornerIndex, corner, project }) => {
+      const proj = resolveProject(project);
+      const { path, auto: current } = loadCurrent(proj, auto);
+      const updated = setEnvelopeCorner(current, stepId, cornerIndex, cast<EnvelopePoint>(corner));
+      return writeEditResult(proj, path, updated);
+    }),
+  );
+
+  server.registerTool(
+    "zenith.edit.addEnvelopeCorner",
+    {
+      title: "Add a corner to a step's envelope",
+      description:
+        "Adds a corner to the envelope on step stepId at the middle of the edge that leaves the corner at " +
+        "afterIndex (0-based; the last corner's edge runs back to the first), so the shape does not change " +
+        "until the new corner is moved with zenith.edit.setEnvelopeCorner. The new corner's index is " +
+        "afterIndex + 1. An envelope has at most 32 corners.",
+      inputSchema: {
+        auto: autoRefField,
+        stepId: stepIdField,
+        afterIndex: z.number().int().nonnegative(),
+        project: projectField,
+      },
+    },
+    guarded(({ auto, stepId, afterIndex, project }) => {
+      const proj = resolveProject(project);
+      const { path, auto: current } = loadCurrent(proj, auto);
+      return writeEditResult(proj, path, addEnvelopeCorner(current, stepId, afterIndex));
+    }),
+  );
+
+  server.registerTool(
+    "zenith.edit.removeEnvelopeCorner",
+    {
+      title: "Remove a corner from a step's envelope",
+      description:
+        "Removes the corner at cornerIndex (0-based) from the envelope on step stepId. An envelope keeps " +
+        "at least three corners; to remove the whole envelope, use zenith.edit.setEnvelope with no envelope.",
+      inputSchema: {
+        auto: autoRefField,
+        stepId: stepIdField,
+        cornerIndex: z.number().int().nonnegative(),
+        project: projectField,
+      },
+    },
+    guarded(({ auto, stepId, cornerIndex, project }) => {
+      const proj = resolveProject(project);
+      const { path, auto: current } = loadCurrent(proj, auto);
+      return writeEditResult(proj, path, removeEnvelopeCorner(current, stepId, cornerIndex));
+    }),
+  );
+
+  server.registerTool(
+    "zenith.edit.setRejoinFrom",
+    {
+      title: "Set or clear a path's rejoin pose",
+      description:
+        'Sets rejoinFrom on a path step whose first segment starts from "current": the pose the planner ' +
+        "assumes the robot is at when the step right before the path is a command robot.json marks " +
+        "movesRobot, or a sequence ending in one, so the path can be drawn and timed. Anywhere else it is " +
+        "not used and validate reports a MOVES_ROBOT warning. On the robot, current is always the " +
+        "follower's pose, so the runtime ignores it. Omit pose, or pass null, to clear it. A path that " +
+        "starts from a fixed pose is refused.",
+      inputSchema: {
+        auto: autoRefField,
+        stepId: stepIdField,
+        pose: rejoinPoseSchema.nullable().optional(),
+        project: projectField,
+      },
+    },
+    guarded(({ auto, stepId, pose, project }) => {
+      const proj = resolveProject(project);
+      const { path, auto: current } = loadCurrent(proj, auto);
+      return writeEditResult(proj, path, setRejoinFrom(current, stepId, cast<RejoinPose | null>(pose ?? null)));
     }),
   );
 

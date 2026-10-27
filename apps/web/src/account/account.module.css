@@ -1,0 +1,327 @@
+/* The account, teams, library and outbox sheets (spec 13 sections 4 to 6) on the tokens of
+   apps/web/UI_GUIDE.md: no new colours, sizes or durations. The sheet frame itself is the sharing
+   UI's (src/cloud/controls.tsx), so every docked sheet looks the same. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sectionHead {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-mid);
+}
+
+.lead {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-hi);
+}
+
+.prose {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--sev-error);
+}
+
+.notice {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--ok);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* A row whose field has its label above it: the button sits level with the box, not the label. */
+.rowEnd {
+  align-items: flex-end;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.inlineLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.input,
+.select {
+  height: var(--ctl-h-md);
+  min-width: calc(var(--space-16) * 2);
+  padding-inline: var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.number {
+  font-family: var(--font-mono);
+  width: calc(var(--space-16) + var(--space-8));
+  min-width: 0;
+}
+
+.wide {
+  width: 100%;
+}
+
+.checkbox {
+  accent-color: var(--accent);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.item:first-child {
+  border-top: none;
+}
+
+.itemMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.itemTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+.itemMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+}
+
+.itemActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* A text button that cannot act keeps its tooltip (UI_GUIDE 9.9) and reads as unavailable. */
+.itemActions [aria-disabled="true"],
+.row [aria-disabled="true"][class] {
+  cursor: default;
+}
+
+.itemActions button[aria-disabled="true"] {
+  color: var(--text-disabled);
+}
+
+.itemFollowUp {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* The private-beta screen's user code: monospace, and wide enough for a whole Firebase uid. */
+.userCode {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+
+/* A quiet sentence-case chip: unverified numbers, roles, revision badges (UI_GUIDE section 12). */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: calc(var(--ctl-h-sm) - var(--space-1));
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--bg-hover);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+}
+
+/* Diverged: something to look at, not an error, so the warning hue with a word beside it. */
+.chip[data-tone="warn"] {
+  background: var(--sev-warn-bg);
+  color: var(--sev-warn);
+}
+
+.chip[data-tone="accent"] {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.link {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.textLink {
+  font-size: var(--fs-sm);
+  color: var(--accent);
+}
+
+.textLink:hover {
+  color: var(--accent-hover);
+}
+
+.providers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.providers > * {
+  justify-content: flex-start;
+}
+
+/* The in-panel confirmation (never a modal, spec 11 section 1). */
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-inset);
+  border-radius: var(--radius-xs);
+}
+
+.compare {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-inset);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+}
+
+/* ---- The toolbar pieces ------------------------------------------------------------------------ */
+
+.toolbarGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.signIn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--ctl-h-tool);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+  transition: background var(--dur-base) var(--ease-out);
+}
+
+.signIn:hover,
+.signIn[aria-pressed="true"] {
+  background: var(--bg-hover);
+}
+
+.who {
+  max-width: calc(var(--space-16) * 2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Offline: a state of the connection, not a finding, so no severity hue; the word says it. */
+.offline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--ctl-h-sm);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-strong);
+  font-size: var(--fs-xs);
+  color: var(--text-hi);
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+}

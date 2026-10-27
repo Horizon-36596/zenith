@@ -299,11 +299,257 @@ describe("resimulate", () => {
     expect(JSON.stringify(third.trace)).toBe(JSON.stringify(again.trace));
   });
 
+  it("keys a 40-deep nested sequence without the key growing per level, and still sees an edit deep inside it", () => {
+    // Issue #389: each level's key embedded its child's key as a JSON string, so the escaping
+    // doubled per level and about 30 nested groups threw `RangeError: Invalid string length`.
+    const nested = (toX: number): unknown => {
+      let inner: unknown = line("deepest", toX, 10);
+      for (let level = 39; level >= 0; level -= 1) inner = { id: `level${String(level)}`, kind: "sequence", steps: [inner] };
+      return inner;
+    };
+    const original = autoOf([line("first", -30, 0), nested(-10)]);
+    const first = simulateRun(planOf(original), robot, testField);
+    expect(first.trace.completed).toBe(true);
+    expect(stepById(first.trace, "deepest").endS).toBeGreaterThan(0);
+
+    // Moving the innermost path changes only the second top-level step, so the run resumes there.
+    const planned = planOf(autoOf([line("first", -30, 0), nested(-5)]));
+    const again = resimulate(first, planned, robot, testField);
+    expect(again.resumedFromStep).toBe(1);
+    expect(JSON.stringify(again.trace)).toBe(JSON.stringify(simulate(planned, robot, testField)));
+  });
+
   it("starts over when an input every step depends on changes", () => {
     const planned = planOf(longAuto());
     const first = simulateRun(planned, robot, testField);
     const again = resimulate(first, planned, robot, testField, { tickS: 0.005 });
     expect(again.resumedFromStep).toBe(0);
+  });
+});
+
+describe("stopAfterStepId", () => {
+  /** The time the run is expected to stop at: the step's end, or when its hold settled. */
+  const stopTime = (record: SimStepRecord): number => record.settledS ?? record.endS;
+
+  /** Every top-level id of the long routine, so paths, commands and waits are all covered. */
+  const ids = longAuto().steps.flatMap((step) => (step.id === undefined ? [] : [step.id]));
+
+  it("is off by default, so a run without it is the full run", () => {
+    const planned = planOf(longAuto());
+    expect(JSON.stringify(simulate(planned, robot, testField, { stopAfterStepId: undefined }))).toBe(
+      JSON.stringify(simulate(planned, robot, testField)),
+    );
+    expect(simulate(planned, robot, testField).completed).toBe(true);
+  });
+
+  it("stops at the named step's end, pose for pose with the full trace", () => {
+    const planned = planOf(longAuto());
+    const full = simulate(planned, robot, testField);
+    expect(full.steps.some((step) => step.settledS !== undefined)).toBe(true);
+    for (const id of ids.slice(0, -1)) {
+      const stopped = simulate(planned, robot, testField, { stopAfterStepId: id });
+      const record = stepById(full, id);
+      const lastIndex = full.poses.findIndex((row) => row[0] >= stopTime(record) - 1e-9);
+      expect(lastIndex).toBeGreaterThan(0);
+      expect(stopped.poses).toEqual(full.poses.slice(0, lastIndex + 1));
+      expect(stopped.velocities).toEqual(full.velocities.slice(0, lastIndex + 1));
+      expect(stopped.simTimeS).toBeCloseTo(stopTime(record), 9);
+      // The named step's own record is the full trace's, settle and all.
+      expect(stepById(stopped, id)).toEqual(record);
+      // Every step that closed by then is the full trace's own; one that had only just started is
+      // cut off at the stop, and nothing starts after it.
+      for (const step of stopped.steps) {
+        // (A settle time after the stop is not yet known, so it is left off.)
+        const whole = stepById(full, step.id);
+        const settlesLater = whole.settledS !== undefined && whole.settledS > stopTime(record) + 1e-9;
+        if (step.endS < stopTime(record) - 1e-9 && !settlesLater) expect(step).toEqual(whole);
+        expect(step.startS).toBeLessThanOrEqual(stopTime(record) + 1e-9);
+        expect(step.endS).toBeLessThanOrEqual(stopTime(record) + 1e-9);
+      }
+      expect(stopped.events.every((event) => event.timeS <= stopTime(record) + 1e-9)).toBe(true);
+    }
+  });
+
+  it("waits for a path's settle when one follows, and not otherwise", () => {
+    const planned = planOf(longAuto());
+    const full = simulate(planned, robot, testField);
+    const settled = full.steps.find((step) => step.kind === "path" && step.settledS !== undefined);
+    expect(settled).toBeDefined();
+    if (settled === undefined) return;
+    const stopped = simulate(planned, robot, testField, { stopAfterStepId: settled.id });
+    expect(stopped.simTimeS).toBeCloseTo(settled.settledS ?? NaN, 9);
+    expect(stopped.simTimeS).toBeGreaterThan(settled.endS);
+    const shot = stepById(full, "shot0");
+    expect(simulate(planned, robot, testField, { stopAfterStepId: "shot0" }).simTimeS).toBeCloseTo(shot.endS, 9);
+  });
+
+  it("stops a turn on the spot after its hold settles", () => {
+    const planned = planOf(
+      autoOf([
+        line("leg", 10, 0),
+        {
+          id: "turn",
+          kind: "path",
+          segments: [{ kind: "line", from: "current", to: { xIn: 10, yIn: 0 } }],
+          heading: { mode: "constant", headingRad: 1.5 },
+        },
+        { id: "rest", kind: "wait", seconds: 2 },
+      ]),
+    );
+    const full = simulate(planned, robot, testField);
+    const turn = stepById(full, "turn");
+    // The turn's hold settles after the step closes, so the stop waits for it.
+    expect(turn.settledS).toBeDefined();
+    const stopped = simulate(planned, robot, testField, { stopAfterStepId: "turn" });
+    expect(stopped.simTimeS).toBeCloseTo(turn.settledS ?? NaN, 9);
+    expect(stopped.simTimeS).toBeGreaterThan(turn.endS);
+    expect(stopped.poses).toEqual(full.poses.slice(0, stopped.poses.length));
+  });
+
+  describe("a hold that never settles", () => {
+    // With no heading tolerance the hold never settles, so the leg's settle watch stays pending
+    // through the waits after it and the run goes on past the leg until the routine ends or the
+    // time runs out. Either way the trace is cut back to the leg's end.
+    const NEVER_SETTLES: SimOptions = { follower: { endHeadingToleranceRad: 0 } };
+    const planned = planOf(
+      autoOf([line("leg", 10, 0), { id: "rest", kind: "wait", seconds: 2 }, { id: "more", kind: "wait", seconds: 1 }]),
+    );
+
+    /** The full run's prefix up to the leg's end, as a stopped run must give it. */
+    const expectCutBackToLeg = (stopped: SimTrace, full: SimTrace): void => {
+      const leg = stepById(full, "leg");
+      expect(leg.settledS).toBeUndefined();
+      const lastIndex = full.poses.findIndex((row) => row[0] >= leg.endS - 1e-9);
+      expect(lastIndex).toBeGreaterThan(0);
+      expect(lastIndex).toBeLessThan(full.poses.length - 1);
+      expect(stopped.simTimeS).toBeCloseTo(leg.endS, 9);
+      expect(stopped.poses).toEqual(full.poses.slice(0, lastIndex + 1));
+      expect(stopped.velocities).toEqual(full.velocities.slice(0, lastIndex + 1));
+      expect(stopped.completed).toBe(false);
+      expect(stepById(stopped, "leg")).toEqual(leg);
+      // The wait that started as the leg ended is closed there as interrupted; the next never started.
+      expect(stepById(stopped, "rest")).toMatchObject({ startS: leg.endS, endS: leg.endS, interrupted: true });
+      expect(stopped.steps.map((step) => step.id)).toEqual(["leg", "rest"]);
+      expect(stopped.events).toEqual(full.events.filter((event) => event.timeS <= leg.endS + 1e-9));
+      expect(stopped.events.some((event) => event.kind === "periodEnded")).toBe(false);
+    };
+
+    it("cuts back to the step's end when the routine finishes first", () => {
+      const full = simulate(planned, robot, testField, NEVER_SETTLES);
+      expect(full.completed).toBe(true);
+      const run = simulateRun(planned, robot, testField, { ...NEVER_SETTLES, stopAfterStepId: "leg" });
+      expectCutBackToLeg(run.trace, full);
+      const keptTicks = run.trace.poses.length;
+      expect(run.checkpoints.every((c) => (c.state as { tick: number }).tick < keptTicks)).toBe(true);
+    });
+
+    it("cuts back to the step's end when the time runs out first", () => {
+      const full = simulate(planned, robot, testField, NEVER_SETTLES);
+      const maxTimeS = stepById(full, "leg").endS + 1;
+      const timedOut = simulate(planned, robot, testField, { ...NEVER_SETTLES, maxTimeS });
+      expect(timedOut.completed).toBe(false);
+      expect(timedOut.events.some((event) => event.kind === "periodEnded")).toBe(true);
+      expectCutBackToLeg(simulate(planned, robot, testField, { ...NEVER_SETTLES, maxTimeS, stopAfterStepId: "leg" }), full);
+    });
+
+    it("clears the timeout and condition flags of a step cut off at the stop", () => {
+      // The group starts as the leg ends and runs on while the leg's settle watch is pending: its
+      // condition fires and its timeout ends it after the cut, so neither may survive the cut.
+      const grouped = planOf(
+        autoOf([
+          line("leg", 10, 0),
+          {
+            id: "both",
+            kind: "parallel",
+            mode: "all",
+            steps: [
+              { id: "until", kind: "wait", until: "tipSeen" },
+              { id: "capped", kind: "wait", until: "hopperFull", timeoutS: 0.4 },
+            ],
+          },
+        ]),
+      );
+      const options: SimOptions = {
+        ...NEVER_SETTLES,
+        conditions: (query) => (query.condition === "tipSeen" ? 0.3 : null),
+      };
+      const full = simulate(grouped, robot, testField, options);
+      expect(stepById(full, "until").conditionFired).toBe(true);
+      expect(stepById(full, "capped").timedOut).toBe(true);
+      const stopped = simulate(grouped, robot, testField, { ...options, stopAfterStepId: "leg" });
+      expect(stopped.simTimeS).toBeCloseTo(stepById(full, "leg").endS, 9);
+      for (const id of ["both", "until", "capped"]) {
+        expect(stepById(stopped, id)).toMatchObject({ interrupted: true, timedOut: false, conditionFired: false });
+      }
+    });
+
+    it("cuts nothing when the time runs out before the step closes", () => {
+      const full = simulate(planned, robot, testField, NEVER_SETTLES);
+      const maxTimeS = stepById(full, "leg").endS / 2;
+      const options: SimOptions = { ...NEVER_SETTLES, maxTimeS };
+      expect(JSON.stringify(simulate(planned, robot, testField, { ...options, stopAfterStepId: "leg" }))).toBe(
+        JSON.stringify(simulate(planned, robot, testField, options)),
+      );
+    });
+  });
+
+  it("runs a routine to its end when the named step is the last one or is not a top-level step", () => {
+    const planned = planOf(longAuto());
+    const full = JSON.stringify(simulate(planned, robot, testField));
+    const last = ids[ids.length - 1] as string;
+    expect(JSON.stringify(simulate(planned, robot, testField, { stopAfterStepId: last }))).toBe(full);
+    expect(JSON.stringify(simulate(planned, robot, testField, { stopAfterStepId: "nope" }))).toBe(full);
+  });
+
+  it("marks a run that stopped early as not completed", () => {
+    const planned = planOf(longAuto());
+    expect(simulate(planned, robot, testField, { stopAfterStepId: "shot2" }).completed).toBe(false);
+  });
+
+  it("resimulates from a checkpoint to the same prefix as a full run with it", () => {
+    const original = longAuto();
+    const first = simulateRun(planOf(original), robot, testField);
+    const editedIndex = 9;
+    const edited = parseAuto({
+      ...original,
+      steps: original.steps.map((step, index) =>
+        index === editedIndex && step.kind === "path"
+          ? { ...step, segments: [{ kind: "line", from: "current", to: { xIn: 20, yIn: 30 } }] }
+          : step,
+      ),
+    });
+    const planned = planOf(edited);
+    // A stop before, at and after the edited step: the same prefix as a full run with the option.
+    for (const index of [4, 9, 10, 15, 20]) {
+      const options: SimOptions = { stopAfterStepId: ids[index] as string };
+      const again = resimulate(first, planned, robot, testField, options, editedIndex);
+      expect(again.resumedFromStep).toBe(Math.min(editedIndex, index));
+      expect(JSON.stringify(again.trace)).toBe(JSON.stringify(simulate(planned, robot, testField, options)));
+    }
+    // Without the hint it still finds the checkpoint from the keys alone, though the option differs
+    // from the run that took them.
+    const found = resimulate(first, planned, robot, testField, { stopAfterStepId: ids[15] as string });
+    expect(found.resumedFromStep).toBe(editedIndex);
+  });
+
+  it("takes checkpoints that a later run without the option can resume from", () => {
+    const planned = planOf(longAuto());
+    const stopped = simulateRun(planned, robot, testField, { stopAfterStepId: ids[10] as string });
+    const resumed = resimulate(stopped, planned, robot, testField, {}, 10);
+    expect(resumed.resumedFromStep).toBe(10);
+    expect(JSON.stringify(resumed.trace)).toBe(JSON.stringify(simulate(planned, robot, testField)));
+  });
+
+  it("stays inside the time budget for a window run", () => {
+    const planned = planOf(longAuto());
+    const first = simulateRun(planned, robot, testField);
+    let best = Infinity;
+    for (let run = 0; run < 15; run += 1) {
+      const started = performance.now();
+      resimulate(first, planned, robot, testField, { stopAfterStepId: ids[17] as string }, 12);
+      best = Math.min(best, performance.now() - started);
+    }
+    expect(best).toBeLessThan(30);
   });
 });
 
@@ -410,6 +656,32 @@ describe("command semantics", () => {
     // before the follower hands over to the hold and the step ends.
     expect(fired[2]?.timeS).toBeCloseTo(leg.endS - trace.tickS, 9);
   });
+
+  it("never fires a marker past the point an end condition cut the path short", () => {
+    const trace = simulate(
+      planOf(
+        autoOf([
+          line("leg", 30, 0, {
+            endCondition: { condition: "tipSeen" },
+            markers: [
+              { at: { t: 0.25 }, command: { name: "setIntake" } },
+              { at: { t: 0.9 }, command: { name: "shoot" } },
+            ],
+          }),
+        ]),
+      ),
+      robot,
+      testField,
+      { conditions: (query) => (query.kind === "endCondition" ? 0.5 : undefined) },
+    );
+    const leg = stepById(trace, "leg");
+    expect(leg.conditionFired).toBe(true);
+    const fired = trace.events.filter((event) => event.kind === "markerFired");
+    expect(fired.map((event) => event.command)).toEqual(["setIntake"]);
+    // The robot was cut off near halfway along 80 in, x = -10, well short of the 90% marker.
+    const cutAt = simPoseAt(trace, trace.events.find((event) => event.kind === "conditionFired")?.timeS ?? 0);
+    expect(cutAt?.xIn ?? 0).toBeLessThan(0);
+  });
 });
 
 describe("conditions", () => {
@@ -476,6 +748,53 @@ describe("conditions", () => {
     expect(stepById(trace, "sweep").conditionFired).toBe(true);
   });
 
+  describe("on a turn on the spot", () => {
+    // The runtime races `TurnInPlace` against the condition's `WaitUntilCommand`, which reads the
+    // condition every loop, so a turn ends on its condition as a path does.
+    const turning = (): Plan =>
+      planOf(
+        autoOf([
+          line("leg", 10, 0),
+          {
+            id: "turn",
+            kind: "path",
+            segments: [{ kind: "line", from: "current", to: { xIn: 10, yIn: 0 } }],
+            heading: { mode: "constant", headingRad: 1.5 },
+            endCondition: { condition: "tipSeen" },
+          },
+        ]),
+      );
+    const at = (fraction: number | null): SimOptions => ({
+      conditions: (query) => (query.kind === "endCondition" ? fraction : undefined),
+    });
+
+    it("ends the turn at once on a condition that already holds", () => {
+      const trace = simulate(turning(), robot, testField, at(0));
+      const turn = stepById(trace, "turn");
+      expect(turn.conditionFired).toBe(true);
+      expect(duration(turn)).toBeCloseTo(trace.tickS, 9);
+      expect(trace.events.some((event) => event.kind === "conditionFired" && event.stepId === "turn")).toBe(true);
+    });
+
+    it("ends the turn part way on a condition that comes true during it", () => {
+      const whole = duration(stepById(simulate(turning(), robot, testField, at(null)), "turn"));
+      const trace = simulate(turning(), robot, testField, at(0.5));
+      const turn = stepById(trace, "turn");
+      expect(turn.conditionFired).toBe(true);
+      expect(duration(turn)).toBeGreaterThan(trace.tickS);
+      expect(duration(turn)).toBeLessThan(whole);
+      const pose = simPoseAt(trace, turn.endS);
+      expect(pose?.headingRad ?? 0).toBeGreaterThan(0.6);
+      expect(pose?.headingRad ?? 0).toBeLessThan(1.4);
+    });
+
+    it("runs the whole turn when the condition never holds", () => {
+      const turn = stepById(simulate(turning(), robot, testField, at(null)), "turn");
+      expect(turn.conditionFired).toBe(false);
+      expect(turn.interrupted).toBe(false);
+    });
+  });
+
   it("takes a branch's then side when it cannot tell, and runs only that side", () => {
     const trace = simulate(
       planOf(
@@ -511,6 +830,104 @@ describe("conditions", () => {
     const gate = stepById(trace, "gate");
     expect(gate.conditionFired).toBe(true);
     expect(duration(gate)).toBeCloseTo(0.01, 9);
+  });
+
+  it("ends a wait in a race where the path beside it fills the hopper, not on the first tick (W2-18)", () => {
+    const planned = planOf(
+      autoOf([
+        {
+          id: "collect",
+          kind: "parallel",
+          mode: "race",
+          steps: [
+            line("sweep", 50, 0, { speedFraction: 0.5, expect: { collectFrom: "flowers", count: 4 } }),
+            { id: "untilFull", kind: "wait", until: "hopperFull" },
+          ],
+        },
+      ]),
+    );
+    const trace = simulate(planned, robot, testField, {
+      ledger: runLedger(planned, testField, counting),
+      season: counting,
+    });
+    const gate = stepById(trace, "untilFull");
+    const sweep = stepById(trace, "sweep");
+    expect(gate.conditionFired).toBe(true);
+    expect(sweep.interrupted).toBe(true);
+    // Four pieces evenly along 100 in, the fourth at the middle of its share: 87.5 in, x = 37.5.
+    const at = simPoseAt(trace, gate.endS);
+    expect(Math.abs((at?.xIn ?? 0) - 37.5)).toBeLessThan(3);
+    expect(duration(gate)).toBeGreaterThan(10 * trace.tickS);
+  });
+
+  /** Runs a group of a sweep that fills the hopper and a wait until it is full, built by `group`. */
+  const besideSweep = (sweep: Record<string, unknown>, group: Record<string, unknown>) => {
+    const planned = planOf(
+      autoOf([
+        {
+          id: "collect",
+          kind: "parallel",
+          ...group,
+          steps: [
+            line("sweep", 50, 0, { speedFraction: 0.5, expect: { collectFrom: "flowers", count: 4 }, ...sweep }),
+            { id: "untilFull", kind: "wait", until: "hopperFull" },
+          ],
+        },
+      ]),
+    );
+    return simulate(planned, robot, testField, { ledger: runLedger(planned, testField, counting), season: counting });
+  };
+
+  it("ends a wait in an all group when the path beside it stops on its own end condition at the fire point", () => {
+    // The sweep's own end condition stops it on the tick the wait would fire, so the follower has
+    // stopped by the time the wait reads it: the wait still ends there, not at the end of the period.
+    const trace = besideSweep({ endCondition: { condition: "hopperFull" } }, { mode: "all" });
+    const sweep = stepById(trace, "sweep");
+    const gate = stepById(trace, "untilFull");
+    expect(trace.completed).toBe(true);
+    expect(Number.isFinite(stepById(trace, "collect").endS)).toBe(true);
+    expect(gate.conditionFired).toBe(true);
+    expect(Math.abs(gate.endS - sweep.endS)).toBeLessThanOrEqual(trace.tickS + 1e-9);
+    expect(stepById(trace, "collect").endS).toBeLessThan(10);
+  });
+
+  it("ends a wait that is a deadline group's deadline when the path beside it times out first", () => {
+    const trace = besideSweep({ timeoutS: 1 }, { mode: "deadline", deadline: "untilFull" });
+    const sweep = stepById(trace, "sweep");
+    const gate = stepById(trace, "untilFull");
+    expect(trace.completed).toBe(true);
+    expect(sweep.endS).toBeCloseTo(1, 1);
+    expect(gate.conditionFired).toBe(true);
+    expect(Math.abs(gate.endS - sweep.endS)).toBeLessThanOrEqual(trace.tickS + 1e-9);
+    expect(stepById(trace, "collect").endS).toBeLessThan(2);
+  });
+
+  it("watches the path beside a wait nested in a sequence inside the group", () => {
+    const planned = planOf(
+      autoOf([
+        {
+          id: "collect",
+          kind: "parallel",
+          mode: "race",
+          steps: [
+            line("sweep", 50, 0, { speedFraction: 0.5, expect: { collectFrom: "flowers", count: 4 } }),
+            {
+              id: "thenGate",
+              kind: "sequence",
+              steps: [
+                { id: "settle", kind: "wait", seconds: 0.1 },
+                { id: "untilFull", kind: "wait", until: "hopperFull" },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const trace = simulate(planned, robot, testField, { ledger: runLedger(planned, testField, counting), season: counting });
+    const gate = stepById(trace, "untilFull");
+    expect(gate.conditionFired).toBe(true);
+    const at = simPoseAt(trace, gate.endS);
+    expect(Math.abs((at?.xIn ?? 0) - 37.5)).toBeLessThan(3);
   });
 });
 

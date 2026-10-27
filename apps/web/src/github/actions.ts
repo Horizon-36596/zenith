@@ -7,21 +7,25 @@
  * the base branch — `GitHubProject.save` refuses that before any request, and the editor disables
  * Save as well so the refusal is never the first the user hears of it.
  */
-import { canonicalize, prBody } from "@horizon36596/zenith-core";
+import { canonicalize, loadWaypoints, prBody } from "@horizon36596/zenith-core";
 import {
   GitHubProject,
   RENDER_URL_PLACEHOLDER,
-  diffAnchor,
   loadReview,
   propose,
   type ProposeResult,
 } from "@horizon36596/zenith-github";
 import { adoptBackend, reportOpenError } from "../app/projectActions";
+import { desktopBridge, isDesktop } from "../project/desktop";
+import type { ZenithDesktopBridge } from "../project/desktopBridge";
 import { confirmReplace } from "../app/unsaved";
 import {
   closeProject,
+  currentAllFindings,
   currentDerived,
+  autoFieldOf,
   getState,
+  loadedWaypoints,
   openAuto,
   openProject,
   setAuth,
@@ -30,19 +34,62 @@ import {
   setRepo,
   setReview,
   setStatus,
+  waypointsDirty,
 } from "../state/store";
+import { errorsHidden, hiddenErrorsWhere, turnOnWords } from "../state/features";
 import { GitHubBackend, autoNameOf } from "./backend";
-import { buildReviewModel, type ReviewState } from "./reviewModel";
-import { currentClient, requireClient, restoreSession, signIn, signOut } from "./session";
-import type { GitHubAuth } from "./types";
+import { anchorRows, buildReviewModel, type ReviewState } from "./reviewModel";
+import { currentClient, requireClient, restoreSession, signIn, signInWithCli, signOut } from "./session";
+import { oauthToken, type OAuthRoute } from "./oauthSignIn";
+import type { GitHubAuth, TokenKeep } from "./types";
 
 const say = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /* ---- Sign in ------------------------------------------------------------- */
 
 /** Validates the pasted token and puts the account in the store. Throws for the dialog to show. */
-export async function signInWithToken(token: string, remember: boolean): Promise<GitHubAuth> {
-  const auth = await signIn(token, remember);
+export async function signInWithToken(token: string, keep: TokenKeep): Promise<GitHubAuth> {
+  const auth = await signIn(token, keep);
+  setAuth(auth);
+  await shareWithDesktop((github) => github.setToken(token, keep !== "page"));
+  return auth;
+}
+
+/**
+ * "Sign in with GitHub": gets an OAuth token by the route `oauthSignIn.ts` chose, then keeps it
+ * exactly as a pasted token is kept, including the desktop app's encrypted copy for pull requests.
+ */
+export async function signInWithGitHubOAuth(route: OAuthRoute, keep: TokenKeep): Promise<GitHubAuth> {
+  const token = await oauthToken(route);
+  const auth = await signIn(token, keep, "oauth");
+  setAuth(auth);
+  await shareWithDesktop((github) => github.setToken(token, keep !== "page"));
+  return auth;
+}
+
+/**
+ * In the desktop app, the main process opens pull requests with a token of its own, so the one
+ * sign-in dialog hands it the same token, or tells it to forget its own on sign-out, and the git
+ * panel reads the new state. The page's sign-in already worked, so a failure here is left to the
+ * git panel, which says what is wrong when it needs GitHub.
+ */
+async function shareWithDesktop(step: (github: ZenithDesktopBridge["github"]) => Promise<unknown>): Promise<void> {
+  const github = desktopBridge()?.github;
+  if (github === undefined) return;
+  await step(github).catch(() => undefined);
+  const { refreshGitHub } = await import("../project/desktopActions");
+  await refreshGitHub();
+}
+
+/**
+ * Signs in with the GitHub CLI's own sign-in, in the desktop app (issue #213): the main process runs
+ * `gh auth token` and hands the token straight to `session.ts`, which keeps it in memory only. Throws
+ * a sentence for the dialog when there is no desktop app, no CLI, or GitHub refuses the token.
+ */
+export async function signInWithGitHubCli(): Promise<GitHubAuth> {
+  const cliToken = desktopBridge()?.github.cliToken;
+  if (cliToken === undefined) throw new Error("Signing in with the GitHub CLI needs the Zenith desktop app.");
+  const auth = await signInWithCli(await cliToken());
   setAuth(auth);
   return auth;
 }
@@ -61,8 +108,9 @@ export async function signOutOfGitHub(): Promise<void> {
   signOut();
   setAuth(null);
   setRepo(null);
+  await shareWithDesktop((github) => github.forgetToken());
   if (getState().project?.source.kind === "github") closeProject();
-  setStatus("info", "Signed out of GitHub. The token is gone from this tab.");
+  setStatus("info", `Signed out of GitHub. The token is gone from ${isDesktop() ? "Zenith" : "this browser"}.`);
 }
 
 /** Picks a remembered session back up on load. Silent when there is nothing to pick up. */
@@ -101,15 +149,15 @@ export async function openFromGitHub(owner: string, repo: string, base: string):
   setBusy(true);
   try {
     const login = getState().auth?.login ?? (await requireClient().users.me()).login;
-    await adoptBackend(
+    const opened = await adoptBackend(
       buildBackend(owner, repo, base, login),
       undefined,
       `Opening ${owner}/${repo} will close it.`,
     );
     setDialog(null);
-    setStatus("ok", `Opened ${owner}/${repo} at ${base}.`);
+    if (opened) setStatus("ok", `Opened ${owner}/${repo} at ${base}.`);
   } catch (error) {
-    reportOpenError(error);
+    reportOpenError(error, "repo", `${owner}/${repo}`);
   } finally {
     setBusy(false);
   }
@@ -128,16 +176,35 @@ export function setWorkBranch(name: string, fileName: string | null): void {
 export function proposeBlockedReason(state = getState()): string | null {
   if (state.review !== null) return "Review mode is read only; open the auto from its branch to edit it.";
   if (state.auto === null) return "No auto is open.";
-  if (state.backend?.canPropose !== true) {
-    return "Propose opens a pull request, so it needs a project opened from GitHub.";
-  }
+  // A sentence of its own, since the key's status line shows it without the action's name first
+  // (issue #412).
+  if (state.backend?.canPropose !== true) return "Propose needs a project opened from GitHub.";
   const derived = currentDerived();
-  const errors = derived.findings.filter((finding) => finding.severity === "error").length;
+  // Every error counts, a hidden one too, as Validate and the CLI count them; the reason says where
+  // a hidden one is, since Problems does not list it.
+  const counted = errorsHidden(currentAllFindings(), state.auto, state.prefs.features);
+  const { errors, hidden } = counted;
   if (errors > 0) {
-    return `Validation has ${String(errors)} error${errors === 1 ? "" : "s"}; fix them and propose again.`;
+    const head = `Validation has ${String(errors)} error${errors === 1 ? "" : "s"}${hiddenErrorsWhere(counted)}`;
+    const them = errors === 1 ? "it" : "them";
+    if (hidden === 0) return `${head}; fix ${them} and propose again.`;
+    if (hidden === errors) return `${head}; fix ${them} or ${turnOnWords(counted.features)}, and propose again.`;
+    return `${head}; ${turnOnWords(counted.features)} to see ${hidden === 1 ? "it" : "them"}, fix them all and propose again.`;
   }
   if (derived.staticSvg === null) return "The render is unavailable, and the pull request body needs it.";
   return null;
+}
+
+/**
+ * The branch a proposal goes from: the one typed in the dialog, or, with the field empty, the branch
+ * Save commits to. That is a custom one when the user named it, not always `auto/<auto>/<login>`,
+ * and what was saved there is part of the proposal (issue #407). `undefined` leaves the choice to
+ * `propose`, which only happens before an auto has named its branch.
+ */
+export function proposalBranch(typed: string | undefined, workBranch: string, base: string): string | undefined {
+  const trimmed = typed?.trim() ?? "";
+  if (trimmed.length > 0) return trimmed;
+  return workBranch === base ? undefined : workBranch;
 }
 
 /**
@@ -156,20 +223,31 @@ export async function proposeCurrent(summary: string, branchName?: string): Prom
   const derived = currentDerived();
   if (derived.staticSvg === null) throw new Error("The render is unavailable.");
 
-  const body = prBody(auto, derived.estimate, derived.findings, derived.ledger, {
+  // Every warning travels in the body, a hidden one too: the reviewer's settings are not the author's.
+  const body = prBody(auto, derived.estimate, currentAllFindings(), derived.ledger, {
     renderUrl: RENDER_URL_PLACEHOLDER,
-    periodS: project.field.periods?.autoS,
+    // The auto period of the field this auto is planned on, its own when it sets one (issue #403).
+    periodS: autoFieldOf(state)?.periods?.autoS,
   });
 
-  return propose(requireClient(), backend.githubProject, {
+  // A waypoint change not yet saved goes into the proposal with the auto (issue #134).
+  const waypoints = waypointsDirty(state) ? project.waypoints : undefined;
+  const branch = proposalBranch(branchName, backend.workBranch, backend.base);
+  const result = await propose(requireClient(), backend.githubProject, {
     autoName: autoNameOf(fileName),
     autoText: canonicalize("auto", auto),
+    ...(waypoints === undefined ? {} : { waypointsText: canonicalize("waypoints", waypoints) }),
     renderSvg: derived.staticSvg,
     body,
     base: backend.base,
-    branchName: branchName !== undefined && branchName.trim().length > 0 ? branchName : undefined,
+    branchName: branch,
     summary,
+    // A file that changed on the branch since it was opened, the merge from base included, is
+    // refused rather than written over (issue #407).
+    ...(branch === undefined ? {} : { expectedShas: backend.expectedShas(branch) }),
   });
+  backend.rememberShas(result.branch, result.shas);
+  return result;
 }
 
 /* ---- Review -------------------------------------------------------------- */
@@ -211,16 +289,21 @@ export async function openReview(owner: string, repo: string, number: number): P
       data.files.find((file) => file.endsWith(".auto.json")) ??
       `${project.link.autosDir}/${data.head.name}.auto.json`;
     const headText = canonicalize("auto", data.head);
+    const baseText = data.base === null ? null : canonicalize("auto", data.base);
+    // A pull request that moves a waypoint is drawn with each side's own waypoints, not the base
+    // branch tip's (issue #407); one that leaves the file alone uses the project's.
+    const sideWaypoints = (text: string | null | undefined) =>
+      text === undefined ? project.waypoints : text === null ? undefined : loadWaypoints(JSON.parse(text));
+    const headWaypoints = sideWaypoints(data.waypoints?.head);
     const model = buildReviewModel({
       base: data.base,
       head: data.head,
       robot: project.robot,
       field: project.field,
-      waypoints: project.waypoints,
+      waypoints: headWaypoints,
+      baseWaypoints: sideWaypoints(data.waypoints?.base),
     });
-    for (const row of model.rows) {
-      row.anchor = await diffAnchor(path, headText, row.stepId, row.kind === "removed" ? "base" : "head");
-    }
+    await anchorRows(model.rows, path, headText, baseText);
 
     const review: ReviewState = {
       owner,
@@ -237,6 +320,7 @@ export async function openReview(owner: string, repo: string, number: number): P
       model,
     };
     openAuto(`${data.head.name}.auto.json`, data.head, headText);
+    if (data.waypoints !== undefined && headWaypoints !== undefined) loadedWaypoints(headWaypoints);
     setReview(review);
     setDialog(null);
     setStatus("info", `Reviewing ${owner}/${repo}#${String(number)}. The editor is read only.`);

@@ -22,7 +22,7 @@
   color-scheme: dark;
 
   /* ---- 0. Brand: Horizon -----------------------------------------------------------
-   * Chrome and brand ONLY: the frame edge, the title bar's horizon line, the logo, the
+   * Chrome and brand ONLY: the title bar's horizon line, the logo, the
    * active tool indicator, primary buttons and the focus ring. Never on the field, never on
    * a path, never on a finding, never as a panel wash.
    */
@@ -33,7 +33,7 @@
   --brand-crimson: #b13848;  /* brand.700, oklch h 17 */
   --brand-800:     #8e2c40;
 
-  /* Left-to-right sunrise: the frame edge and the active tool bar. */
+  /* Left-to-right sunrise: the active tool bar and other thin brand edges. */
   --brand-gradient: linear-gradient(90deg, #ffcb5c 0%, #f86a43 55%, #b13848 100%);
   /* The logo's horizon band, symmetric with a bright centre: the title bar's bottom edge. */
   --brand-gradient-horizon: linear-gradient(90deg, #b13848 0%, #f86a43 38%, #ff884f 50%,
@@ -46,7 +46,6 @@
   --brand-ink:   #17061d;                 /* text on any brand fill */
   --selection-bg: rgb(248 106 67 / 0.32); /* ::selection, text-hi stays 9:1 on it */
 
-  --frame-edge-w: 1px;  /* the gradient hairline round the desktop window */
   --horizon-w:    2px;  /* the gradient line under the title bar */
 
   /* ---- 1. Surfaces, the night ramp ----------------------------------------------------
@@ -75,6 +74,7 @@
   --bg-hover:    #22102b;  /* night.900: row and control hover */
   --bg-active:   #2a1735;  /* night.850: pressed, or an open menu's trigger */
   --bg-selected: #3b1728;  /* --brand-orange at 14 % over --bg-panel, solid so text contrast is fixed */
+  --bg-running:  #2a1735;  /* night.850: a step row running at the playhead (issue #111); --text-lo 5.5:1 */
 
   /* ---- 2. Borders -------------------------------------------------------------------
    * Decorative separators, used sparingly (UI_GUIDE section 3). --border-strong is the only
@@ -147,6 +147,7 @@
   --path-hover:     #f0e8f2;               /* haze.100 */
   --path-actual:    #62d286;               /* recorded truth, same as --ok */
   --path-ghost:     rgb(194 176 200 / 0.28); /* mirrored preview, dashed 4 4 */
+  --path-candidate: #86e268;               /* grass green, h 139: Optimize path's proposed route, dashed, with joint dots; the dark well in both themes */
 
   --path-w-normal:   2px;
   --path-w-selected: 3px;
@@ -184,11 +185,32 @@
   --alliance-blue-text: #80b3fd;
   --alliance-blue-bg:   rgb(48 130 246 / 0.16);
 
+  /* Alliance partners in the alliance view (spec 13 section 9): each partner's robot outline,
+   * trajectory, envelopes, timeline lane and panel swatch. Field and alliance view only, like the
+   * alliance hues, and never the only channel: every partner is drawn with its name beside it.
+   * Violet h 295, lime h 118 and pink h 340 sit off the brand arc and between the hues already
+   * taken (periwinkle 255 and orchid 320, lemon 102 and green 152, orchid 320 and rose 8).
+   */
+  --partner-1: #b592ff;
+  --partner-2: #b9d45c;
+  --partner-3: #f291d2;
+
+  /* Your own robot while nobody can predict where it is (issue #481): the playback robot and its
+   * step's envelope during a command that drives the robot by itself, drawn in the partner style.
+   * Iris h 282 (oklch 0.72 0.15): a violet like --partner-1 (h 295) but bluer, in the gap between
+   * blue 258 and violet 295, and more chromatic than periwinkle 255, so it reads as "a robot we
+   * guess at" without passing for the first partner. Never the only channel: the robot's label
+   * says "position unknown". 7.7:1 on --bg-canvas, 7.2:1 on --field-floor.
+   */
+  --canvas-unknown: #9695ff;
+
   /* ---- 11. Field element categories --------------------------------------------------
    * Field furniture keeps its own hues, all off the brand arc: neutral structure, lemon rule
    * zones (the warning hue on purpose, since a breach is a KEEPOUT warning), orchid game
-   * elements, aqua scoring targets.
+   * elements, aqua hive pivots and score claims. The floor is the tiles inside the perimeter, one step above
+   * the well, so the field reads as one lit board; the wall is drawn in --field-obstacle.
    */
+  --field-floor:         #1c0a24;
   --field-obstacle:      #83738b;
   --field-obstacle-fill: #2e2034;
   --field-zone:          #eddb49;
@@ -196,6 +218,7 @@
   --field-element:       #d489e5;  /* orchid, h 320 */
   --field-element-fill:  rgb(212 137 229 / 0.18);
   --field-target:        #43d5dc;  /* aqua, h 200 */
+  --field-pollen:        #f5c400;  /* gold, h 90: pollen, warmer than the lemon tape, off the brand arc */
   --field-waypoint:      #a08fa8;  /* named pose pin; --canvas-annotation when referenced or hovered */
 
   /* ---- 12. Timeline and estimate bars ------------------------------------------------ */
@@ -211,6 +234,16 @@
   --bar-h:             4px;
   --bar-h-timeline:    10px;
 
+  /* ---- 12a. Generated code (the Code tab) --------------------------------------------
+   * Four quiet hues for the Java the Code tab shows, borrowed from hues already in the app so
+   * nothing new competes with the accent: violet keywords, green strings, sky numbers, comments in
+   * --text-lo. Each clears 4.5:1 on the panel, a hovered line and a selected line (UI_GUIDE 4.4).
+   */
+  --code-keyword: #b592ff;
+  --code-string:  #62d286;
+  --code-number:  #71c9fa;
+  --code-comment: var(--text-lo);
+
   /* ---- 13. Type ----------------------------------------------------------------------
    * Jost (display): the title bar, panel and section titles, buttons, tabs, the tour. 13 px
    * and up only; its x-height is too small for 11-12 px rows (UI_GUIDE section 5).
@@ -223,6 +256,7 @@
 
   --fs-micro: 10px;  /* timeline ruler ticks only */
   --fs-xs:    11px;  /* chips, unit suffixes, shortcut hints, code chips */
+  --fs-label: 12px;  /* Inspector row labels and the piecewise range values (issue #431) */
   --fs-sm:    13px;  /* default: rows, inspector values, table cells, tooltips (v1 was 12) */
   --fs-md:    14px;  /* finding messages, modal and tour body copy */
   --fs-lg:    16px;  /* panel titles and modal titles, in Jost */
@@ -245,7 +279,8 @@
   --tracking-display: -0.02em;  /* Jost 20 px and up */
   --tracking-normal:  0;
   --tracking-wide:    0.02em;   /* 10 and 11 px chips only */
-  --tracking-label:   0.01em;   /* Jost section headers at 13 px */
+  --tracking-label:   0.01em;   /* Jost 15 px selection header, 13 px sub-headers */
+  --tracking-section: 0.07em;   /* the Inspector's 11 px uppercase section titles only (issue #431) */
 
   --numeric: tabular-nums slashed-zero;
 
@@ -266,11 +301,15 @@
   --pad-row-x:     var(--space-3);  /* 12 px left and right in a list or table row (v1 was 8) */
   --pad-control-x: var(--space-2);
   --pad-modal:     var(--space-6);  /* 24 px */
-  --gap-section:   var(--space-6);  /* between inspector sections: space, not a rule */
+  --gap-section:   var(--space-6);  /* between sections outside the Inspector: space, not a rule */
+  --inspector-gutter:  var(--space-6);  /* 24 px: where every Inspector label starts (issue #431) */
+  --inspector-label-w: 88px;            /* the label column, so every value starts at 120 px */
 
   /* ---- 15. Sizing -------------------------------------------------------------------- */
   --row-h-compact:     28px;  /* ruler rows, nested finding detail */
-  --row-h:             32px;  /* the default: step rows, inspector fields, table rows (v1 28) */
+  --row-h:             32px;  /* the default: step rows, settings fields, table rows (v1 28) */
+  --row-h-inspector:   28px;  /* Inspector section headers and field rows (issue #431) */
+  --row-h-list:        24px;  /* Inspector list rows: waypoints, group members, heading ranges */
   --row-h-comfortable: 36px;  /* palette results, modal list rows */
 
   --ctl-h-sm:        24px;  /* inline chips, ghost icon buttons inside a row */
@@ -326,7 +365,8 @@
 
   --tooltip-delay:      400ms;
   --tooltip-skip-delay: 100ms;
-  --help-delay:         150ms;  /* the ? affordance opens faster: the user is asking */
+  --hint-delay:         800ms;  /* a row hint's long hover (issue #237). SET BY HAND: twice --tooltip-delay, tune in the beta */
+  --help-delay:        150ms;  /* the ? affordance opens faster: the user is asking */
 
   /* ---- 19. Tour ---------------------------------------------------------------------- */
   --tour-scrim:        rgb(10 2 12 / 0.72);  /* the dimmed backdrop around the cut-out */
@@ -335,7 +375,13 @@
   --tour-cutout-ring:  0 0 0 2px var(--brand-amber);
   --tour-card-w:       340px;
   --tour-choice-w:     560px;
+  --tour-preset-w:     760px;                /* the first-run preset card: three choices side by side, UI_GUIDE 10.4 */
   --tour-gap:          12px;                 /* card to cut-out */
+
+  /* ---- The Settings window (issue #97) ----------------------------------------------- */
+  --settings-w:     880px;  /* capped to the viewport; the Horizon guide's row-max */
+  --settings-h:     640px;
+  --settings-nav-w: 216px;  /* the list of sections */
 
   /* ---- 20. Layers -------------------------------------------------------------------- */
   --z-canvas:         0;
@@ -346,6 +392,7 @@
   --z-resizer:        40;
   --z-tour-ring:      45;  /* the tour's ring: over the panels, under every popover it must not hide */
   --z-popover:        50;
+  --z-settings:       55;  /* the Settings window: over every panel and popover, under the tooltips its controls show */
   --z-tooltip:        60;
   --z-modal:          70;
   --z-palette:        80;
@@ -369,6 +416,7 @@
   --bg-hover:    #f1eaf3;
   --bg-active:   #e6dce9;
   --bg-selected: #f5e8eb;
+  --bg-running:  #f1eaf3;  /* as --bg-hover: every text token, --sev-warn included, keeps 4.5:1 on it */
   --selection-bg: rgb(177 56 72 / 0.20);
 
   --border-subtle:  #eee6f0;
@@ -399,6 +447,10 @@
 
   --prov-derived-bg: rgb(107 93 113 / 0.12);
 
+  --code-keyword: #6b3fc0;
+  --code-string:  #05773b;
+  --code-number:  #1b6390;
+
   --bar-track:         #eee6f0;
   --bar-preview:       #8e7c96;  /* a step darker than the estimate, so it leads on a light track */
   --bar-unknown:       #a799ad;
@@ -410,6 +462,9 @@
   --shadow-popover: 0 2px 4px rgb(38 25 44 / 0.06), 0 8px 16px rgb(38 25 44 / 0.08);
   --shadow-modal:   0 4px 8px rgb(38 25 44 / 0.08), 0 16px 40px rgb(38 25 44 / 0.12);
   --tour-scrim:     rgb(23 6 29 / 0.55);
+  /* Brand amber is about 1.4:1 on a white panel; crimson is over 6:1 there, and its white keyline
+     keeps it clear of the dark field and title bar the light theme keeps (UI_GUIDE 10.2). */
+  --tour-cutout-ring: 0 0 0 2px #ffffff, 0 0 0 4px var(--brand-crimson);
 }
 
 @media (prefers-reduced-motion: reduce) {

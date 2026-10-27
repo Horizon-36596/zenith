@@ -6,22 +6,23 @@ Short answers to the questions new users and mentors ask most.
 
 ### Why does Windows SmartScreen warn about the desktop installer?
 
-The v0.1.0 installer and portable exe are not code-signed yet. A signing certificate costs money,
-and until the app has one, SmartScreen shows "Windows protected your PC" for any unsigned download.
+The installer and portable exe are not code-signed yet. Windows may show "Windows protected your PC"
+when you run a downloaded build.
 To run it, choose **More info**, then **Run anyway**. Download it only from the project's GitHub
 Releases page. If you would rather not run an unsigned exe, use the web app instead; it has the same
 editor.
 
 ### Does the app work offline?
 
-The desktop app does, fully, in local mode: open a folder, edit, validate, sim and save with no
-network. The web app needs a connection to load, then works on local folders without one. GitHub
-mode and review links need a connection, because they talk to GitHub.
+The desktop editor can open local folders, edit, validate and save offline. A high-fidelity sim can
+also run offline once Java, the Android SDK and its Gradle dependencies are installed; the first run
+may need downloads. The web app needs a connection to load, then can edit an open local folder
+without one. GitHub mode and review links need a connection.
 
 ### Why can't the web app save into my folder?
 
 Saving in place uses the File System Access API, which Chrome and Edge support. Firefox and Safari
-fall back to a read-only file picker, and Save downloads a copy. Use Chrome, Edge or the desktop app
+fall back to a read-only file picker, and Save downloads the auto, or the whole project as a zip. Use Chrome, Edge or the desktop app
 to save in place.
 
 ## Reading the numbers
@@ -35,8 +36,10 @@ Zenith does not invent a number. A step's time is unknown when something it depe
   is not known after a hive tips,
 - a sequence or group that contains an unknown step.
 
-Give the command a real estimate in `robot.json` (with its provenance), or record a sim trace and
-calibrate, and the time appears.
+For a command, add a measured estimate in `robot.json` with its provenance. A wait on an unpredictable
+condition can remain unknown; a recorded trace gives the time observed in that run, not a guarantee
+for the next one. Calibration fits path timing and does not fill in unknown command estimates or
+make sensor conditions predictable.
 
 ### What does a provenance label mean, and why does it matter?
 
@@ -56,10 +59,11 @@ the robot's limits from `robot.json`, and it re-runs every time you edit, so the
 timeline update as you drag.
 
 The **high-fidelity sim** is your team's own headless sim in the robot repository, named by the
-`sim` command in `zenith.json`. It runs your real robot code, so it is slower and closer to the
-truth. Run it with the **High-fidelity sim** button in the desktop app or `zenith sim` on the command
-line; Zenith overlays the actual timing on the estimate. `zenith calibrate` fits the instant sim to
-those traces so the two agree over time.
+`sim` command in `zenith.json`. It runs your robot code against the simulated hardware and physics
+you provide. Run it with **Run high-fidelity sim** in the desktop app or `zenith sim` on the command
+line. Zenith overlays the recorded run on the plan. `zenith calibrate` can fit the estimate's
+acceleration and settle time from those traces; it does not tune your follower or validate the
+physics model against the robot.
 
 ## Seasons and robots
 

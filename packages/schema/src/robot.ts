@@ -24,6 +24,18 @@ export const footprintSchema = z.object({
   }),
   /** How tall the robot is, for the z gate on the STRUCTURE check. `robot.heightIn` wins over it. */
   heightIn: valuedNumberSchema.optional(),
+  /**
+   * How close the robot may pass a structure before the CLEARANCE warning, in inches (owner ruling
+   * D8). Optional, so `robot.json` stays at format version 1; core reads 1 in when it is absent
+   * (`DEFAULT_CLEARANCE_IN`). It is its own number, never the follower's
+   * `translationalDeviationToleranceIn`. 0 turns the warning off for this robot.
+   */
+  clearanceIn: z
+    .object({
+      value: z.number().finite().nonnegative(),
+      provenance: provenanceSchema.optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -126,29 +138,38 @@ export const commandParamSchema = z.discriminatedUnion("type", [
     min: z.number().optional(),
     max: z.number().optional(),
     default: z.number().optional(),
+    provenance: provenanceSchema.optional(),
   }),
   z.object({
     type: z.literal("number"),
     min: z.number().optional(),
     max: z.number().optional(),
     default: z.number().optional(),
+    provenance: provenanceSchema.optional(),
   }),
   z.object({
     type: z.literal("enum"),
     values: z.array(z.string().min(1)).min(1),
     default: z.string().optional(),
+    provenance: provenanceSchema.optional(),
   }),
   z.object({
     type: z.literal("boolean"),
     default: z.boolean().optional(),
+    provenance: provenanceSchema.optional(),
   }),
   z.object({
     type: z.literal("string"),
     default: z.string().optional(),
+    provenance: provenanceSchema.optional(),
   }),
 ]);
 
-/** One entry in the named-command registry. `name` must match a NamedCommands registration. */
+/**
+ * One entry in the named-command registry. `name` must match a NamedCommands registration.
+ * `provenance` says where the entry came from; `zenith import-commands` writes one naming the
+ * Java file it read the registration from (Zenith's ADR 0014).
+ */
 export const commandSpecSchema = z.object({
   name: z.string().min(1),
   summary: z.string().optional(),
@@ -160,17 +181,40 @@ export const commandSpecSchema = z.object({
   stationary: z.boolean().optional(),
   movesRobot: z.boolean().optional(),
   ledger: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  provenance: provenanceSchema.optional(),
 });
+
+/**
+ * How the planner reads a condition from the ledger, when it can. Planner-only: on the robot the
+ * condition is always the team's own `BooleanSupplier`.
+ *
+ * - `"full"`: the robot holds its `capacity.max`; `"empty"`: it holds nothing.
+ * - `{ quantity, min?, max? }`: a number the season plugin keeps in its ledger (a location's piece
+ *   count such as `robot` or `hiveOwnUpCell`, or a counter such as `hiveOwn.tips`) lies within
+ *   `min` to `max`, both inclusive and both counts. `Own` and `Opponent` in a quantity stand for
+ *   the routine's alliance and the other one, so one robot file serves both. At least one bound is
+ *   required.
+ */
+export const conditionLedgerTestSchema = z
+  .object({
+    quantity: z.string().min(1),
+    min: z.number().int().optional(),
+    max: z.number().int().optional(),
+  })
+  .refine((test) => test.min !== undefined || test.max !== undefined, {
+    message: "a ledger test needs min, max or both",
+  });
 
 export const conditionSpecSchema = z.object({
   name: z.string().min(1),
   summary: z.string().optional(),
   /**
-   * Which condition means the robot is at capacity (`"full"`) or holding nothing (`"empty"`), so
-   * the instant sim can answer it from the ledger. Without it the sim assumes `hopperFull` and
-   * `hopperEmpty`.
+   * How the instant sim answers this condition from the ledger (`conditionLedgerTestSchema`).
+   * Without it the sim assumes `hopperFull` and `hopperEmpty` are the full and empty conditions,
+   * and cannot tell how any other condition reads.
    */
-  ledger: z.enum(["full", "empty"]).optional(),
+  ledger: z.union([z.enum(["full", "empty"]), conditionLedgerTestSchema]).optional(),
+  provenance: provenanceSchema.optional(),
 });
 
 /**
@@ -252,6 +296,7 @@ export type Mouth = z.infer<typeof mouthSchema>;
 export type CommandParam = z.infer<typeof commandParamSchema>;
 export type CommandSpec = z.infer<typeof commandSpecSchema>;
 export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
+export type ConditionLedgerTest = z.infer<typeof conditionLedgerTestSchema>;
 export type Robot = z.infer<typeof robotSchema>;
 export type Follower = z.infer<typeof followerSchema>;
 export type Drivetrain = z.infer<typeof drivetrainSchema>;

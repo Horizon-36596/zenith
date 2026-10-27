@@ -8,6 +8,11 @@
 #
 # Fails before building anything when the tag does not match the root package.json, and when
 # CHANGELOG.md has no section for the version.
+#
+# The app is built with the cloud on: the production Firebase project and its App Check site key from
+# cloud/web-config.json (scripts/release-cloud.mjs), and the desktop sign-in clients from this
+# repository's Actions variables and secret, which PUBLISHING.md lists. A build without the config or
+# any sign-in client fails; one without the App Check key only warns.
 
 name: Release
 
@@ -28,6 +33,16 @@ jobs:
     defaults:
       run:
         shell: pwsh
+
+    # The desktop app's sign-in clients (cloud/README.md step 4a). None is a secret to the app, which
+    # carries them, but a Google client secret committed to a public repository gets revoked, so all
+    # four come from Settings > Secrets and variables > Actions. A provider left unset is hidden in
+    # the app; with none set, the cloud check fails.
+    env:
+      VITE_ZENITH_GITHUB_CLIENT_ID: ${{ vars.ZENITH_GITHUB_CLIENT_ID }}
+      VITE_ZENITH_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.ZENITH_GOOGLE_DESKTOP_CLIENT_ID }}
+      VITE_ZENITH_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.ZENITH_GOOGLE_DESKTOP_CLIENT_SECRET }}
+      VITE_ZENITH_MICROSOFT_CLIENT_ID: ${{ vars.ZENITH_MICROSOFT_CLIENT_ID }}
 
     steps:
       - uses: actions/checkout@v4
@@ -54,11 +69,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Every later step builds with the production cloud and its App Check site key.
+      - name: Use the release cloud
+        run: node scripts/release-cloud.mjs env --github-env
+
       - name: Build
         run: pnpm build
 
+      # A release ships with the cloud on. Fail if the web or desktop build lacks the Firebase config
+      # or every desktop sign-in client. A missing App Check site key only warns.
+      - name: Check the cloud is on in the build
+        run: node scripts/release-cloud.mjs check
+
       # electron-builder, through apps/desktop/scripts/dist.mjs, with publishing off: this workflow
-      # uploads the files itself. No certificate, so nothing is signed.
+      # uploads the files itself. No certificate, so nothing is signed. dist.mjs rebuilds the web app
+      # with the release cloud and checks it again before packaging.
       - name: Package the desktop app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'

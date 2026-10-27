@@ -32,6 +32,7 @@ import org.horizon36596.zenith.AutoFile;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
 /**
@@ -162,8 +163,13 @@ public final class AutoBuilder {
     // ---------------------------------------------------------------------------------------------
 
     private static Command path(final AutoSpec.PathStep step, final AutoContext ctx) {
+        // Resolved here, at init, even for a path that is built later from "current": an end condition
+        // nobody registered then throws on the tile, not when the step starts mid-match.
+        final BooleanSupplier endCondition = step.endCondition != null
+                ? NamedCommands.condition(step.endCondition)
+                : null;
         if (!step.startsFromCurrentPose()) {
-            return follow(step, ctx, null);
+            return follow(step, ctx, null, endCondition);
         }
         Command[] markers = new Command[step.markers.size()];
         for (int i = 0; i < markers.length; i++) {
@@ -173,33 +179,51 @@ public final class AutoBuilder {
         return DeferredPath.of(step.id, ctx, new Function<Pose2d, Command>() {
             @Override
             public Command apply(Pose2d currentPose) {
-                return follow(step, ctx, currentPose);
+                return follow(step, ctx, currentPose, endCondition);
             }
         }, markers);
     }
 
     /** The path-following command for one path step, with its markers and its end condition. */
-    private static Command follow(AutoSpec.PathStep step, AutoContext ctx, Pose2d currentPose) {
+    private static Command follow(AutoSpec.PathStep step, AutoContext ctx, Pose2d currentPose,
+            BooleanSupplier endCondition) {
         PathBuilder.Built built = PathBuilder.build(step, ctx, currentPose);
 
         double speed = step.speedFraction != null
                 ? step.speedFraction.doubleValue()
                 : ctx.defaultSpeedFraction();
-        Command drive = ctx.followPath(built.path, speed);
-        if (step.endCondition != null) {
-            // Not drive.interruptOn(...): that is a SolversLib ParallelRaceGroup, whose end() skips the
-            // member that finished, so a path that arrived before its condition was never ended. This
-            // race ends every member exactly once.
-            drive = Parallel.race(drive, new WaitUntilCommand(NamedCommands.condition(step.endCondition)));
-        }
-
+        // A step this short is a turn on the spot (decision D10): it is held at its end pose until the
+        // heading settles, never handed to followPath, and every marker on it fires as it starts.
+        Command drive = built.isTurn()
+                ? new TurnInPlace(ctx, built.turn)
+                : ctx.followPath(built.path, speed);
+        // The markers go on the path itself and the end condition races the two together, never the
+        // other way round. A condition that cuts the path short then ends the marker runner with it, on
+        // the loop it fires. Inside the race, the runner would run once more after the path was held,
+        // see a follower that has stopped following, count the whole path as driven and start every
+        // marker still waiting, wherever the robot was cut off.
+        //
+        // A turn has nothing to measure progress along, so its markers all sit at 0 and start with it.
+        // They still go through the runner, so two that need one subsystem take turns there as they do
+        // on a path, rather than both running (or the group refusing them) inside a plain deadline.
         List<PathMarkers.Marker> markers = new ArrayList<PathMarkers.Marker>(step.markers.size());
         for (AutoSpec.Marker marker : step.markers) {
             markers.add(new PathMarkers.Marker(
-                    marker.distanceAlongIn(built.totalLengthIn),
+                    built.isTurn() ? 0.0 : marker.distanceAlongIn(built.totalLengthIn),
                     NamedCommands.build(marker.commandName, marker.args, ctx)));
         }
-        return PathMarkers.wrap(drive, built.segmentLengthsIn, markers, ctx);
+        return cutShortBy(endCondition, PathMarkers.wrap(drive, built.segmentLengthsIn, markers, ctx));
+    }
+
+    /** {@code drive} raced against the step's end condition, or {@code drive} when it has none. */
+    private static Command cutShortBy(BooleanSupplier endCondition, Command drive) {
+        if (endCondition == null) {
+            return drive;
+        }
+        // Not drive.interruptOn(...): that is a SolversLib ParallelRaceGroup, whose end() skips the
+        // member that finished, so a path that arrived before its condition was never ended. This
+        // race ends every member exactly once.
+        return Parallel.race(drive, new WaitUntilCommand(endCondition));
     }
 
     // ---------------------------------------------------------------------------------------------

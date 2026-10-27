@@ -47,7 +47,7 @@ export function runEstimate(autoArg: string, options: EstimateOptions): number {
   if (!result.ok || hasErrors(findings)) {
     const files: FileFindings[] = [{ path: relPath, findings }];
     if (options.json === true) {
-      process.stdout.write(`${JSON.stringify({ project: slash(project.root), files, errors: findings.length }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify({ project: slash(project.root), files, errors: findings.filter((finding) => finding.severity === "error").length }, null, 2)}\n`);
     } else {
       process.stdout.write(`${formatFindingsTable(files)}\n`);
     }

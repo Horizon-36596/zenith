@@ -1,7 +1,9 @@
-import { parseAuto, SCHEMA_ID, type Auto } from "@horizon36596/zenith-schema";
+import { parseAuto, SCHEMA_ID, type Auto, type Step } from "@horizon36596/zenith-schema";
 import { describe, expect, it } from "vitest";
 import { EditError } from "./errors.js";
-import { collectIds, duplicateIds } from "./ids.js";
+import { collectIds, duplicateIds, stepIdProblem } from "./ids.js";
+import { setParallel } from "./fields.js";
+import { finish } from "./finish.js";
 import { addStep, moveStep, removeStep, renameStep } from "./steps.js";
 import { canonicalRoundTrip, testAuto } from "./testing.js";
 
@@ -42,6 +44,19 @@ describe("addStep", () => {
     expect(() => addStep(testAuto(), { id: "shoot", kind: "command", name: "launcherIdle" })).toThrow(
       EditError,
     );
+  });
+
+  it("refuses an explicit id outside the step id rule, in the rule's own words", () => {
+    const command = (id: string): Step => ({ id, kind: "command", name: "launcherIdle" });
+    expect(() => addStep(testAuto(), command("park.2"))).toThrow(EditError);
+    expect(() => addStep(testAuto(), command("park.2"))).toThrow(stepIdProblem("park.2") ?? "");
+    expect(() => addStep(testAuto(), command("a".repeat(65)))).toThrow("A step's id is at most 64 characters.");
+    expect(addStep(testAuto(), command("idle_2")).steps.map((step) => step.id)).toEqual([
+      "leg1",
+      "shoot",
+      "park",
+      "idle_2",
+    ]);
   });
 
   it("rejects an afterId that does not exist", () => {
@@ -132,28 +147,119 @@ describe("renameStep", () => {
     expect(() => renameStep(testAuto(), "shoot", "leg1")).toThrow(EditError);
   });
 
+  it("refuses an id of only spaces", () => {
+    expect(() => renameStep(testAuto(), "shoot", "   ")).toThrow(EditError);
+  });
+
   it("throws when the id does not exist", () => {
     expect(() => renameStep(testAuto(), "nope", "x")).toThrow(EditError);
+  });
+
+  it("refuses a new id outside the waypoint name rule, with the reason", () => {
+    expect(() => renameStep(testAuto(), "shoot", "shoot preload")).toThrow(
+      "A step's id starts with a letter and holds only letters, digits, _ and -.",
+    );
+    expect(() => renameStep(testAuto(), "shoot", "2nd")).toThrow(EditError);
+    expect(() => renameStep(testAuto(), "shoot", "shoot.preload")).toThrow(EditError);
+    expect(() => renameStep(testAuto(), "shoot", "")).toThrow("A step needs an id.");
+    expect(() => renameStep(testAuto(), "shoot", "a".repeat(65))).toThrow("A step's id is at most 64 characters.");
+    expect(() => renameStep(testAuto(), "shoot", "leg1")).toThrow("There is already a step named leg1.");
+  });
+
+  it("renames an old id outside the rule to one inside it, and the deadline that named it follows", () => {
+    const fixture = testAuto();
+    const old = parseAuto({
+      ...fixture,
+      steps: fixture.steps.map((step) =>
+        step.kind === "parallel"
+          ? {
+              ...step,
+              deadline: "drive to wall",
+              steps: step.steps.map((member) => (member.id === "drive" ? { ...member, id: "drive to wall" } : member)),
+            }
+          : step,
+      ),
+    });
+    const result = renameStep(old, "drive to wall", "driveToWall");
+    const park = result.steps.find((step) => step.id === "park");
+    if (park?.kind !== "parallel") throw new Error("expected parallel");
+    expect(park.deadline).toBe("driveToWall");
+    expect(park.steps.map((step) => step.id)).toEqual(["driveToWall", "spinDown"]);
   });
 });
 
 describe("a parallel group's deadline reference", () => {
-  it("finding 6: is dropped when removeStep deletes the child it names", () => {
-    const result = removeStep(testAuto(), "drive");
-    const park = result.steps.find((step) => step.id === "park");
+  const parkOf = (auto: Auto) => {
+    const park = auto.steps.find((step) => step.id === "park");
     if (park?.kind !== "parallel") throw new Error("expected parallel");
+    return park;
+  };
+
+  /** `park` with a path that has no id of its own after `spinDown`, in the given mode. */
+  const withPositionalDrive = (mode: "all" | "deadline"): Auto =>
+    finish({
+      ...testAuto(),
+      steps: testAuto().steps.map((step) =>
+        step.id === "park" && step.kind === "parallel"
+          ? {
+              ...step,
+              mode,
+              steps: [
+                ...step.steps,
+                {
+                  kind: "path",
+                  segments: [{ kind: "line", from: "current", to: { xIn: 24, yIn: 24, headingRad: 0 } }],
+                  heading: { mode: "tangent" },
+                },
+              ],
+            }
+          : step,
+      ),
+    });
+
+  it("finding 6: passes to the step left in the group when removeStep deletes the child it names", () => {
+    const result = removeStep(testAuto(), "drive");
+    const park = parkOf(result);
     expect(park.steps.map((step) => step.id)).toEqual(["spinDown"]);
-    expect(park.deadline).toBeUndefined();
+    expect(park.mode).toBe("deadline");
+    expect(park.deadline).toBe("spinDown");
     canonicalRoundTrip(result);
   });
 
-  it("finding 6: is dropped when moveStep takes the child out of the group", () => {
+  it("finding 6: passes to the step left in the group when moveStep takes the child out of it", () => {
     const result = moveStep(testAuto(), "drive", 0);
-    const park = result.steps.find((step) => step.id === "park");
-    if (park?.kind !== "parallel") throw new Error("expected parallel");
     expect(result.steps.map((step) => step.id)).toEqual(["drive", "leg1", "shoot", "park"]);
-    expect(park.deadline).toBeUndefined();
+    expect(parkOf(result).deadline).toBe("spinDown");
     canonicalRoundTrip(result);
+  });
+
+  it("passes to the first remaining step that drives, and names it in the file when it has no id", () => {
+    const result = removeStep(withPositionalDrive("deadline"), "drive");
+    const park = parkOf(result);
+    // The id it went by, park.2, with the dot a step's id cannot hold taken out.
+    expect(park.deadline).toBe("park2");
+    expect(park.steps.map((step) => step.id)).toEqual(["spinDown", "park2"]);
+    expect(canonicalRoundTrip(result)).toContain('"deadline": "park2"');
+  });
+
+  it("is dropped from a group in all mode, which has no use for one", () => {
+    const stale = withPositionalDrive("all");
+    expect(parkOf(stale).deadline).toBe("drive");
+    const result = removeStep(stale, "drive");
+    const park = parkOf(result);
+    expect(park.mode).toBe("all");
+    expect("deadline" in park).toBe(false);
+    expect(park.steps.map((step) => step.id)).toEqual(["spinDown", undefined]);
+  });
+
+  it("stays one of the group's own steps after a switch to deadline and a move out of the group", () => {
+    const switched = setParallel(setParallel(testAuto(), "park", { mode: "all" }), "park", { mode: "deadline" });
+    expect(parkOf(switched).deadline).toBe("drive");
+    const result = moveStep(switched, "drive", "leg1");
+    const park = parkOf(result);
+    expect(park.mode).toBe("deadline");
+    expect(park.steps.map((step) => step.id)).toContain(park.deadline);
+    expect(park.deadline).toBe("spinDown");
   });
 
   it("finding 6: survives a move inside the group it belongs to", () => {
@@ -197,5 +303,66 @@ describe("ids after an insertion", () => {
   it("finding 8: an id-less step still lands next to the step it was added after", () => {
     const result = addStep(testAuto(), { kind: "command", name: "launcherIdle" }, "leg1");
     expect(result.steps[1]?.id).toBe("command");
+  });
+});
+
+describe("positional ids through an edit (issue #401)", () => {
+  /** Wait steps with no ids, told apart by how long they wait. */
+  const wait = (seconds: number) => ({ kind: "wait", seconds });
+  const autoOf = (steps: unknown[]): Auto =>
+    parseAuto({
+      $schema: SCHEMA_ID.auto,
+      formatVersion: 1,
+      name: "positional",
+      alliance: "RED",
+      start: { pose: { xIn: 0, yIn: 0, headingRad: 0 } },
+      steps,
+    });
+  const group = (deadline: string, members: unknown[]) => ({ id: "g", kind: "parallel", mode: "deadline", deadline, steps: members });
+  const seconds = (steps: readonly Step[]) => steps.map((step) => (step.kind === "wait" ? step.seconds : step.kind));
+  const groupOf = (auto: Auto) => {
+    const found = auto.steps[0];
+    if (found?.kind !== "parallel") throw new Error("expected parallel");
+    return found;
+  };
+
+  it("moveStep puts a positional step after the step the target named before the move", () => {
+    const result = moveStep(autoOf([wait(1), wait(2), wait(3)]), "step1", "step2");
+    expect(seconds(result.steps)).toEqual([2, 1, 3]);
+  });
+
+  it("moveStep into a positional group finds the group the id named before the move", () => {
+    const result = moveStep(autoOf([wait(1), { kind: "sequence", steps: [wait(2)] }, { kind: "sequence", steps: [wait(3)] }]), "step1", { into: "step2" });
+    const first = result.steps[0];
+    // The group that held the 2 s wait, not the one that held the 3 s wait, which was step3.
+    expect(first?.kind === "sequence" ? seconds(first.steps) : null).toEqual([2, 1]);
+  });
+
+  it("removeStep keeps a deadline on the positional member it named, now renumbered", () => {
+    const result = removeStep(autoOf([group("g.2", [wait(1), wait(2), wait(3)])]), "g.1");
+    const g = groupOf(result);
+    expect(seconds(g.steps)).toEqual([2, 3]);
+    expect(g.deadline).toBe("g.1");
+  });
+
+  it("moveStep within a group keeps the deadline on the member it named", () => {
+    const result = moveStep(autoOf([group("g.1", [wait(1), wait(2), wait(3)])]), "g.1", "g.3");
+    const g = groupOf(result);
+    expect(seconds(g.steps)).toEqual([2, 3, 1]);
+    expect(g.deadline).toBe("g.3");
+  });
+
+  it("renameStep carries a deadline that names a positional member by the group's old id", () => {
+    const result = renameStep(autoOf([group("g.2", [wait(1), wait(2)])]), "g", "h");
+    const h = groupOf(result);
+    expect(h.id).toBe("h");
+    expect(h.deadline).toBe("h.2");
+  });
+
+  it("renaming a positional deadline member still renames the deadline", () => {
+    const result = renameStep(autoOf([group("g.2", [wait(1), wait(2)])]), "g.2", "last");
+    const g = groupOf(result);
+    expect(g.deadline).toBe("last");
+    expect(g.steps.map((step) => step.id)).toEqual([undefined, "last"]);
   });
 });

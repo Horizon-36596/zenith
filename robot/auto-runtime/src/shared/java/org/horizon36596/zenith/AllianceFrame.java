@@ -36,7 +36,8 @@ import java.util.function.UnaryOperator;
  * mirrors if and only if {@link AutoFile#mirrorsInto} says so. This class is built from that same call
  * and never asks the question again, so a path's headings are mirrored exactly when its poses are. When
  * {@code alliance(pose)} does not turn headings, every heading here is handed back unchanged, the very
- * same numbers.
+ * same numbers, except a {@code facePoint} target, which still goes through the pose map whenever that
+ * map moves positions at all.
  *
  * <h2>The heading map</h2>
  * The team's mirror is a rigid motion of the field: a point symmetry, a reflection across an axis, or any
@@ -65,7 +66,8 @@ import java.util.function.UnaryOperator;
  *   <li>{@code linear}: the start is mapped, and the sweep keeps its size and turns {@code s} times the
  *       way the file wrote it, left unwrapped, so each segment's share and the way round it turns are
  *       what the file meant. This is {@code mirrorHeading} in {@code packages/core/src/mirror.ts}.</li>
- *   <li>{@code facePoint}: the point goes through the pose map.</li>
+ *   <li>{@code facePoint}: the point goes through the pose map, even for a map that only moves the
+ *       field and keeps every heading.</li>
  *   <li>{@code piecewise}: each range's heading is mapped the same way; its {@code startT} and
  *       {@code endT} stay, because a rigid motion keeps arc length.</li>
  *   <li>{@code tangent}, {@code tangentReversed}: unchanged, since they follow the mirrored curve.</li>
@@ -82,15 +84,21 @@ public final class AllianceFrame {
     private final UnaryOperator<Pose> alliance;
     /** True when headings come through unchanged, so a heading is handed back as it is. */
     private final boolean headingsUnchanged;
+    /**
+     * True when positions come through unchanged too, so a whole heading block, {@code facePoint}
+     * targets included, is handed back as it is.
+     */
+    private final boolean identity;
     /** {@code c}: where heading zero goes. */
     private final double offsetRad;
     /** {@code s}: +1 when the map keeps orientation, -1 when it reverses it. */
     private final int turn;
 
-    private AllianceFrame(UnaryOperator<Pose> alliance, boolean headingsUnchanged, double offsetRad,
-            int turn) {
+    private AllianceFrame(UnaryOperator<Pose> alliance, boolean headingsUnchanged, boolean identity,
+            double offsetRad, int turn) {
         this.alliance = alliance;
         this.headingsUnchanged = headingsUnchanged;
+        this.identity = identity;
         this.offsetRad = offsetRad;
         this.turn = turn;
     }
@@ -131,7 +139,10 @@ public final class AllianceFrame {
             throw inconsistent("heading pi/2", quarter, expected);
         }
         boolean unchanged = turn > 0 && sameAngle(offset, 0);
-        return new AllianceFrame(alliance, unchanged, wrap(offset), turn);
+        // A frame that only moves the field keeps every heading but still moves a facePoint target.
+        boolean identity = unchanged && near(origin.x(), 0) && near(origin.y(), 0) && near(xx, 1)
+                && near(xy, 0) && near(yx, 0) && near(yy, 1);
+        return new AllianceFrame(alliance, unchanged, identity, wrap(offset), turn);
     }
 
     /**
@@ -162,23 +173,15 @@ public final class AllianceFrame {
      * A path step's heading, in this frame. See <b>Per heading mode</b> above.
      *
      * @param file the heading as the file wrote it
-     * @return {@code file} itself when headings are unchanged, otherwise the mirrored heading
+     * @return {@code file} itself when the frame is the identity, otherwise the mirrored heading. A
+     *         frame that keeps headings but moves positions still moves a {@code facePoint} target,
+     *         a piecewise range's included.
      */
     public AutoFile.Heading heading(AutoFile.Heading file) {
-        if (headingsUnchanged) {
+        if (identity) {
             return file;
         }
         String mode = file.mode;
-        if ("constant".equals(mode)) {
-            return new AutoFile.Heading(mode, heading(file.headingRad), file.fromRad, file.toRad,
-                    file.pointXIn, file.pointYIn, file.ranges);
-        }
-        if ("linear".equals(mode)) {
-            double from = heading(file.fromRad);
-            double to = from + turn * (file.toRad - file.fromRad);
-            return new AutoFile.Heading(mode, file.headingRad, from, to, file.pointXIn, file.pointYIn,
-                    file.ranges);
-        }
         if ("facePoint".equals(mode)) {
             Pose point = pose(new Pose(file.pointXIn, file.pointYIn, 0));
             return new AutoFile.Heading(mode, file.headingRad, file.fromRad, file.toRad, point.x(),
@@ -191,6 +194,19 @@ public final class AllianceFrame {
             }
             return new AutoFile.Heading(mode, file.headingRad, file.fromRad, file.toRad, file.pointXIn,
                     file.pointYIn, ranges);
+        }
+        if (headingsUnchanged) {
+            return file;
+        }
+        if ("constant".equals(mode)) {
+            return new AutoFile.Heading(mode, heading(file.headingRad), file.fromRad, file.toRad,
+                    file.pointXIn, file.pointYIn, file.ranges);
+        }
+        if ("linear".equals(mode)) {
+            double from = heading(file.fromRad);
+            double to = from + turn * (file.toRad - file.fromRad);
+            return new AutoFile.Heading(mode, file.headingRad, from, to, file.pointXIn, file.pointYIn,
+                    file.ranges);
         }
         // tangent and tangentReversed follow the mirrored curve; an unknown mode is PedroPaths' to refuse.
         return file;
@@ -217,5 +233,9 @@ public final class AllianceFrame {
 
     private static boolean sameAngle(double a, double b) {
         return Math.abs(PedroPaths.normalizeSigned(a - b)) < TOLERANCE_RAD;
+    }
+
+    private static boolean near(double a, double b) {
+        return Math.abs(a - b) < SNAP_RAD;
     }
 }

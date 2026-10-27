@@ -28,12 +28,30 @@
   color: var(--text-mid);
 }
 
+/* Several short paragraphs read as one block, a little apart (the waypoint dialog's followers). */
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
 .warn {
   margin: 0;
   padding: var(--space-2);
   border-radius: var(--radius-xs);
   background: var(--sev-warn-bg);
   color: var(--sev-warn);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+}
+
+/* A failure the dialog itself caused, said beside the control that caused it (UI_GUIDE 9.19). */
+.error {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--sev-error-bg);
+  color: var(--sev-error);
   font-size: var(--fs-md);
   line-height: var(--lh-md);
 }
@@ -53,6 +71,30 @@
 .file {
   font-size: var(--fs-sm);
   color: var(--text-mid);
+}
+
+/*
+ * The browser's own "Choose Files" button, drawn as the app's secondary button, the one Open the
+ * example is (components/primitives, UI_GUIDE 9.9). It stays the native input, so Tab reaches it and
+ * Space or Enter opens the picker; the focus ring is the global :focus-visible one, on the whole input.
+ */
+.file::file-selector-button {
+  height: var(--ctl-h-lg);
+  margin-right: var(--space-3);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-out);
+}
+
+.file:hover::file-selector-button {
+  background: var(--bg-hover);
 }
 
 .fileLabel {
@@ -139,4 +181,42 @@
   font-variant-numeric: var(--numeric);
   font-size: var(--fs-sm);
   color: var(--text-hi);
+}
+
+/* A line of text that is also a button: the link under a dialog's choices. */
+.textLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.textLink:hover {
+  color: var(--accent-hover);
+}
+
+/* Open project, with a project open: the way to the other ways of opening one. */
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.disclosure:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+.linkRow {
+  margin-top: var(--space-3);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
 }

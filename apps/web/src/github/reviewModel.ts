@@ -8,6 +8,7 @@
  * a browser.
  */
 import type { AutoDiffChangeKind, Estimate, Finding, Plan } from "@horizon36596/zenith-core";
+import { diffAnchor } from "@horizon36596/zenith-github";
 import type { Auto, Field, Robot, Waypoints } from "@horizon36596/zenith-schema";
 import { safeCheck, safeDiff, safeEstimate, safePlan, safeResolve } from "../lib/coreSafe";
 
@@ -53,7 +54,13 @@ interface Sides {
   head: Auto;
   robot: Robot;
   field: Field;
+  /** The head's waypoints, and the base's too unless `baseWaypoints` is given. */
   waypoints?: Waypoints | undefined;
+  /**
+   * The base side's own waypoints, when the pull request changes them (issue #407). Given as
+   * `undefined`, the base side has none; left out, it shares `waypoints`.
+   */
+  baseWaypoints?: Waypoints | undefined;
 }
 
 interface Analysed {
@@ -65,7 +72,7 @@ interface Analysed {
 
 /** Resolve, plan, estimate and check one side, degrading to nulls rather than throwing. */
 function analyse(auto: Auto, robot: Robot, field: Field, waypoints: Waypoints | undefined): Analysed {
-  const resolved = safeResolve(auto, waypoints);
+  const resolved = safeResolve(auto, waypoints, robot);
   if (!resolved.ok) return { plan: null, estimate: null, findings: [], reason: resolved.reason };
   const planned = safePlan(resolved.value, robot, field);
   if (!planned.ok) return { plan: null, estimate: null, findings: [], reason: planned.reason };
@@ -102,8 +109,9 @@ function deltaFor(kind: AutoDiffChangeKind, baseS: number | null, headS: number 
 
 export function buildReviewModel(sides: Sides): ReviewModel {
   const { base, head, robot, field, waypoints } = sides;
+  const baseWaypoints = "baseWaypoints" in sides ? sides.baseWaypoints : waypoints;
   const headSide = analyse(head, robot, field, waypoints);
-  const baseSide = base === null ? null : analyse(base, robot, field, waypoints);
+  const baseSide = base === null ? null : analyse(base, robot, field, baseWaypoints);
 
   const totals: ReviewTotals = {
     baseS: baseSide?.estimate?.nominalS ?? null,
@@ -178,6 +186,26 @@ export function buildReviewModel(sides: Sides): ReviewModel {
     basePlan: baseSide?.plan ?? null,
     reason: headSide.reason ?? baseSide?.reason ?? null,
   };
+}
+
+/**
+ * Fills in each row's link into the pull request's diff. A removed step is only in the base text,
+ * so its line is looked up there, on the diff's left side (issue #407).
+ */
+export async function anchorRows(
+  rows: ReviewStepRow[],
+  path: string,
+  headText: string,
+  baseText: string | null,
+): Promise<void> {
+  for (const row of rows) {
+    row.anchor =
+      row.kind === "removed"
+        ? baseText === null
+          ? null
+          : await diffAnchor(path, baseText, row.stepId, "base")
+        : await diffAnchor(path, headText, row.stepId, "head");
+  }
 }
 
 /** Everything review mode holds while a pull request is open in the editor. */

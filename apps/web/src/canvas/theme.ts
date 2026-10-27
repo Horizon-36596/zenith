@@ -17,6 +17,8 @@ export interface CanvasTheme {
   gridMinor: string;
   gridMajor: string;
   gridAxis: string;
+  /** The tiles inside the perimeter, one step above the well. */
+  fieldFloor: string;
   fieldObstacle: string;
   fieldObstacleFill: string;
   fieldZone: string;
@@ -24,12 +26,16 @@ export interface CanvasTheme {
   fieldElement: string;
   fieldElementFill: string;
   fieldTarget: string;
+  /** Pollen pieces on the field, gold (`pieceColours.ts`). */
+  fieldPollen: string;
   fieldWaypoint: string;
   pathEstimated: string;
   pathSelected: string;
   pathHover: string;
   pathActual: string;
   pathGhost: string;
+  /** The route Optimize path proposes, drawn dashed with its joints as dots (UI_GUIDE 9.11). */
+  pathCandidate: string;
   pathWidthNormalPx: number;
   pathWidthSelectedPx: number;
   pathWidthActualPx: number;
@@ -60,6 +66,27 @@ export interface CanvasTheme {
   robotOutlineFill: string;
   bgRaised: string;
   borderStrong: string;
+  /** Alliance partners' outlines, trajectories and envelopes (`--partner-1` to `--partner-3`). */
+  partner1: string;
+  partner2: string;
+  partner3: string;
+  /**
+   * The user's own robot, and its step's envelope, while nobody can predict where it is: a command
+   * that drives the robot by itself (`--canvas-unknown`, issue #481).
+   */
+  canvasUnknown: string;
+  /**
+   * The ledger's count chips on the field (`fieldCounts.ts`): their fill, edge and ink. They read
+   * the fixed `--chrome-*` tokens and are not in `LIGHT_FIELD_INK`, so a chip stays dark with light
+   * ink over the light field picture too, and its piece colours keep their contrast on it.
+   */
+  countChip: string;
+  countEdge: string;
+  countInk: string;
+  countInkLo: string;
+  /** Nectar's number, in its alliance's text colour; the icon takes `allianceRed` or `allianceBlue`. */
+  allianceRedText: string;
+  allianceBlueText: string;
 }
 
 /**
@@ -73,6 +100,7 @@ const FALLBACK: CanvasTheme = {
   gridMinor: "#2a1b30",
   gridMajor: "#3c2b44",
   gridAxis: "#594364",
+  fieldFloor: "#1c0a24",
   fieldObstacle: "#83738b",
   fieldObstacleFill: "#2e2034",
   fieldZone: "#eddb49",
@@ -80,12 +108,14 @@ const FALLBACK: CanvasTheme = {
   fieldElement: "#d489e5",
   fieldElementFill: "rgb(212 137 229 / 0.18)",
   fieldTarget: "#43d5dc",
+  fieldPollen: "#f5c400",
   fieldWaypoint: "#a08fa8",
   pathEstimated: "#c2b0c8",
   pathSelected: "#faf6fb",
   pathHover: "#f0e8f2",
   pathActual: "#62d286",
   pathGhost: "rgb(194 176 200 / 0.28)",
+  pathCandidate: "#86e268",
   pathWidthNormalPx: 2,
   pathWidthSelectedPx: 3,
   pathWidthActualPx: 1.5,
@@ -113,6 +143,16 @@ const FALLBACK: CanvasTheme = {
   robotOutlineFill: "rgb(250 246 251 / 0.08)",
   bgRaised: "#2a1735",
   borderStrong: "#6f5b7c",
+  partner1: "#b592ff",
+  partner2: "#b9d45c",
+  partner3: "#f291d2",
+  canvasUnknown: "#9695ff",
+  countChip: "#2a1735",
+  countEdge: "#6f5b7c",
+  countInk: "#faf6fb",
+  countInkLo: "#a08fa8",
+  allianceRedText: "#fb8276",
+  allianceBlueText: "#80b3fd",
 };
 
 /**
@@ -129,6 +169,7 @@ const VARIABLES: Readonly<Record<keyof CanvasTheme, string>> = {
   gridMinor: "--grid-minor",
   gridMajor: "--grid-major",
   gridAxis: "--grid-axis",
+  fieldFloor: "--field-floor",
   fieldObstacle: "--field-obstacle",
   fieldObstacleFill: "--field-obstacle-fill",
   fieldZone: "--field-zone",
@@ -136,12 +177,14 @@ const VARIABLES: Readonly<Record<keyof CanvasTheme, string>> = {
   fieldElement: "--field-element",
   fieldElementFill: "--field-element-fill",
   fieldTarget: "--field-target",
+  fieldPollen: "--field-pollen",
   fieldWaypoint: "--field-waypoint",
   pathEstimated: "--path-estimated",
   pathSelected: "--path-selected",
   pathHover: "--path-hover",
   pathActual: "--path-actual",
   pathGhost: "--path-ghost",
+  pathCandidate: "--path-candidate",
   pathWidthNormalPx: "--path-w-normal",
   pathWidthSelectedPx: "--path-w-selected",
   pathWidthActualPx: "--path-w-actual",
@@ -169,6 +212,16 @@ const VARIABLES: Readonly<Record<keyof CanvasTheme, string>> = {
   robotOutlineFill: "--robot-outline-fill",
   bgRaised: "--chrome-active",
   borderStrong: "--chrome-border-strong",
+  partner1: "--partner-1",
+  partner2: "--partner-2",
+  partner3: "--partner-3",
+  canvasUnknown: "--canvas-unknown",
+  countChip: "--chrome-active",
+  countEdge: "--chrome-border-strong",
+  countInk: "--chrome-text-hi",
+  countInkLo: "--chrome-text-lo",
+  allianceRedText: "--alliance-red-text",
+  allianceBlueText: "--alliance-blue-text",
 };
 
 const NUMERIC = new Set<keyof CanvasTheme>([
@@ -197,8 +250,8 @@ export function readTheme(root: Element): CanvasTheme {
 export const fallbackTheme = (): CanvasTheme => ({ ...FALLBACK });
 
 /**
- * The second palette: the ink the live layer draws with over a light field picture (the printable
- * BIOBUZZ "light" style, near-white tiles). The v2 dark-theme inks are near-white and vanish there,
+ * The second palette: the ink the live layer draws with over a light field picture (a field file's
+ * printable "light" style, near-white tiles). The v2 dark-theme inks are near-white and vanish there,
  * so paths, the robot outline, handles and the drag bubble switch to night ink, and the annotations
  * (heading, markers, snap guides, measure) to a darker blue than the sky blue that reads on dark.
  * Severity and alliance colours, fonts and the corner readouts (which sit on the dark well) are not
@@ -218,6 +271,7 @@ export const LIGHT_FIELD_INK: Readonly<Partial<CanvasTheme>> = {
   pathHover: "#3c2b44",
   pathSelected: "#17061d",
   pathGhost: "rgb(42 23 53 / 0.35)",
+  pathCandidate: "#2d6a12",
   pathWidthSelectedPx: 4,
   robotOutline: "#17061d",
   robotOutlineFill: "rgb(23 6 29 / 0.08)",
@@ -227,6 +281,10 @@ export const LIGHT_FIELD_INK: Readonly<Partial<CanvasTheme>> = {
   snapGuide: "#2f5fa8",
   handleHeading: "#2f5fa8",
   markerPin: "#2f5fa8",
+  partner1: "#5b2fb8",
+  partner2: "#4d6400",
+  partner3: "#a3196f",
+  canvasUnknown: "#4e3dbc",
 };
 
 /** The theme the live layer draws with: the resolved tokens, with the light-field ink over them. */

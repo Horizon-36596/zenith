@@ -15,6 +15,11 @@ export type ProjectSource =
   | { kind: "desktop"; root: string }
   /** Files picked one at a time on a browser without the API. Save downloads. */
   | { kind: "files" }
+  /**
+   * A project another web app handed over in host mode (`hostBackend.ts`,
+   * site/docs/host-protocol.md). It lives in memory; Save posts the auto back to that app.
+   */
+  | { kind: "host"; hostId: string }
   /** A repository read over the Contents API. Save commits to `branch`, never to `base`. */
   | {
       kind: "github";
@@ -45,13 +50,48 @@ export interface LoadedAuto {
   auto: Auto;
   /** Canonical text as loaded, which is what "unsaved changes" compares against. */
   canonical: string;
+  /**
+   * The `formatVersion` the file was written at, only when it is older than the one Save writes
+   * (`formatVersion.ts`), so opening it can say that saving changes the file's format.
+   */
+  fromFormatVersion?: number;
+  /**
+   * The project's `waypoints.json` as the auto's own branch has it, when that can differ from the
+   * copy the project opened with: GitHub mode reads it from the work branch, where Save commits a
+   * waypoint change with the auto (issue #134). Absent for every other backend.
+   */
+  waypoints?: Waypoints;
 }
 
 export const isWritable = (source: ProjectSource): boolean =>
   source.kind === "directory" ||
   source.kind === "desktop" ||
+  source.kind === "host" ||
   (source.kind === "github" && source.branch !== source.base);
+
+/**
+ * The project's key in per-person view choices such as hidden waypoint pins (issue #236): the same
+ * project opened again gets the same key, and two projects never share one. `example:examples/starter`,
+ * `folder:<handle name>`, `desktop:<root>`, `github:<owner>/<repo>`, `files:<name>` or `host:<hostId>`.
+ */
+export function projectKey(project: Pick<Project, "source" | "name">): string {
+  const { source } = project;
+  switch (source.kind) {
+    case "example":
+      return `example:${project.name}`;
+    case "directory":
+      return `folder:${source.handle.name}`;
+    case "desktop":
+      return `desktop:${source.root}`;
+    case "github":
+      return `github:${source.owner}/${source.repo}`;
+    case "files":
+      return `files:${project.name}`;
+    case "host":
+      return `host:${source.hostId}`;
+  }
+}
 
 /** True when this browser can open a folder and write back into it. */
 export const supportsDirectoryPicker = (): boolean =>
-  typeof window !== "undefined" && "showDirectoryPicker" in window;
+  typeof window !== "undefined" && typeof window.showDirectoryPicker === "function";

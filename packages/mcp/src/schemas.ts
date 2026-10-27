@@ -113,16 +113,58 @@ export const expectSchema = z.object({
   tip: z.enum(["own", "opponent"]).optional(),
 });
 
+export const envelopePointSchema = z
+  .object({ xIn: z.number(), yIn: z.number() })
+  .describe("One corner of an envelope's polygon, in field inches in the auto's own alliance frame.");
+
+export const envelopeSchema = z
+  .object({
+    polygon: z
+      .array(envelopePointSchema)
+      .min(3)
+      .max(32)
+      .describe("3 to 32 corners in order round the outside; a polygon whose edges cross or fold back is an ENVELOPE_SHAPE error."),
+    maxDurationS: z.number().positive().max(30).describe("The longest the step runs, in seconds: over 0 and at most 30."),
+    actualDurationS: z
+      .number()
+      .positive()
+      .optional()
+      .describe(
+        "Optional what-if: how long the step runs this time, in seconds, over 0 and at most maxDurationS, to preview a " +
+          "faster or failed run. Where the window times the step, the planner uses it instead of maxDurationS; a " +
+          "partner's projection keeps maxDurationS. Leave it out for a run of the whole window.",
+      ),
+    provenance: z.string().min(1).describe('Where the shape and the time came from, as a provenance label, e.g. "SET BY HAND: ...".'),
+  })
+  .describe(
+    "A planner-only envelope: while the step runs, for at most maxDurationS, the robot's bounding box is declared " +
+      "to stay inside polygon. A command or wait with no estimate of its own is timed by maxDurationS. The runtime ignores it.",
+  );
+
+export const rejoinPoseSchema = z
+  .object({
+    xIn: z.number(),
+    yIn: z.number(),
+    headingRad: z.number(),
+    provenance: z.string().min(1).optional(),
+  })
+  .describe(
+    'Where a path that starts from "current" assumes the robot is after a movesRobot command (or a sequence ending in one) ' +
+      "written right before it: inches and radians. The runtime ignores it.",
+  );
+
 export const pathStepInputSchema = z.object({
   id: z.string().min(1).optional().describe("Omit to get an id assigned automatically."),
   kind: z.literal("path"),
   timeoutS: z.number().positive().optional(),
+  rejoinFrom: rejoinPoseSchema.optional(),
   segments: z.array(segmentSchema).min(1),
   heading: headingSchema.optional(),
   speedFraction: z.number().positive().max(1).optional(),
   markers: z.array(markerSchema).optional(),
   endCondition: z.object({ condition: z.string().min(1) }).optional(),
   expect: expectSchema.optional(),
+  envelope: envelopeSchema.optional(),
   notes: z.string().optional(),
 });
 
@@ -133,6 +175,7 @@ export const commandStepInputSchema = z.object({
   args: commandArgsSchema.optional(),
   timeoutS: z.number().positive().optional(),
   expect: expectSchema.optional(),
+  envelope: envelopeSchema.optional(),
   notes: z.string().optional(),
 });
 
@@ -142,8 +185,26 @@ export const waitStepInputSchema = z.object({
   seconds: z.number().nonnegative().optional(),
   until: z.string().min(1).optional(),
   timeoutS: z.number().positive().optional(),
+  envelope: envelopeSchema.optional(),
   notes: z.string().optional(),
 });
+
+export const transferStepInputSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    kind: z.literal("transfer"),
+    from: z.string().min(1).describe("A ledger location: robot, partner, a hive cell (hiveRedUpCell), a flower, a floor quarter, a loading zone, loose or offField."),
+    to: z.string().min(1).describe("A ledger location, as for from."),
+    expectedCount: z.number().int().nonnegative().describe("How many pieces the auto is written for."),
+    actualCount: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe("What the ledger moves instead, to preview an edge case such as the partner failing to tip; omit to use expectedCount."),
+    notes: z.string().optional(),
+  })
+  .describe("Planner-only: pieces moving between two ledger locations. The robot runs it as a wait of zero seconds.");
 
 export const sequenceStepInputSchema = z.object({
   id: z.string().min(1).optional(),
@@ -177,11 +238,12 @@ export const stepInputSchema = z
     pathStepInputSchema,
     commandStepInputSchema,
     waitStepInputSchema,
+    transferStepInputSchema,
     sequenceStepInputSchema,
     parallelStepInputSchema,
     branchStepInputSchema,
   ])
-  .describe("One step: path, command, wait, sequence, parallel or branch (https://libraries.horizon36596.org/zenith/file-format/).");
+  .describe("One step: path, command, wait, transfer, sequence, parallel or branch (https://libraries.horizon36596.org/zenith/file-format/).");
 
 export const intoGroupSchema = z
   .object({

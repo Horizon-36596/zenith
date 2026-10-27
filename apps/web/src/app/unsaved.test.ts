@@ -12,13 +12,15 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { ProjectBackend, SaveResult } from "../project/backend";
 import type { Project } from "../project/types";
 import { commit, getState, isDirty, openAuto, openProject } from "../state/store";
+import { answerSaveChoice, getSaveChoice } from "./saveChoice";
 import { answerUnsaved, confirmReplace } from "./unsaved";
 
 const examples = fileURLToPath(new URL("../../../../examples/starter/autos/", import.meta.url));
 const read = (relative: string): unknown => JSON.parse(readFileSync(`${examples}${relative}`, "utf8"));
 
+/** A writable project, so Save goes through the backend; a read-only one asks first (below). */
 const project: Project = {
-  source: { kind: "example" },
+  source: { kind: "desktop", root: "C:/unsaved-fixture" },
   name: "unsaved-fixture",
   link: { autosDir: "autos", robot: "robot.json", field: "field.json" } as Project["link"],
   robot: loadRobot(read("robot.json")),
@@ -117,5 +119,22 @@ describe("replacing the open auto", () => {
     expect(await going).toBe(false);
     expect(isDirty()).toBe(true);
     expect(getState().status?.message).toContain("the disk is full");
+  });
+
+  it("on a read-only project, Save asks where the auto goes, and Cancel there keeps the edits (issue #103)", async () => {
+    const store = backend(false);
+    openProject({ ...project, source: { kind: "example" } }, store);
+    openAuto("unsaved-fixture.auto.json", auto, canonicalize("auto", auto));
+    commit({ ...auto, title: "Edited" });
+    const going = confirmReplace("Opening first-auto.auto.json will replace it.");
+    await answer("save");
+    for (let tries = 0; tries < 200 && getSaveChoice() === null; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    expect(getSaveChoice()?.fileName).toBe("unsaved-fixture.auto.json");
+    answerSaveChoice("cancel");
+    expect(await going).toBe(false);
+    expect(store.writes).toBe(0);
+    expect(isDirty()).toBe(true);
   });
 });

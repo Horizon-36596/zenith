@@ -1,0 +1,643 @@
+/* The sharing UI (spec 13 section 8.4) on the tokens of apps/web/UI_GUIDE.md: no new colours, sizes
+   or durations. Every value below is a token. */
+
+/* ---- The non-modal sheet --------------------------------------------------------------------- */
+
+/* Docked at the right over the inspector, under the toolbar. It is not modal (spec 11 section 1):
+   there is no backdrop, and the rest of the app keeps working while it is open. */
+.sheet {
+  position: fixed;
+  top: calc(var(--titlebar-h) + var(--toolbar-h) + var(--space-2));
+  right: var(--space-3);
+  max-height: calc(100vh - var(--titlebar-h) - var(--toolbar-h) - var(--space-2) - var(--space-3));
+  max-width: calc(100vw - var(--space-6));
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  color: var(--text-hi);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  z-index: var(--z-popover);
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  padding: var(--space-4) var(--space-4) var(--space-2) var(--pad-modal);
+}
+
+.sheetTitle {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-tight);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+/* Stays in view while the body scrolls: the sentence the share dialog leads with. */
+.sheetLead {
+  flex: none;
+  padding: var(--space-2) var(--pad-modal) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sheetBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--pad-modal);
+}
+
+.sheetFoot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  padding: var(--space-3) var(--pad-modal) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---- Sections and prose ---------------------------------------------------------------------- */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sectionHead {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-mid);
+}
+
+/* The one sentence the share dialog leads with (section 8.4). */
+.sentence {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-hi);
+}
+
+.prose {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--sev-error);
+}
+
+/* The link confirmation's warning: a sentence to read, not a wash of colour. */
+.caution {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-hi);
+}
+
+.cautionIcon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--sev-warn);
+}
+
+/* ---- Controls -------------------------------------------------------------------------------- */
+
+/* The small button that takes a team off the share's list. */
+.chipButton {
+  height: var(--ctl-h-sm);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: var(--text-lo);
+  transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+
+.chipButton:hover {
+  color: var(--text-hi);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.input {
+  height: var(--ctl-h-md);
+  width: calc(var(--space-16) * 2);
+  padding-inline: var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.team {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--ctl-h-md);
+  padding-left: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--bg-hover);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+/* The buttons are UI_GUIDE 9.9's one recipe, composed from the shared primitives. */
+.button {
+  composes: secondary from "../components/primitives.module.css";
+}
+
+.primary {
+  composes: primary from "../components/primitives.module.css";
+}
+
+.textButton {
+  font-size: var(--fs-sm);
+  color: var(--accent);
+}
+
+.textButton:hover {
+  color: var(--accent-hover);
+}
+
+.preview {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: var(--space-3);
+  background: var(--bg-inset);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.link {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+/* ---- The sharing chip in the title bar (section 8.4) ----------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+  height: var(--ctl-h-sm);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-xs);
+  transition: background var(--dur-base) var(--ease-out);
+}
+
+/* Team only: the quiet default. */
+.chip[data-tone="team"] {
+  color: var(--text-lo);
+}
+
+/* Shared with specific teams: a step brighter, on a fill. */
+.chip[data-tone="teams"] {
+  color: var(--text-hi);
+  background: var(--bg-hover);
+}
+
+/* Anyone with the link: the widest audience, in the control accent so it is never overlooked. */
+.chip[data-tone="link"] {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.chip:hover {
+  background: var(--bg-active);
+}
+
+/* ---- The Sharing page ------------------------------------------------------------------------ */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.item:first-child {
+  border-top: none;
+}
+
+.itemMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.itemWho {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+.itemAuto {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.itemMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+}
+
+.itemActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The row's action that cannot be undone, at its end and apart from the icons (Revoke). */
+.itemEnd {
+  display: inline-flex;
+  margin-left: var(--space-3);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.itemFollowUp {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* The share dialog's More options: a native disclosure with the section heading's look, and the
+   values it holds on its line while closed, so nothing it sets is out of sight. */
+.moreSummary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-mid);
+}
+
+.moreSummary:hover {
+  color: var(--text-hi);
+}
+
+.moreNow {
+  margin-left: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-weight: var(--fw-regular);
+  color: var(--text-lo);
+}
+
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+/* A received share's one line: who it is from, then what it allows and the time left. */
+/* Who, then the level and time left; in a narrow panel the second half wraps under the name. */
+.itemLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-2);
+  min-width: 0;
+}
+
+.itemLine > .itemWho {
+  max-width: 100%;
+}
+
+.itemToggle {
+  align-self: flex-start;
+}
+
+/* What Details opens under a row: one fact per line, then its controls. */
+.itemDetails {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* The expiry warning (section 8.4): a warning to the team that made the share, so the warning
+   hue, with an icon and words so colour is never the only channel. */
+.soon {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--sev-warn-bg);
+  color: var(--sev-warn);
+  font-size: var(--fs-xs);
+}
+
+.ended {
+  color: var(--text-lo);
+}
+
+/* "Commands included" and "A newer version is not shared" on a Sharing page row (section 8.4:
+   sharing settings are easy to see), in the info hue, always with words. */
+.flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--sev-info-bg);
+  color: var(--sev-info);
+  font-size: var(--fs-xs);
+}
+
+/* ---- See it as they will: the projection preview ------------------------ */
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.projection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.previewField {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-canvas);
+}
+
+.previewCanvas {
+  display: block;
+}
+
+.player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.scrub {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.phases {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.phaseStrip {
+  position: relative;
+  height: var(--bar-h-timeline);
+  border-radius: var(--radius-xs);
+  background: var(--bar-track);
+  overflow: hidden;
+}
+
+.phase {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.phase[data-label="drive"],
+.phaseSwatch[data-label="drive"] {
+  background: var(--bar-preview);
+}
+
+.phase[data-label="score"],
+.phaseSwatch[data-label="score"] {
+  background: var(--field-target);
+}
+
+.phase[data-label="collect"],
+.phaseSwatch[data-label="collect"] {
+  background: var(--field-element);
+}
+
+.phase[data-label="wait"],
+.phaseSwatch[data-label="wait"] {
+  background: var(--bar-unknown);
+}
+
+.phase[data-label="park"],
+.phaseSwatch[data-label="park"] {
+  background: var(--canvas-annotation);
+}
+
+.phase[data-label="other"],
+.phaseSwatch[data-label="other"] {
+  background: var(--border-strong);
+}
+
+.phase + .phase {
+  box-shadow: inset 1px 0 0 var(--bar-track);
+}
+
+.phaseHead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--space-0_5);
+  margin-left: calc(var(--space-0_5) / -2);
+  background: var(--robot-outline);
+}
+
+.phaseLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.phaseKey {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.phaseSwatch {
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-xs);
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.factsHead {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-mid);
+}
+
+.factList,
+.structure {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.structure {
+  max-height: calc(var(--space-16) * 3.5);
+  overflow: auto;
+}
+
+.fact,
+.structureRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.fact {
+  flex-wrap: wrap;
+}
+
+.structureKind {
+  color: var(--text-hi);
+}
+
+.structureWords {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-lo);
+}
+
+.structureRow[data-kind="arm"] .mono {
+  color: var(--text-lo);
+}
+
+.exact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.exactSummary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.exactSummary:hover {
+  color: var(--text-hi);
+}

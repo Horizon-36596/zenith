@@ -67,6 +67,43 @@ jobs:
             apps/web/test-results/
           retention-days: 14
 
+  # The Firestore security rules, cloud/firestore.rules, against the Firestore emulator: the cloud
+  # package's permission and flow suites, which pnpm test runs only against the rules' in-memory copy
+  # and skips on the emulator without it. The emulator is a Java program that needs Java 21 or newer
+  # (ADR 0009 section 1). firebase-tools is a pinned devDependency of packages/cloud, so this runs the
+  # version the lockfile holds, and the emulator jar it downloads on first use is cached under the
+  # key of that package.json, which changes whenever the pin does. The tests run against the
+  # TypeScript sources, so no build is needed.
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Set up JDK 21 for the Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache the Firestore emulator
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('packages/cloud/package.json') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Rules tests against the Firestore emulator
+        run: pnpm test:rules
+
   # The Java robot runtime under robot/, the artifact JitPack serves. Builds the library (an Android
   # library, because SolversLib is only published as an AAR), runs its JVM unit tests, and installs it
   # into the runner's local Maven repository exactly the way jitpack.yml does, so a change that would

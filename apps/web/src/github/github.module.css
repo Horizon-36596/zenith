@@ -103,6 +103,30 @@
   color: var(--text-mid);
 }
 
+/* Where the token is kept: three radio choices, each with its one line. */
+.keep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.keepOption {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.keepHint {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
 /* ---- The toolbar's status chip ------------------------------------------ */
 
 .chip {
@@ -368,4 +392,13 @@
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
   color: var(--text-mid);
+}
+
+.textButton {
+  font-size: var(--fs-sm);
+  color: var(--accent);
+}
+
+.textButton:hover {
+  color: var(--accent-hover);
 }

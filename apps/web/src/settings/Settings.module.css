@@ -1,0 +1,985 @@
+/* The Settings window (issue #97) on the tokens of apps/web/UI_GUIDE.md, laid out by the Horizon UI
+   guide's section 7: the section list on the ground, the chosen section on the panel surface, one
+   hairline between them, and rows whose words start on the left edge and whose controls end on the
+   right edge. Three grounds (app, panel, the controls' inset well), three text colours (hi, mid,
+   lo), no card around anything. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-settings);
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: var(--tour-scrim);
+  animation: fade var(--dur-slow) var(--ease-out);
+}
+
+.window {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--settings-nav-w) minmax(0, 1fr);
+  width: min(var(--settings-w), 100%);
+  height: min(var(--settings-h), 100%);
+  overflow: hidden;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  animation: rise var(--dur-slow) var(--ease-out);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(var(--space-1));
+  }
+}
+
+/* ---- The list of sections --------------------------------------------------------------------- */
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-5) var(--space-2) var(--space-4);
+  background: var(--bg-app);
+  border-right: 1px solid var(--border-default);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-inline: var(--space-2);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-hi);
+}
+
+.navList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: var(--row-h);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+  text-align: left;
+  transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+
+.navItem:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+/* The section showing: the selected fill and weight, no coloured bar (Horizon guide, nav item). */
+.navItem[aria-current="page"] {
+  background: var(--bg-selected);
+  color: var(--text-hi);
+  font-weight: var(--fw-medium);
+}
+
+/* ---- The chosen section ----------------------------------------------------------------------- */
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.paneHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-5) var(--space-12) var(--space-5) var(--space-6);
+}
+
+.paneTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-xl);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-display);
+  color: var(--text-hi);
+}
+
+.paneTitle:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
+.paneBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--space-6) var(--space-6);
+}
+
+/* The example project's one banner (issue #246): the fact on the left, the way out on the right. */
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.paneNote {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+}
+
+/* Only at a phone's width, where a section opens over the list. */
+.back {
+  display: none;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  height: var(--ctl-h-md);
+  margin-bottom: var(--space-2);
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.back:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+/* ---- Groups and rows -------------------------------------------------------------------------- */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-mid);
+}
+
+.groupAside {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-6);
+  row-gap: var(--space-2);
+  padding-block: var(--space-3);
+}
+
+/* One hairline between the rows of a group, never round them. */
+.row + .row,
+.list + .row,
+.row + .list {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+  min-width: 0;
+}
+
+.rowLabel {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+  overflow-wrap: anywhere;
+}
+
+.rowDescription {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.rowControl {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* A choice among several words that does not fit a segmented switch: the Grid dropdown. */
+.select {
+  height: var(--ctl-h-md);
+  min-width: 128px;
+  padding-inline: var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  color: var(--text-hi);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+.rowBelow {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.rowBelow:empty {
+  display: none;
+}
+
+/* A value that cannot be changed here reads as text, not as a control (UI_GUIDE layout rule 6). */
+.value {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+  white-space: nowrap;
+}
+
+/* Nothing set: muted, so a value someone chose is what the eye finds (Horizon guide section 7). */
+.valueDefault {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+/* Full sim speed: each speed, what it does and what it costs, one short line each. */
+.speeds {
+  margin: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.speed {
+  display: grid;
+  grid-template-columns: 5.5em 1fr;
+  gap: var(--space-2);
+}
+
+.speedName {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.speedText {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--sev-error);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  letter-spacing: normal;
+  color: var(--text-lo);
+}
+
+.link {
+  color: var(--accent);
+}
+
+.link:hover {
+  color: var(--accent-hover);
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+/* ---- Robot and Commands (issue #100) ----------------------------------------------------------- */
+
+/* The inspector's field rows, kept to a width the eye can cross from label to value. */
+.fields {
+  display: flex;
+  flex-direction: column;
+  max-width: 520px;
+}
+
+/* Robot's groups run to the right edge, as every other pane's controls do (issue #414). */
+.rows > .fields {
+  max-width: none;
+}
+
+.fields + .fields {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* A value that cannot be changed here, as text in the mono face the inputs use. */
+.readValue {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding-inline: var(--space-1);
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+/* Unsaved Robot edits: kept in view at the foot of the section until saved or discarded. */
+.saveBar {
+  position: sticky;
+  bottom: calc(-1 * var(--space-6));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-inline: calc(-1 * var(--space-6));
+  margin-bottom: calc(-1 * var(--space-6));
+  padding: var(--space-3) var(--space-6);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-default);
+}
+
+.saveText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+.commandName {
+  font-family: var(--font-mono);
+}
+
+.rowMeta {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.params {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+}
+
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* Adding or editing a command: the form sits in the list, on the inset ground, in place of its row. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+.formHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  max-width: 520px;
+}
+
+.param {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.param .fields {
+  align-self: stretch;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  max-width: 520px;
+}
+
+/* The fake cloud's switches and the reads readout keep their own sheet-style blocks. */
+.developer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* ---- A phone's width: the window fills the screen, one column at a time ------------------------ */
+
+@media (max-width: 640px) {
+  .backdrop {
+    padding: 0;
+  }
+
+  .window {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 0;
+  }
+
+  .window[data-view="list"] .pane,
+  .window[data-view="section"] .nav {
+    display: none;
+  }
+
+  .nav {
+    padding: var(--space-4);
+    border-right: none;
+  }
+
+  .navItem {
+    height: var(--row-h-comfortable);
+  }
+
+  .back {
+    display: inline-flex;
+  }
+
+  .paneHead {
+    padding: var(--space-4) var(--space-12) var(--space-4) var(--space-4);
+  }
+
+  .paneBody {
+    padding: 0 var(--space-4) var(--space-6);
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rowControl,
+  .inline {
+    justify-content: flex-start;
+  }
+
+  .saveBar {
+    margin-inline: calc(-1 * var(--space-4));
+    padding-inline: var(--space-4);
+  }
+}
+
+/* Settings, Keyboard: the filter and Reset all keys above the groups, and the key chip on each row. */
+.keyboardTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding-bottom: var(--space-2);
+}
+
+.keyboardFilter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.keyboardFilterInput {
+  width: 220px;
+  max-width: 100%;
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  color: var(--text-hi);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+.keyChip {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: calc(var(--lh-sm) - 2px);
+  color: var(--text-hi);
+  white-space: nowrap;
+}
+
+/* A key the person set: the accent edge says it is theirs, as the sheet's dot does. */
+.keyChip[data-custom] {
+  border-color: var(--accent);
+}
+
+/* ---- Presets ------------------------------------------------------------------------------------ */
+
+.presetField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 520px;
+}
+
+.presetInput {
+  width: 320px;
+  max-width: 100%;
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  color: var(--text-hi);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+.presetCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- Issue #414: shorter panes ------------------------------------------------------------------- */
+
+/* The preset the settings came from: a check and "In use" where the Apply button would be. */
+.inUse {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--ok);
+}
+
+/* A long list of one-line rows, such as the keys: a row is its name and one control. */
+.group[data-compact] .row {
+  padding-block: var(--space-1);
+}
+
+/* The key on a Keyboard row is the button that rebinds it, so it keeps the chip's look and nothing more. */
+.keyButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--ctl-h-md);
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  background: transparent;
+}
+
+.keyButton:hover {
+  background: var(--bg-hover);
+}
+
+.keyButton[aria-pressed="true"] {
+  background: var(--bg-selected);
+}
+
+/* Settings, Editor, Toolbar buttons: the toolbar's buttons as one wrapped row of icon toggles. */
+.toolToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
+}
+
+.toolToggle {
+  display: inline-grid;
+  place-items: center;
+  width: var(--ctl-h-lg, 32px);
+  height: var(--ctl-h-lg, 32px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-lo);
+  transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+
+.toolToggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+/* On the toolbar: filled and in the bright text, as the toolbar's own pressed buttons are. */
+.toolToggle[aria-pressed="true"] {
+  background: var(--bg-selected);
+  border-color: var(--border-default);
+  color: var(--text-hi);
+}
+
+/* The one line above Robot: how many values are left to settle, and a switch to show only those. */
+.todoLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+/* Closing Settings with an unsaved robot.json: asked in the window, over the pane, never in a dialog. */
+.closeAsk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 var(--space-6) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.closeAsk > .error {
+  flex-basis: 100%;
+}
+
+@media (max-width: 640px) {
+  .closeAsk {
+    margin-inline: var(--space-4);
+  }
+}
+
+/* ---- Popovers opened from inside the window ----------------------------------------------------- */
+
+/* Where the window's menus and choice lists are portalled (issue #313): inside the backdrop, after
+   the window, so they draw over it at its own level. It holds no box of its own; each popover inside
+   is `position: fixed` and places itself. */
+.popoverLayer {
+  position: fixed;
+  inset: 0 auto auto 0;
+  width: 0;
+  height: 0;
+}
+
+/* ---- Search (issue #430) --------------------------------------------------------------------- */
+
+/* The box under the title: one inset well, the icon inside its left edge, the clear button inside its right. */
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-inline: var(--space-2);
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--space-2);
+  color: var(--text-lo);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  height: var(--ctl-h-lg);
+  padding-inline: calc(var(--space-2) + 14px + var(--space-2)) calc(var(--ctl-h-sm) + var(--space-1));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  color: var(--text-hi);
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  text-overflow: ellipsis;
+}
+
+.searchInput::placeholder {
+  color: var(--text-lo);
+}
+
+.searchInput:hover,
+.searchInput:focus-visible {
+  border-color: var(--border-strong);
+}
+
+.searchClear {
+  position: absolute;
+  right: var(--space-1);
+  display: inline-flex;
+}
+
+/* How many rows each section has that match, at the right of its name in the list. */
+.navCount {
+  margin-left: auto;
+  min-width: 20px;
+  padding-inline: 6px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-selected);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--text-hi);
+}
+
+.paneSub {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+/* The matching rows. Each section is a block under its own name, one hairline above each block after
+   the first and one between the rows, so a long result still reads as a few parts. */
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.resultGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.resultGroup + .resultGroup {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-default);
+}
+
+.resultHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-mid);
+}
+
+.resultCount {
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.resultList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resultList > li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--space-6);
+  width: calc(100% + var(--space-4));
+  margin-inline: calc(-1 * var(--space-2));
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-xs);
+  text-align: left;
+  transition: background var(--dur-base) var(--ease-out);
+}
+
+.result:hover {
+  background: var(--bg-hover);
+}
+
+.resultText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+  min-width: 0;
+}
+
+/* Where the row lives inside its section: quiet, at the right, so the label and its line lead. */
+.resultGroupName {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+/* The words that matched: a tinted fill and an underline, so the mark does not rest on colour alone. */
+.mark {
+  padding: 0;
+  border-radius: 2px;
+  background: var(--bg-selected);
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+}
+
+.noResults {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-4);
+}
+
+.noResultsTitle {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-hi);
+  overflow-wrap: anywhere;
+}
+
+.noResultsQuery {
+  font-weight: var(--fw-medium);
+}
+
+/* At a phone's width a search shows its box on top and the results under it, in place of both screens. */
+@media (max-width: 640px) {
+  .window[data-searching="true"] {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .window[data-searching="true"] .nav {
+    overflow: visible;
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  .window[data-searching="true"] .navList,
+  .window[data-searching="true"] .back {
+    display: none;
+  }
+
+  .window[data-searching="true"] .pane {
+    display: flex;
+  }
+
+  .searchInput {
+    height: var(--row-h-comfortable);
+  }
+}

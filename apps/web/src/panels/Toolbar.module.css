@@ -133,19 +133,89 @@
 .bar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  /* One row, always (issue #412): a second row would push the whole editor down and move the
+     buttons with the window's width. On a phone, where the row cannot fit, it scrolls sideways. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
   column-gap: var(--space-4);
   flex: none;
-  min-height: var(--toolbar-h);
+  height: var(--toolbar-h);
   padding-inline: var(--space-3);
   background: var(--bg-app);
   z-index: var(--z-toolbar);
 }
 
+/* The tool groups: they take what the right cluster leaves, and what does not fit goes into the
+   More menu (Toolbar.tsx `useToolbarFit`), so Search, Settings and Help stay on screen at any width
+   down to 640 px. Hidden overflow only guards the one frame before the count is worked out. */
+.tools {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  column-gap: var(--space-4);
+  overflow: hidden;
+  /* Room for a focused button's ring at either end, which the hidden overflow would cut. */
+  padding-inline: var(--space-1);
+  margin-inline: calc(-1 * var(--space-1));
+}
+
 .group {
   display: flex;
   align-items: center;
+  flex: none;
   gap: var(--space-1);
+}
+
+/* The room a tool's option keeps while its tool is off, so choosing the tool moves nothing. */
+.slot {
+  display: inline-block;
+  width: var(--ctl-h-tool);
+  height: var(--ctl-h-tool);
+  flex: none;
+}
+
+/* Optimize and its chevron, one control (issue #412). */
+.split {
+  display: inline-flex;
+  align-items: center;
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: var(--ctl-h-tool);
+  padding: 0;
+  border-radius: var(--radius-xs);
+  color: var(--text-mid);
+}
+
+.chevron:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+/* Unavailable as the wand beside it is: greyed, and its tooltip says why. */
+.chevron[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.chevron[aria-disabled="true"]:hover {
+  background: none;
+  color: var(--text-disabled);
+}
+
+/* Shown only at 1100 px and wider: the Search label and key, and the Docs book (issue #412). */
+@media (max-width: 1099.98px) {
+  .wideOnly {
+    display: none;
+  }
 }
 
 .search {

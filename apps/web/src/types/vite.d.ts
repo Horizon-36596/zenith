@@ -26,6 +26,11 @@ interface ImportMetaEnv {
   readonly DEV: boolean;
   readonly PROD: boolean;
   readonly MODE: string;
+  /**
+   * Extra origins host mode accepts, comma separated, for a host's preview deployments
+   * (`project/hostOrigins.ts`, site/docs/host-protocol.md). Unset in the usual build.
+   */
+  readonly VITE_ZENITH_HOST_ORIGINS?: string;
 }
 
 interface ImportMeta {
@@ -36,3 +41,9 @@ interface ImportMeta {
     options: { eager: true; query?: string; import?: string },
   ): Record<string, T>;
 }
+
+/**
+ * The Zenith version from the root package.json, set by `define` in vite.config.ts. Absent where Vite
+ * did not build the code (the node unit tests), so read it through `typeof` (report/setup.ts).
+ */
+declare const __APP_VERSION__: string;

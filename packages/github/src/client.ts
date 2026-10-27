@@ -95,6 +95,7 @@ function toRepo(raw: RawRepo): Repo {
     defaultBranch: raw.default_branch,
     private: raw.private,
     htmlUrl: raw.html_url,
+    ...(raw.permissions?.push === undefined ? {} : { canPush: raw.permissions.push }),
   };
 }
 
@@ -348,10 +349,12 @@ export class GitHubClient {
       repo: string,
       branch: string,
       state: "open" | "closed" | "all" = "open",
+      base?: string,
     ): Promise<PullRequest[]> => {
       const raw = await this.paginate<RawPull>(`/repos/${owner}/${repo}/pulls`, {
         head: `${owner}:${branch}`,
         state,
+        ...(base === undefined ? {} : { base }),
         per_page: 100,
       });
       return raw.map(toPull);

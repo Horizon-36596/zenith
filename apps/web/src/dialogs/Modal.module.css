@@ -1,6 +1,9 @@
 .dialog {
   max-width: calc(100vw - var(--space-8));
-  max-height: calc(100vh - var(--space-12));
+  max-height: calc(90vh - var(--space-6));
+  /* Anchored near the top, so a dialog that grows (a section that expands) grows downward and the
+     title stays where it was. */
+  margin-block: 10vh auto;
   padding: var(--pad-modal);
   background: var(--bg-raised);
   color: var(--text-hi);
@@ -18,7 +21,20 @@
   font-size: var(--fs-lg);
   line-height: var(--lh-lg);
   letter-spacing: var(--tracking-tight);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-medium);
+}
+
+/* A title with a control at its right end; the title gives its bottom margin to the row. */
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+}
+
+.titleRow .title {
+  margin: 0;
 }
 
 .body {
@@ -44,6 +60,7 @@
 
 /* A reference sheet: the window's height, with the body taking what the title leaves. */
 .tall[open] {
+  margin-block: var(--space-3) auto;
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - var(--space-6));

@@ -31,6 +31,8 @@
  * Pure: the caller supplies the footprint bounds, so nothing here needs a robot or the DOM.
  */
 import { degToRad, radToDeg, wrapAngle, type Box2, type Pose } from "@horizon36596/zenith-core";
+import type { Waypoints } from "@horizon36596/zenith-schema";
+import type { Ray } from "./modifiers.js";
 
 export const WAYPOINT_SNAP_PX = 6;
 export const WALL_SNAP_IN = 1;
@@ -45,6 +47,19 @@ export interface SnapWaypoint {
   name: string;
   xIn: number;
   yIn: number;
+}
+
+/**
+ * The waypoints rule 1 may snap onto: every pin in `waypoints.json` except the ones this person hid
+ * (issue #236), so a snap never lands on, or names, a pin nobody can see.
+ */
+export function snapWaypointsOf(
+  waypoints: Waypoints | null | undefined,
+  hidden?: ReadonlySet<string>,
+): SnapWaypoint[] {
+  return Object.entries(waypoints?.waypoints ?? {})
+    .filter(([name]) => hidden?.has(name) !== true)
+    .map(([name, waypoint]) => ({ name, xIn: waypoint.xIn, yIn: waypoint.yIn }));
 }
 
 /** A wall the footprint was snapped flush to, for the snap-feedback line. */
@@ -85,6 +100,11 @@ export interface SnapResult {
   walls?: SnapWall[];
   /** Set when rule 3 fired because a mouth, not the body, is what reaches the wall. */
   mouth?: boolean;
+  /**
+   * Set when Shift kept a path end to a ray from its anchor (`modifiers.ts` `constrainToRay`), so
+   * the live layer can draw the ray and the bubble can name its bearing.
+   */
+  ray?: Ray;
 }
 
 const round = (value: number, step: number): number => Math.round(value / step) * step;

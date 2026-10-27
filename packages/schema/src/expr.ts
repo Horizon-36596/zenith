@@ -221,6 +221,8 @@ export function evaluateEstimateExpression(
     case "number":
       return expr.value;
     case "name": {
+      // Only the scope's own keys: `toString` or `constructor` must not reach Object.prototype.
+      if (!Object.hasOwn(scope, expr.name)) return null;
       const value = scope[expr.name];
       return value === undefined ? null : value;
     }

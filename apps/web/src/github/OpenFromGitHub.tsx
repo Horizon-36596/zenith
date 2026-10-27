@@ -6,19 +6,45 @@
  *
  * The base branch is the one thing the app never writes to; what a Save commits to is the work
  * branch, named here and shown in the toolbar chip.
+ *
+ * When the open folder project is a clone of a GitHub repository (desktop app only), the tab offers
+ * that repository first, with its base already chosen, and fills the picker in with it (issue #213).
  */
-import { useEffect, useState } from "react";
-import type { RepoSummary } from "@horizon36596/zenith-github";
+import { useEffect, useRef, useState } from "react";
+import type { GitHubClient, RepoSummary } from "@horizon36596/zenith-github";
 import { Button } from "../components/primitives";
+import { Tooltip } from "../components/Tooltip";
 import { setDialog, useEditor } from "../state/store";
 import { openFromGitHub, openReviewFromUrl, setWorkBranch } from "./actions";
+import { markReturnToGitHub, originName, useCloneOrigin } from "./cloneOffer";
 import { currentClient } from "./session";
 import styles from "./github.module.css";
 
 const say = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+/**
+ * Lists `summary`'s branches into `show`, or its failure into `fail`, unless another repository has
+ * been picked since: clicking A then B with A's list arriving last must not leave A's branches in
+ * B's base picker (issue #407).
+ */
+export async function listBranches(
+  client: Pick<GitHubClient, "branches">,
+  summary: RepoSummary,
+  latest: { current: string | null },
+  show: (names: string[]) => void,
+  fail: (message: string) => void,
+): Promise<void> {
+  try {
+    const list = await client.branches.list(summary.owner, summary.repo);
+    if (latest.current === summary.fullName) show(list.map((branch) => branch.name));
+  } catch (failure) {
+    if (latest.current === summary.fullName) fail(say(failure));
+  }
+}
+
 export function GitHubTab() {
   const { auth, project, repo, fileName, busy } = useEditor();
+  const origin = useCloneOrigin();
   const [repos, setRepos] = useState<RepoSummary[] | null>(null);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<RepoSummary | null>(null);
@@ -27,6 +53,8 @@ export function GitHubTab() {
   const [prUrl, setPrUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /** The repository picked last, so a slower branch list for an earlier pick is dropped (issue #407). */
+  const latestPick = useRef<string | null>(null);
 
   // Repositories are only ever listed for a signed-in account; there is no anonymous path.
   useEffect(() => {
@@ -54,35 +82,44 @@ export function GitHubTab() {
     };
   }, [auth]);
 
-  const choose = (summary: RepoSummary): void => {
+  const choose = (summary: RepoSummary, startBase = summary.defaultBranch): void => {
     const client = currentClient();
+    latestPick.current = summary.fullName;
     setPicked(summary);
-    setBase(summary.defaultBranch);
+    setBase(startBase);
     setBranches(null);
     setError(null);
-    client?.branches.list(summary.owner, summary.repo).then(
-      (list) => {
-        setBranches(list.map((branch) => branch.name));
-      },
-      (failure: unknown) => {
-        setError(say(failure));
-      },
-    );
+    if (client !== null) void listBranches(client, summary, latestPick, setBranches, setError);
   };
+
+  // A clone's repository is filled in for the person, at the clone's base, once the list arrives.
+  useEffect(() => {
+    if (origin === null || repos === null || picked !== null) return;
+    const name = originName(origin).toLowerCase();
+    const match = repos.find((summary) => summary.fullName.toLowerCase() === name);
+    if (match === undefined) return;
+    setQuery(match.fullName);
+    choose(match, origin.base);
+    // `choose` is a fresh function each render; the list and the origin are what this waits on.
+  }, [origin, repos]);
 
   if (auth === null) {
     return (
       <>
+        {origin === null || project === null ? null : (
+          <p className={styles.prose} data-testid="github-clone-offer">
+            {project.name} is a clone of <code className="mono">{originName(origin)}</code>.
+          </p>
+        )}
         <p className={styles.prose}>
-          Sign in with a fine-grained personal access token and Zenith will list the repositories
-          that token can push to. Nothing is fetched until you do: with no token this tab shows no
-          repositories, not even public ones.
+          Sign in to list the repositories your token can push to.
         </p>
         <div className={styles.row}>
           <Button
             kind="primary"
             testId="github-open-signin"
             onClick={() => {
+              markReturnToGitHub();
               setDialog("signIn");
             }}
           >
@@ -100,10 +137,29 @@ export function GitHubTab() {
   return (
     <>
       <p className={styles.prose}>
-        Signed in as {auth.login}. Pick the robot repository and the branch to read from; Zenith
-        reads <code className="mono">zenith.json</code> and the files it names, and commits your
-        edits to a work branch beside it.
+        Signed in as {auth.login}.
       </p>
+
+      {origin === null || project === null ? null : (
+        <div className={styles.stack} data-testid="github-clone-offer">
+          <div className={styles.row}>
+            <Button
+              tooltip="Open this repository in GitHub mode"
+              hint={`Opens it from GitHub at ${origin.base}, the branch the folder's pull requests go into. Your folder stays as it is.`}
+              whyDisabled={busy ? "Opening a project now." : null}
+              testId="github-open-clone"
+              onClick={() => {
+                void openFromGitHub(origin.owner, origin.repo, origin.base);
+              }}
+            >
+              Open this repository in GitHub mode
+            </Button>
+          </div>
+          <p className={styles.hint}>
+            {project.name} is a clone of <code className="mono">{originName(origin)}</code>.
+          </p>
+        </div>
+      )}
 
       <div className={styles.stack}>
         <label className={styles.label} htmlFor="github-repo-search">
@@ -175,7 +231,7 @@ export function GitHubTab() {
           </select>
           <Button
             kind="primary"
-            disabled={busy || base === ""}
+            whyDisabled={busy ? "Opening a project now." : base === "" ? "Pick a branch first." : null}
             testId="github-open-repo"
             onClick={() => {
               void openFromGitHub(picked.owner, picked.repo, base);
@@ -197,22 +253,26 @@ export function GitHubTab() {
           <label className={styles.label} htmlFor="github-branch">
             Work branch
           </label>
-          <input
-            id="github-branch"
-            className={styles.search}
-            data-testid="github-branch"
-            defaultValue={repo.branch}
-            onBlur={(event) => {
-              setWorkBranch(event.target.value, fileName);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-            }}
-          />
-          <p className={styles.hint}>
-            Every Save commits here. It is created from {repo.base} the first time, and {repo.base}{" "}
-            itself is never written to. Clearing this field goes back to{" "}
-            <code className="mono">auto/&lt;auto&gt;/{auth.login}</code>.
+          <Tooltip
+            label="Work branch"
+            hint={`Created from ${repo.base} the first time; the base branch is never written to. Empty goes back to auto/<auto>/${auth.login}.`}
+          >
+            <input
+              id="github-branch"
+              className={styles.search}
+              data-testid="github-branch"
+              defaultValue={repo.branch}
+              onBlur={(event) => {
+                // Only a change names a branch; tabbing through the field leaves it alone (issue #407).
+                if (event.target.value !== repo.branch) setWorkBranch(event.target.value, fileName);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+            />
+          </Tooltip>
+          <p className={styles.hint} data-testid="github-branch-base">
+            Zenith never writes to {repo.base}.
           </p>
         </div>
       )}
@@ -237,7 +297,7 @@ export function GitHubTab() {
             }}
           />
           <Button
-            disabled={prUrl.trim() === ""}
+            whyDisabled={prUrl.trim() === "" ? "Paste the pull request's address first." : null}
             testId="github-review-open"
             onClick={() => {
               void openReviewFromUrl(prUrl);

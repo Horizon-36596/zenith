@@ -189,6 +189,57 @@ const HEADER_KEYS = [
   "start",
 ] as const;
 
+/**
+ * The ids of the steps that kept their place among the steps both versions of one list hold: the
+ * longest run of them that is in the same order before and after. A step inserted or removed
+ * shifts the index of every step after it, but it does not change their order, so none of them is
+ * reported as moved; only a step outside this run was really reordered.
+ */
+function keptInOrder(before: readonly Entry[], after: readonly Entry[]): Set<string> {
+  const afterIds = new Set(after.map((entry) => entry.id));
+  const beforeIds = new Set(before.map((entry) => entry.id));
+  const left = before.filter((entry) => afterIds.has(entry.id)).map((entry) => entry.id);
+  const right = after.filter((entry) => beforeIds.has(entry.id)).map((entry) => entry.id);
+  // The longest common subsequence, by the textbook table; a list holds at most a few hundred steps.
+  const rows = left.length + 1;
+  const cols = right.length + 1;
+  const table = new Array<number>(rows * cols).fill(0);
+  for (let i = left.length - 1; i >= 0; i -= 1) {
+    for (let j = right.length - 1; j >= 0; j -= 1) {
+      table[i * cols + j] =
+        left[i] === right[j]
+          ? (table[(i + 1) * cols + j + 1] ?? 0) + 1
+          : Math.max(table[(i + 1) * cols + j] ?? 0, table[i * cols + j + 1] ?? 0);
+    }
+  }
+  const kept = new Set<string>();
+  let i = 0;
+  let j = 0;
+  while (i < left.length && j < right.length) {
+    if (left[i] === right[j]) {
+      kept.add(left[i] as string);
+      i += 1;
+      j += 1;
+    } else if ((table[(i + 1) * cols + j] ?? 0) >= (table[i * cols + j + 1] ?? 0)) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+  return kept;
+}
+
+/** The entries of each list, keyed on the list's name, in list order. */
+function byList(entries: readonly Entry[]): Map<string, Entry[]> {
+  const lists = new Map<string, Entry[]>();
+  for (const entry of entries) {
+    const list = lists.get(entry.list);
+    if (list === undefined) lists.set(entry.list, [entry]);
+    else list.push(entry);
+  }
+  return lists;
+}
+
 /** The step-level structural diff between two routines. */
 export function diff(a: Auto, b: Auto): AutoDiff {
   const before = walkSteps(a.steps);
@@ -196,6 +247,14 @@ export function diff(a: Auto, b: Auto): AutoDiff {
   const beforeById = new Map(before.map((entry) => [entry.id, entry]));
   const afterById = new Map(after.map((entry) => [entry.id, entry]));
   const changes: AutoDiffChange[] = [];
+
+  // A step moved when it changed lists, or when, within its list, it is not among the steps that
+  // kept their order. Its index alone is not enough: an inserted wait shifts every later index.
+  const beforeLists = byList(before);
+  const kept = new Set<string>();
+  for (const [list, entries] of byList(after)) {
+    for (const id of keptInOrder(beforeLists.get(list) ?? [], entries)) kept.add(id);
+  }
 
   for (const entry of before) {
     if (afterById.has(entry.id)) continue;
@@ -248,7 +307,7 @@ export function diff(a: Auto, b: Auto): AutoDiff {
       change.summary = summarise(change, old.step, entry.step);
       changes.push(change);
     }
-    if (old.list !== entry.list || old.index !== entry.index) {
+    if (old.list !== entry.list || !kept.has(entry.id)) {
       const change: AutoDiffChange = {
         kind: "moved",
         stepId: entry.id,

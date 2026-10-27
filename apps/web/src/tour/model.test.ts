@@ -3,15 +3,21 @@ import { NO_TOUR_PROGRESS } from "../state/prefs";
 import {
   TOUR_OFF,
   currentStop,
+  isFirstRunAddress,
   positionLabel,
   progressAfter,
   shouldAutoStart,
+  shouldOfferPreset,
   tourReducer,
+  withinStops,
   type TourEvent,
   type TourState,
   type TourStops,
 } from "./model";
-import { CORE_STOPS, FULL_STOPS, TOUR_STOPS } from "./stops";
+import { ALL_FEATURES, NO_FEATURES, type Feature, type FeatureSwitches } from "../state/features";
+import { ESSENTIAL_UNCHOSEN, presetSettings } from "../settings/presets";
+import { SETTINGS } from "../settings/registry";
+import { CORE_STOPS, FULL_STOPS, SIMULATE_IN_BROWSER, TOUR_STOPS, browserStops, stopsShown, tourStopsFor } from "./stops";
 
 const STOPS: TourStops = {
   core: [
@@ -146,14 +152,197 @@ describe("the shipped stops", () => {
     }
   });
 
+  it("says what Save does in the example, where the tour runs (sweep items A21 and D11)", () => {
+    const run = CORE_STOPS.find((stop) => stop.id === "run");
+    expect(run?.body).toContain("the example is read only, so there Save asks whether to save the full project or just the auto");
+  });
+
+  // The 0.1.2 UX sweep (W1-4): a browser cannot run the robot's sim, so there Simulate loads its trace.
+  it("says in a browser that Simulate loads the trace the robot repository's sim records", () => {
+    const simulate = (stops: typeof TOUR_STOPS) => stops.full.find((stop) => stop.id === "run.simulate")?.body;
+    expect(simulate(tourStopsFor(null))).toContain("Runs the high-fidelity sim");
+    expect(simulate(browserStops(tourStopsFor(null)))).toBe(SIMULATE_IN_BROWSER);
+    expect(SIMULATE_IN_BROWSER).toContain("trace recorded by the high-fidelity sim in your robot repository");
+    // The tests run as a browser, with no desktop bridge.
+    expect(simulate(TOUR_STOPS)).toBe(SIMULATE_IN_BROWSER);
+  });
+
   it("covers the core features in the order the owner asked for", () => {
     expect(CORE_STOPS.map((stop) => stop.id)).toEqual([
       "field",
       "steps",
       "insert",
       "inspector",
+      // Issue #217: the owner asked for waypoints to be explained the first time someone meets them.
+      "waypoints",
       "findings",
       "run",
     ]);
+  });
+});
+
+describe("where a first visit starts the tour", () => {
+  it("is the editor's own page, however its address is written", () => {
+    expect(isFirstRunAddress("/", "", "", "/")).toBe(true);
+    expect(isFirstRunAddress("/zenith/app/", "", "", "/zenith/app/")).toBe(true);
+    expect(isFirstRunAddress("/zenith/app", "", "", "/zenith/app/")).toBe(true);
+    expect(isFirstRunAddress("/zenith/app/index.html", "", "", "/zenith/app/")).toBe(true);
+  });
+
+  it("ignores a query that does not open anything, such as a link's tracking parameters", () => {
+    expect(isFirstRunAddress("/", "?utm_source=discord", "", "/")).toBe(true);
+    expect(isFirstRunAddress("/", "?ref=readme", "", "/")).toBe(true);
+  });
+
+  it("is not host mode, a review link or another page", () => {
+    // Host mode starts the tour itself, once the host's project has opened.
+    expect(isFirstRunAddress("/", "?host=dsim", "", "/")).toBe(false);
+    expect(isFirstRunAddress("/", "?review=fixture", "", "/")).toBe(false);
+    expect(isFirstRunAddress("/", "", "#/review/owner/repo/3", "/")).toBe(false);
+    expect(isFirstRunAddress("/other", "", "", "/")).toBe(false);
+  });
+
+  it("never starts again for someone who has seen it, however they left it", () => {
+    expect(shouldAutoStart({ seen: true, coreDone: false, fullDone: false }, true)).toBe(false);
+  });
+});
+
+describe("when the first visit asks for a preset", () => {
+  it("does so only on a true first run: nothing seen, nothing chosen, the example open", () => {
+    expect(shouldOfferPreset(NO_TOUR_PROGRESS, ESSENTIAL_UNCHOSEN, true)).toBe(true);
+  });
+
+  it("waits for the example, so the card never sits over an empty field", () => {
+    expect(shouldOfferPreset(NO_TOUR_PROGRESS, ESSENTIAL_UNCHOSEN, false)).toBe(false);
+  });
+
+  it("never asks someone who has seen the tour, however they left it", () => {
+    expect(shouldOfferPreset({ seen: true, coreDone: false, fullDone: false }, ESSENTIAL_UNCHOSEN, true)).toBe(false);
+  });
+
+  it("never asks someone who already chose a preset, in Settings or on the card", () => {
+    expect(shouldOfferPreset(NO_TOUR_PROGRESS, { id: "basic", chosen: true }, true)).toBe(false);
+    expect(shouldOfferPreset(NO_TOUR_PROGRESS, { id: "user:abc", chosen: true, basedOn: "full" }, true)).toBe(false);
+  });
+});
+
+describe("the stops in host mode", () => {
+  const host = tourStopsFor("DSIM");
+
+  it("talk about the host's auto and Save to the host, not the example or a repository", () => {
+    const field = host.core.find((stop) => stop.id === "field");
+    const run = host.core.find((stop) => stop.id === "run");
+    expect(field?.body).toContain("DSIM");
+    expect(field?.body).not.toMatch(/example/);
+    expect(run?.body).toContain("Save to DSIM");
+    expect(run?.body).not.toMatch(/repository/);
+    // Save to the host is on the host bar, so the stop's spotlight is there too.
+    expect(run?.anchor).toBe("host.save");
+    expect(CORE_STOPS.find((stop) => stop.id === "run")?.anchor).toBe("run");
+  });
+
+  it("keep the same core stops in the same order, and drop Propose from the full tour", () => {
+    expect(host.core.map((stop) => stop.id)).toEqual(CORE_STOPS.map((stop) => stop.id));
+    expect(host.full.some((stop) => stop.id === "run.propose")).toBe(false);
+    expect(tourStopsFor(null).full.some((stop) => stop.id === "run.propose")).toBe(true);
+  });
+});
+
+describe("the stops the settings hide", () => {
+  const ids = (stops: TourStops): string[] => [...stops.core, ...stops.full].map((stop) => stop.id);
+  const body = (stops: TourStops, id: string): string => [...stops.core, ...stops.full].find((stop) => stop.id === id)?.body ?? "";
+  const every = ids(TOUR_STOPS);
+  const switchOf = (entry: (typeof SETTINGS)[number]): Feature => entry.storage.slice("features.".length) as Feature;
+
+  it("drops every stop each switch gates while that switch is off, and no other stop", () => {
+    const switches = SETTINGS.filter((entry) => entry.kind === "feature");
+    expect(switches.map(switchOf).sort()).toEqual(Object.keys(ALL_FEATURES).sort());
+    for (const entry of switches) {
+      const gated: readonly string[] = entry.gates?.tourStops ?? [];
+      const shown = ids(stopsShown(TOUR_STOPS, { ...ALL_FEATURES, [switchOf(entry)]: false }));
+      expect(shown, `${entry.id} off`).toEqual(every.filter((id) => !gated.includes(id)));
+    }
+    expect(ids(stopsShown(TOUR_STOPS, ALL_FEATURES))).toEqual(every);
+  });
+
+  it("gives Basic a tour without the group or ledger stops", () => {
+    const basic = presetSettings("basic");
+    const features = Object.fromEntries(
+      (Object.keys(ALL_FEATURES) as Feature[]).map((feature) => [feature, basic[`features.${feature}`] === true]),
+    ) as unknown as FeatureSwitches;
+    const shown = ids(stopsShown(TOUR_STOPS, features));
+    for (const id of ["groups", "ledger"]) expect(shown).not.toContain(id);
+    // Basic keeps Commands on.
+    expect(shown).toContain("tool.marker");
+    expect(shown).toContain("timeline");
+  });
+
+  it("does not mention groups, waypoints, piecewise headings or finding codes while they are off", () => {
+    const off = stopsShown(TOUR_STOPS, { ...ALL_FEATURES, groups: false, waypoints: false, advancedHeading: false }, { findingCodes: false });
+    expect(body(off, "steps")).toBe("The robot runs these top to bottom. A step drives a path, runs a command, or waits.");
+    expect(body(off, "inspector")).not.toMatch(/waypoint/);
+    expect(body(off, "section.heading")).not.toMatch(/Piecewise/);
+    expect(body(off, "tool.heading")).not.toMatch(/split/i);
+    expect(body(TOUR_STOPS, "tool.heading")).toMatch(/Right-click a path for Split heading here./);
+    expect(body(off, "findings.fixes")).not.toMatch(/code/);
+    // The example has no problems, so the stop speaks of a row the list may have (0.1.2 UX sweep, W1-7).
+    expect(body(off, "findings.fixes")).toMatch(/^When the Problems list has a row, click it/);
+    expect(body(TOUR_STOPS, "findings.fixes")).toMatch(/^When the Problems list has a row, hover its code/);
+    const pathsOnly = stopsShown(TOUR_STOPS, NO_FEATURES);
+    expect(body(pathsOnly, "steps")).toBe("The robot runs these top to bottom. A step drives a path or waits.");
+    const on = stopsShown(TOUR_STOPS, ALL_FEATURES, { findingCodes: true });
+    for (const id of ["steps", "inspector", "section.heading", "tool.heading", "findings.fixes"]) {
+      expect(body(on, id), id).toBe(body(TOUR_STOPS, id));
+    }
+  });
+
+  it("writes every key into its stop's text, leaving no {key:...} marker behind", () => {
+    const shown = stopsShown(TOUR_STOPS, ALL_FEATURES);
+    for (const stop of [...shown.core, ...shown.full]) {
+      expect(stop.body, stop.id).not.toContain("{key:");
+      expect(stop.task?.label ?? "", stop.id).not.toContain("{key:");
+    }
+    expect(shown.full.find((stop) => stop.id === "tool.select")?.body).toContain("V switches back to it");
+  });
+
+  it("drops the stop on a toolbar button the person took off the toolbar", () => {
+    const shown = ids(stopsShown(TOUR_STOPS, ALL_FEATURES, { buttonShown: (id) => id !== "tool.measure" && id !== "view.alliance" }));
+    expect(shown).toEqual(every.filter((id) => id !== "tool.measure" && id !== "view.alliance"));
+  });
+
+  it("drops the Play and save stop once every button of the run group is off the toolbar", () => {
+    const run = ["run.validate", "view.play", "run.simulate", "run.save", "run.propose"];
+    const none = ids(stopsShown(TOUR_STOPS, ALL_FEATURES, { buttonShown: (id) => !run.includes(id) }));
+    expect(none).not.toContain("run");
+    const one = ids(stopsShown(TOUR_STOPS, ALL_FEATURES, { buttonShown: (id) => id === "view.play" || !run.includes(id) }));
+    expect(one).toContain("run");
+  });
+});
+
+describe("a tour whose stop Settings hides (issue #403)", () => {
+  const fewer: TourStops = { core: STOPS.core, full: STOPS.full.slice(0, 1) };
+
+  it("moves back onto the last stop it still has, instead of showing nothing", () => {
+    const past: TourState = { phase: "full", index: 1 };
+    expect(currentStop(past, fewer)).toBeNull();
+    const synced = tourReducer(past, { type: "sync" }, fewer);
+    expect(synced).toEqual({ phase: "full", index: 0 });
+    expect(currentStop(synced, fewer)?.id).toBe("x");
+  });
+
+  it("goes on to the next card when the phase has no stops left", () => {
+    expect(withinStops({ phase: "full", index: 0 }, { core: STOPS.core, full: [] })).toEqual({ phase: "finished", index: 0 });
+    expect(withinStops({ phase: "core", index: 0 }, { core: [], full: STOPS.full })).toEqual({ phase: "choice", index: 0 });
+  });
+
+  it("walks on from where it is held to", () => {
+    expect(tourReducer({ phase: "full", index: 1 }, { type: "next" }, fewer)).toEqual({ phase: "finished", index: 0 });
+    expect(tourReducer({ phase: "core", index: 5 }, { type: "back" }, STOPS)).toEqual({ phase: "core", index: 0 });
+  });
+
+  it("leaves a state that is on a stop it has as it is", () => {
+    const on: TourState = { phase: "full", index: 0 };
+    expect(withinStops(on, fewer)).toBe(on);
+    expect(tourReducer(on, { type: "sync" }, fewer)).toBe(on);
   });
 });

@@ -6,7 +6,7 @@
 # One dependency, pinned in site/requirements.txt: mkdocs-material.
 site_name: Zenith
 site_description: >-
-  A PathPlanner-style autonomous path planner for FTC, shared by humans and agents.
+  An autonomous path planner for FTC, shared by humans and agents.
 site_author: Horizon (FTC 36596)
 # The domain the site is served at. Another agent wires the build that deploys here; this line is
 # what MkDocs uses for canonical links and the sitemap in the meantime.
@@ -22,13 +22,13 @@ site_dir: build/site
 # The version stamp, shown in the footer of every page. `package.json` at the repository root is
 # the authoritative source; scripts/stamp-version.mjs keeps this in sync. Bump this line when that
 # script runs.
-copyright: "Zenith 0.1.1 · Horizon (FTC 36596) · MIT"
+copyright: "Zenith 0.1.2 · Horizon (FTC 36596) · MIT"
 
 theme:
   name: material
 
-  logo: assets/horizon-mark.svg
-  favicon: assets/horizon-mark.svg
+  logo: assets/zenith-mark.svg
+  favicon: assets/zenith-mark.svg
 
   features:
     - navigation.sections
@@ -52,6 +52,10 @@ theme:
 extra_css:
   - assets/stylesheets/horizon.css
 
+# Cookieless page-view counter; see the file's header and privacy.md.
+extra_javascript:
+  - assets/javascripts/pageviews.js
+
 markdown_extensions:
   - admonition
   - attr_list
@@ -67,17 +71,29 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Desktop files, simulation and recovery: desktop.md
   - Autonomous paths, explained: paths-explained.md
   - The editor: editor.md
+  - Host mode: host-protocol.md
   - Step kinds: step-kinds.md
   - Checks and findings: checks-and-findings.md
   - File format reference: file-format.md
   - Simulation: simulation.md
+  - Full sim with SimLoop: full-sim-simloop.md
+  - The sim server protocol: sim-server-protocol.md
   - Robot runtime: robot-runtime.md
   - Choosing a command library: command-libraries.md
+  - Bring paths from other planners: import.md
   - CLI reference: cli-reference.md
   - Agents and MCP: agents-mcp.md
   - Working with GitHub: github.md
+  - Alliance partners: alliance-partners.md
+  - Teams and sharing: teams-and-sharing.md
   - Seasons: seasons.md
   - FAQ and troubleshooting: faq.md
   - Changelog: changelog.md
+  - Accounts:
+      - Privacy notice: privacy.md
+      - Terms of use: terms.md
+      - Retention policy: retention.md
+      - "Guide for school admins": school-admin-guide.md

@@ -11,6 +11,7 @@ export {
   posesDiffer as idealPosesDiffer,
   IDEAL_POSITION_TOLERANCE_IN,
   IDEAL_HEADING_TOLERANCE_RAD,
+  type IdealDrift,
   type IdealHold,
   type IdealPathMotion,
   type IdealSegment,

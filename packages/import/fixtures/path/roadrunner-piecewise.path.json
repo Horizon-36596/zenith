@@ -1,0 +1,112 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/path.json",
+  "formatVersion": 1,
+  "kind": "path",
+  "season": "biobuzz",
+  "alliance": "RED",
+  "title": "Garden run, RoadRunner frame",
+  "source": {
+    "planner": "hand-written fixture"
+  },
+  "frame": {
+    "preset": "roadrunner"
+  },
+  "startPose": {
+    "x": 63,
+    "y": -12,
+    "heading": 3.141592653589793
+  },
+  "steps": [
+    {
+      "id": "drive",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "x": 63,
+            "y": -12
+          },
+          "to": {
+            "x": 36,
+            "y": -12
+          }
+        },
+        {
+          "kind": "bezier",
+          "from": {
+            "x": 36,
+            "y": -12
+          },
+          "control": [
+            {
+              "x": 30,
+              "y": -40
+            }
+          ],
+          "to": {
+            "x": 44,
+            "y": -58
+          }
+        }
+      ],
+      "heading": {
+        "mode": "piecewise",
+        "ranges": [
+          {
+            "startT": 0,
+            "endT": 0.4,
+            "heading": {
+              "mode": "constant",
+              "heading": 3.141592653589793
+            }
+          },
+          {
+            "startT": 0.4,
+            "endT": 0.7,
+            "heading": {
+              "mode": "linear",
+              "from": 3.141592653589793,
+              "to": 4.71238898038469
+            }
+          },
+          {
+            "startT": 0.7,
+            "endT": 1,
+            "heading": {
+              "mode": "facePoint",
+              "x": 60,
+              "y": -60,
+              "offset": 0.25
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "settle",
+      "kind": "wait",
+      "seconds": 0.5
+    },
+    {
+      "id": "back",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "x": 44,
+            "y": -58
+          },
+          "to": {
+            "x": 36,
+            "y": -12
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangentReversed"
+      }
+    }
+  ]
+}

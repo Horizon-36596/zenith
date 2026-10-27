@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -63,6 +63,17 @@ describe("isEntryPoint", () => {
       context.skip();
     }
     expect(isEntryPoint(link, pathToFileURL(script).href)).toBe(true);
+  });
+
+  it("is true through a linked directory, where the entry path is not the module's real path", () => {
+    const realDir = join(root, "real");
+    const linkDir = join(root, "linked");
+    mkdirSync(realDir);
+    const script = join(realDir, "index.js");
+    writeFileSync(script, "");
+    // A junction on Windows (no privilege needed), a directory symlink elsewhere.
+    symlinkSync(realDir, linkDir, "junction");
+    expect(isEntryPoint(join(linkDir, "index.js"), pathToFileURL(script).href)).toBe(true);
   });
 
   it("is false for another script, and for no script at all", () => {

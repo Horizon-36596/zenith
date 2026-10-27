@@ -1,7 +1,9 @@
-import { FINDING_HELP, type Finding, type FindingCode, type FindingHelp } from "@horizon36596/zenith-core";
+import { FINDING_HELP, helpByCode, type Finding, type FindingCode, type FindingHelp } from "@horizon36596/zenith-core";
 
 export interface FileFindings {
   path: string;
+  /** Set for an interchange file (`trajectory.json` or `path.json`); absent for an auto. */
+  kind?: "trajectory" | "path";
   findings: Finding[];
   /** Full sentences from `@horizon36596/zenith-seasons` when the file's season plugin is missing or unknown. */
   seasonWarnings?: readonly string[];
@@ -53,9 +55,15 @@ export function codesIn(files: readonly FileFindings[]): FindingCode[] {
   return codes;
 }
 
-/** `FINDING_HELP` for just the codes these files raise, for `validate --explain --json`. */
-export const helpFor = (files: readonly FileFindings[]): Partial<Record<FindingCode, FindingHelp>> =>
-  Object.fromEntries(codesIn(files).map((code) => [code, FINDING_HELP[code]]));
+/**
+ * `FINDING_HELP` for just the codes these files raise, for `validate --explain --json`. A code with
+ * words of its own for a severity, such as TIME_BUDGET's info note, gets the words for its most
+ * severe finding (`helpByCode`).
+ */
+export const helpFor = (files: readonly FileFindings[]): Partial<Record<FindingCode, FindingHelp>> => {
+  const byCode = helpByCode(files.flatMap((file) => file.findings));
+  return Object.fromEntries(codesIn(files).map((code) => [code, byCode[code] ?? FINDING_HELP[code]]));
+};
 
 /**
  * `validate --explain`: what each code in the table means and how to fix it, once per code, in
@@ -64,9 +72,10 @@ export const helpFor = (files: readonly FileFindings[]): Partial<Record<FindingC
 export function formatExplanations(files: readonly FileFindings[]): string {
   const codes = codesIn(files);
   if (codes.length === 0) return "";
+  const byCode = helpFor(files);
   const lines: string[] = ["", "What these findings mean"];
   for (const code of codes) {
-    const help = FINDING_HELP[code];
+    const help = byCode[code] ?? FINDING_HELP[code];
     lines.push(`  ${code}: ${help.title}`);
     lines.push(`    ${help.means}`);
     lines.push(`    To fix it: ${help.fix}`);

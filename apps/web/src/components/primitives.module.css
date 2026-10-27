@@ -39,44 +39,75 @@
   background: var(--brand-gradient);
 }
 
-.ghost,
-.primary {
+/* ---- Buttons (UI_GUIDE 9.9) ---------------------------------------------
+   The one recipe for each kind. Other modules compose these (`composes: primary from ...`) rather
+   than copying them, so a primary looks the same in a modal, a sheet, the tour and the host bar. */
+
+.primary,
+.secondary,
+.ghost {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: var(--space-2);
   height: var(--ctl-h-lg);
   padding-inline: var(--space-3);
   border-radius: var(--radius-xs);
+  font-family: var(--font-display);
   font-size: var(--fs-sm);
-  transition: background var(--dur-base) var(--ease-out);
-}
-
-.ghost {
-  border: 1px solid var(--border-default);
-  color: var(--text-hi);
-  background: transparent;
-}
-
-.ghost:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
-}
-
-.primary {
-  background: var(--accent);
-  color: var(--text-on-accent);
   font-weight: var(--fw-medium);
+  white-space: nowrap;
+  transition: background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
 }
 
-.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+/* The screen's one primary: the button gradient with dark ink and the ember shadow. */
+.primary {
+  border: none;
+  background: var(--brand-gradient-button);
+  color: var(--brand-ink);
+  box-shadow: var(--shadow-ember);
 }
 
-.ghost:disabled,
-.primary:disabled {
-  color: var(--text-disabled);
+.primary:hover:not([aria-disabled="true"]) {
+  background: var(--brand-gradient-button-hover);
+}
+
+/* The alternative beside it: Cancel, Discard changes. */
+.secondary {
+  border: 1px solid var(--border-strong);
   background: transparent;
+  color: var(--text-hi);
+}
+
+.secondary:hover:not([aria-disabled="true"]) {
+  background: var(--bg-hover);
+}
+
+/* A row or region action: no edge until hovered. */
+.ghost {
+  border: none;
+  background: transparent;
+  color: var(--text-mid);
+}
+
+.ghost:hover:not([aria-disabled="true"]) {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+.primary[aria-disabled="true"],
+.secondary[aria-disabled="true"] {
+  background: transparent;
+  box-shadow: none;
   border: 1px solid var(--border-subtle);
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.ghost[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
 }
 
 .rowButton {
@@ -96,6 +127,33 @@
 .rowButton:disabled,
 .rowButton[aria-disabled="true"] {
   color: var(--text-disabled);
+}
+
+/* A quiet text button inside a row (TextButton, UI_GUIDE section 9.5): accent words, no box until
+   hovered, the height of a small control so it never makes its row taller. */
+.textButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--ctl-h-sm);
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  white-space: nowrap;
+  transition: background var(--dur-base) var(--ease-out);
+}
+
+.textButton:hover:not([aria-disabled="true"]) {
+  background: var(--bg-hover);
+  color: var(--accent-hover);
+}
+
+.textButton[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
 }
 
 /* ---- Severity (UI_GUIDE 8.4, 8.5) --------------------------------------- */
@@ -206,6 +264,13 @@
   white-space: nowrap;
 }
 
+/* The short chip of a pose row is at most 12 characters, so it takes 3 px less each side and no letter spacing to fit the
+   row's one line at the default panel width (UI_GUIDE section 9.5). */
+.chip[data-short] {
+  padding-inline: 3px;
+  letter-spacing: 0;
+}
+
 .chip[data-tier="measured"] {
   color: var(--prov-measured);
   background: var(--prov-measured-bg);
@@ -221,6 +286,25 @@
   background: var(--prov-unverified-bg);
 }
 
+/* Needs measurement: the unverified ink, hollow, so it reads apart from Placeholder's filled chip. */
+.chip[data-needs] {
+  background: transparent;
+  outline: 1px dashed currentColor;
+  outline-offset: -1px;
+}
+
+/* A chip that opens the provenance menu: the chip itself is the button, outlined on hover and while
+   its menu is open so it reads as something to press without changing the chip's colour, which is
+   the tier. Focus takes the global ring (base.css). */
+.chipButton {
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.chipButton:hover .chip,
+.chipButton[aria-expanded="true"] .chip {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
 /* ---- Panels (UI_GUIDE 3, 6) --------------------------------------------- */
 
 .panel {
@@ -309,6 +393,20 @@
   color: var(--text-disabled);
 }
 
+.emptyIcon {
+  flex: none;
+  color: var(--text-lo);
+}
+
+.emptyHeadline {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-xl);
+  color: var(--text-hi);
+}
+
 .emptyLine {
   margin: 0;
   font-size: var(--fs-md);
@@ -337,10 +435,69 @@
   color: var(--text-lo);
 }
 
+.loading {
+  margin: 0;
+  padding: var(--pad-panel);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}
+
+.loadFailed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--pad-panel);
+}
+
+.loadFailedLine {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--sev-error);
+}
+
+.offlineLine {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.offlineIcon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-lo);
+}
+
 .unavailable {
   margin: 0;
   padding: var(--pad-panel);
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
   color: var(--text-lo);
+}
+
+/* A status chip (issue #242): a quiet state or a warning about the selection, in the UI face and
+   sentence case, since it is a word the person reads and not a value. */
+.statusChip {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-h-sm);
+  padding-inline: 6px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  color: var(--text-mid);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  white-space: nowrap;
+}
+
+.statusChip[data-tone="warn"] {
+  background: var(--sev-warn-bg);
+  color: var(--sev-warn);
 }

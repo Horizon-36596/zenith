@@ -83,7 +83,9 @@ export class HttpClient {
   constructor(auth: AuthProvider, options: HttpOptions = {}) {
     this.auth = auth;
     this.apiBase = options.apiBase ?? DEFAULT_API_BASE;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    // The global `fetch` is wrapped, not stored: a browser throws "Illegal invocation" when it is
+    // called as a method of this object instead of on `window`.
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
     this.maxRetries = options.maxRetries ?? 3;
     this.retryDelayMs = options.retryDelayMs ?? 500;
     this.sleep = options.sleep ?? defaultSleep;

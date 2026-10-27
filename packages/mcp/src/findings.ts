@@ -1,7 +1,7 @@
 import {
   check,
   estimate,
-  FINDING_HELP,
+  helpByCode,
   loadField,
   loadRobot,
   plan,
@@ -41,6 +41,18 @@ function override<T>(
     });
     return fallback;
   }
+}
+
+/**
+ * The robot and field an auto resolves to: its own `robot`/`field` override when it names one and
+ * it loads, else the project's. For edits that need geometry but not a plan or its findings.
+ */
+export function robotAndFieldFor(auto: Auto, project: Project): { robot: Robot; field: Field } {
+  const ignored: Finding[] = [];
+  return {
+    robot: override(project, auto.robot, loadRobot, project.robot, ignored),
+    field: override(project, auto.field, loadField, project.field, ignored),
+  };
 }
 
 export interface AutoFindings {
@@ -86,7 +98,7 @@ export function loadAutoAndPlan(auto: Auto, project: Project): LoadedAuto {
   }
   const robot: Robot = override(project, auto.robot, loadRobot, project.robot, findings);
   const field: Field = override(project, auto.field, loadField, project.field, findings);
-  const planned = plan(resolve(auto, project.waypoints), robot, field);
+  const planned = plan(resolve(auto, project.waypoints, robot), robot, field);
   const season = resolveSeason(field);
   findings.push(...check(planned, estimate(planned, robot), robot, field, season.rules));
   return { plan: planned, robot, field, findings, seasonWarnings: [...season.warnings] };
@@ -107,10 +119,9 @@ export const warningCount = (findings: readonly Finding[]): number =>
 /**
  * What each finding code present means and how to fix it (core's `FINDING_HELP`), keyed by code,
  * so an agent explaining a finding to a person uses the same words the editor and
- * `zenith validate --explain` do.
+ * `zenith validate --explain` do. A code with words of its own for a severity, such as
+ * TIME_BUDGET's info note, gets the words for its most severe finding (`helpByCode`).
  */
 export function helpFor(findings: readonly Finding[]): Partial<Record<FindingCode, FindingHelp>> {
-  const help: Partial<Record<FindingCode, FindingHelp>> = {};
-  for (const finding of findings) help[finding.code] = FINDING_HELP[finding.code];
-  return help;
+  return helpByCode(findings);
 }

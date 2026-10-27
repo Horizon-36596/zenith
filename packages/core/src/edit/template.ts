@@ -29,11 +29,11 @@ export function newAutoFromTemplate(name: string, template: AutoTemplate): Auto 
     start: template.start,
     steps: [
       {
-        id: "leg1",
+        id: "path1",
         kind: "path",
         segments: [{ kind: "line", from: "current", to: { xIn: 0, yIn: 24 } }],
         heading: { mode: "tangent" },
-        notes: "Replace this leg with the real opening move.",
+        notes: "Replace this path with the real opening move.",
       },
     ],
   });

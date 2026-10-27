@@ -31,6 +31,20 @@ export function assertAutoFileName(fileName: unknown): string {
   return fileName;
 }
 
+/**
+ * A bare preset file name such as `Drive team.zenith-preset.json` (spec 15 section 6.5): what the web
+ * app's `presetFileName` makes from a preset's name, which may hold spaces and any letter, but never a
+ * path separator, a character Windows refuses, a control character or a leading dot.
+ */
+export const PRESET_FILE_PATTERN = /^(?!\.)[^/\\:*?"<>|\u0000-\u001f\u007f]{1,100}\.zenith-preset\.json$/;
+
+export function assertPresetFileName(fileName: unknown): string {
+  if (typeof fileName !== "string" || !PRESET_FILE_PATTERN.test(fileName)) {
+    throw new BridgeError(`"${String(fileName)}" is not a preset file name; it must look like name.zenith-preset.json.`);
+  }
+  return fileName;
+}
+
 const outside = (rel: string): boolean =>
   rel === ".." || rel.startsWith("../") || rel.startsWith("..\\") || isAbsolute(rel);
 

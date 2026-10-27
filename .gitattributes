@@ -2,3 +2,8 @@
 *.png binary
 *.jar binary
 *.bat text eol=crlf
+# Changelog entries from parallel branches are independent lines, so a local merge keeps both
+# instead of stopping on a conflict. GitHub's merge button does not use this; merge main into the
+# branch locally first.
+CHANGELOG.md merge=union
+site/docs/changelog.md merge=union

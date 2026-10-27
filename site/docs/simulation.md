@@ -9,9 +9,10 @@ It has two simulators and one quick estimate:
 | [**Instant preview sim**](#instant-preview-sim) | the editor, in the web and desktop apps | re-runs after every edit | a port of the Pedro v3 follower driving a model mecanum drivetrain. The Instant sim playback level uses it. |
 | [**High-fidelity sim**](#high-fidelity-sim) | the desktop app and `zenith sim` | seconds to minutes | your robot repository's own headless simulator, running your real robot code |
 
-The estimate and the preview come from Zenith and know only your files. The high-fidelity sim runs
-your robot code. When they disagree, trust the high-fidelity sim, and use
-[`zenith calibrate`](#calibrating-the-estimate) to bring the estimate closer.
+The estimate and preview use the numbers in your files. The high-fidelity sim runs your robot code
+against your repository's simulated hardware and physics. It can reveal behaviour the estimate cannot,
+but its accuracy still depends on that model. When results disagree, check the inputs, units and model
+before using [`zenith calibrate`](#calibrating-the-estimate). Confirm the result on the real robot.
 
 ## Playback levels
 
@@ -28,25 +29,42 @@ under the timeline's scrubber:
 
 The choice is remembered with your other editor preferences. Ideal is the default on a first visit.
 
-Everything that depends on the robot's simulated pose says which level it is from: the label under
-the robot on the field, the total next to the timeline's time (`ideal 13.48 s`), the playhead
-(`5.23 s ideal`), the time in the hover readout on a path, and the bars. The trace report in the
-Simulate dialog, and the inspector's recorded time, are always the full sim's.
+Everything that depends on the robot's simulated pose follows the level: the label under the robot
+on the field, which names it, the timeline's one total and its playhead, the time in the hover
+readout on a path, and the bars. The timeline names the level only on its switch. The trace report
+in the Simulate dialog, and the inspector's recorded time, are always the full sim's.
+
+A full sim records the whole period, so its trace goes on after the routine ends while the robot
+stands still. At the Full sim level the total, and the scrubber, end where the routine ended: at the
+end of the last step the trace records. While a run is still arriving, playback goes on to the last
+moment received and waits there.
 
 ### Ideal
 
 The ideal robot drives each path along its geometry with no wobble and no overshoot, at the speed
-the [estimate](#the-estimate) gives each point, then holds the end pose for the settle time. A wait
+the [estimate](#the-estimate) gives each point, then holds the end pose for the settle time, unless
+another path follows straight away, in which case it carries straight on as the robot does. A wait
 or a command holds the pose for its estimated time. A `parallel` group follows the member that
 drives, and a `branch` follows its `then` side for as long as the estimate says the branch takes.
+A command marked `movesRobot` that the next path rejoins (`rejoinFrom`) is the exception: the robot
+drifts from where the command starts to the rejoin pose over the command's time, on a straight line,
+eased from rest to rest, so the next path starts there with no transition. Where the command really
+takes the robot is not known, so the editor draws it as a ghost while it drifts.
 
 Where a step does not start where the robot is, the ideal robot does not jump. A path whose `from`
 is a literal pose away from the last step's end, or whose heading mode starts facing another way,
 gets a **transition**: the robot turns and drives in a straight line to the path's start. It is
 timed with the same model as a path, from rest to rest, and a pure turn takes the turn at
-`maxAngularVelRadPerS`. On the field the transition is a thin dashed line. On the timeline it is a
-hatched block before the step, and its tooltip says how far the robot drives and turns. So the ideal
-total can be longer than the estimate's total by exactly its transitions.
+`maxAngularVelRadPerS`. On the field the transition is a thin dashed line.
+
+A pure turn is the path's [joint turn](#the-estimate), which the estimate already counts, so the
+ideal robot plays it inside the path's own time and the timeline shows it as the hatched start of
+the path's bar. Only a drive across a gap is time the estimate does not count: it is a hatched block
+before the step, its tooltip says how far the robot drives and turns, and the ideal total is longer
+than the estimate's total by exactly that. A gap is a literal-pose `from`, or what a timeout leaves:
+a path whose `timeoutS` is shorter than its estimate is counted up to its timeout, so the ideal
+robot stops where the timeout runs out, short of the path's end, and the next path, which starts at
+that end, opens with a transition across what is left.
 
 ### Instant sim
 
@@ -59,6 +77,20 @@ The Full sim level needs a trace. The desktop app writes one when you run the hi
 the web app, run your sim command in the robot repository and load the trace it writes from the
 **Simulate** dialog (F5). Until a trace is loaded the option is disabled, and its tooltip says how
 to get one. A remembered Full sim choice plays Ideal until a trace is loaded.
+
+### When the times disagree
+
+Compare the same auto, alliance and robot settings at each level:
+
+- **Ideal** follows the plan. A literal gap between steps can add a transition to its total.
+- **Instant sim** follows the plan through the simulated follower and drivetrain. Turning, overshoot
+  and settling can make it take longer than Ideal.
+- **Full sim** uses the loaded recording. It may come from an older edit; check which file and run
+  produced it, then rerun after changing the auto or robot settings.
+
+A longer time alone does not identify a fault. Start with the step where the two runs diverge. Check
+its heading, speed, end condition and timeout, then the robot's measured limits. The
+[SimLoop setup guide](full-sim-simloop.md) explains how to produce a trace from your robot repository.
 
 ## The estimate
 
@@ -83,11 +115,40 @@ For each path, sampled every 2 in along its length:
    `strafeDecelInPerS2`. This is a proxy for how hard the drivetrain can hold a curve.
 6. **Profile.** A forward and a backward pass over those caps give the speed at every sample, and
    the time is the sum of distance over speed.
-7. **Settle.** `settleS` (0.25 s by default) is added for the follower to settle at the end.
+7. **Settle.** `settleS` (0.25 s by default) is added for the follower to settle at the end. A path
+   followed straight away by another path adds none, because the robot starts the next path without
+   waiting for the first to settle. It still brakes into the joint: Pedro brakes into the end of every
+   path it is given. To drive through a joint without slowing, put both legs in one path step as two
+   segments.
+8. **Joint turn.** A path that starts where the robot is but facing another way, such as a tangent
+   path leaving a corner in a new direction, or the first path when the start pose faces elsewhere,
+   first turns in place at `maxAngularVelRadPerS` and then drives off from rest. The turn is part
+   of that path step's time and of its band, so the total and
+   [`TIME_BUDGET`](checks-and-findings.md#time_budget) count it. A path that starts somewhere else
+   is a gap the estimate does not time, and [`CONTINUITY`](checks-and-findings.md#continuity)
+   reports one past 0.5 in.
+9. **Turn on the spot.** A path step with no length is a turn on the spot, which the robot runs by
+   holding the end pose until it settles ([Step kinds](step-kinds.md#path)). It takes the turn
+   from the way the robot arrives to the end heading at `maxAngularVelRadPerS`, with no settle on
+   top. The ideal robot plays it as a pure turn inside the step's own time, and the instant sim
+   holds the pose until the heading is within two degrees and the position within 0.5 in, or until
+   the robot has stayed still for a quarter of a second within ten degrees and 2 in, the same rule
+   as the robot (`TurnSettle`). The sim's hold comes to rest up to about 1.1 degrees off with
+   Pedro's default heading P, so two degrees is always reached; a weaker heading P ends on the
+   still rule instead. The sim takes longer than the estimate, because the hold also brakes and
+   settles. A path of 2 in or less, which the robot also holds rather than follows, takes at
+   least the time its heading change takes at that rate, and the instant sim ends it only once the
+   robot has driven to its end, so a short drive with no heading change still takes time.
 
 Everything else:
 
 - A `command` takes its `estimateS` from `robot.json`, or is marked unknown.
+- A `timeoutS` bounds its step. A wait until a condition, or a command with no estimate, still
+  counts as zero in the total but takes at most its timeout, and
+  [`TIME_BUDGET`](checks-and-findings.md#time_budget) says whether the routine fits when it runs
+  the whole of it. A step estimated longer than its timeout is counted at the timeout, where the
+  robot stops it and where the [ideal robot](#ideal) stops too, and
+  [`TIMEOUT_TIGHT`](checks-and-findings.md#timeout_tight) warns.
 - A `sequence` costs the sum of its steps.
 - A `parallel` group costs its longest member under `all`, its shortest under `race`, and its
   deadline member under `deadline`.
@@ -115,6 +176,11 @@ the end of a long routine costs only that end.
 
 It is deterministic: the same files always give the same run, in the web app and the desktop app.
 
+A caller of the sim in code can ask for a run that ends when one top-level step is done, at its end
+or, for a path whose hold settles, at its settle time (`stopAfterStepId`). The result is the start
+of the full run, pose for pose. A step still running at that moment is cut off there as
+interrupted, without a timeout or condition that ended it later. Nothing in the editor uses it yet.
+
 ### What it models
 
 **The follower.** The preview follows paths the way Pedro v3's ForesightV3 follower does, ported
@@ -138,7 +204,9 @@ no wheel is powered. The turning limit follows `maxAngularVelRadPerS`, or the tr
 base when `kinematics.drivetrain` gives them.
 
 **The command tree.** Steps run in the same order the robot's scheduler runs them. Markers fire on
-distance travelled, as the runtime's markers do. A `"current"` path starts from wherever the
+distance travelled, as the runtime's markers do: none past the point where an end condition cut the
+path short, and a marker that starts interrupts any running marker that shares a subsystem with it,
+read from the commands' `requires` in `robot.json`. A `"current"` path starts from wherever the
 simulated robot is. `parallel`, `sequence` and `branch` groups follow their rules on the
 [Step kinds](step-kinds.md) page.
 
@@ -161,11 +229,15 @@ your files tell it.
   coasting to rest. Real braking is shorter, so default stops run long.
 - **Commands take their `estimateS`.** A command's mechanism is not simulated. A command with an
   `"unknown"` estimate takes one tick and marks the step unknown. A command marked `movesRobot` is
-  marked unknown too.
+  marked unknown too. When the next path rejoins it (`rejoinFrom`), the preview moves the robot to
+  the rejoin pose over the command's time, along the same eased line as the Ideal level, and the
+  path then starts from there. It is a guess at where the robot goes, not a prediction.
 - **Conditions it cannot see never fire.** A sensor condition with no `ledger` meaning never reads
   true, and the step is marked unknown. A `branch` on such a condition takes its `then` side.
 - **Collection is approximate.** A path whose `endCondition` waits for a full hopper stops where the
-  ledger says it fills, taking the pieces as evenly spaced along the path.
+  ledger says it fills, taking the pieces as evenly spaced along the path. The robot reads an
+  `endCondition` every loop, so it ends a turn on the spot too; there the pieces are taken as
+  arriving evenly over the turn.
 - **No contact.** The preview does not model the robot hitting field elements or pushing game
   pieces. The [checks](checks-and-findings.md) catch overlaps from the geometry instead.
 - **It differs from the estimate.** The estimate runs each path to rest and adds `settleS`; the
@@ -196,7 +268,9 @@ The name is validated first, the command runs without a shell, and the trace pat
 the repository.
 
 The test and the trace writer live in your robot repository. See
-[Robot runtime](robot-runtime.md) for the runtime that loads auto files on the robot.
+[Robot runtime](robot-runtime.md) for the runtime that loads auto files on the robot, and
+[Full sim with SimLoop](full-sim-simloop.md) for a complete setup that starts from SimLoop's starter
+folder.
 
 ### Running it
 
@@ -209,6 +283,13 @@ The test and the trace writer live in your robot repository. See
 
 The sim needs Java 17 or newer. The app looks at `JAVA_HOME`, then the `PATH`, and says so in plain
 words if it finds none. The first run can take a few minutes while Gradle downloads dependencies.
+
+With a `sim.server` section in `zenith.json`, the app can keep a sim server running instead of
+starting Gradle for every run. **Settings, General, Full sim speed** chooses Basic (the command
+above, every run), Fast (the default: the server starts on the first run and the run plays as it is
+simulated) or Ultrafast (the server starts with the project and runs a saved auto again in the
+background, so its next run plays at once). [Full sim with SimLoop](full-sim-simloop.md#full-sim-speed)
+explains each speed, what it costs, and the `sim.server` keys.
 
 The web app cannot start a local process, so it cannot run the high-fidelity sim. It can load a
 trace the sim wrote, from the **Simulate** dialog, and play it at the Full sim level.
@@ -248,8 +329,37 @@ shown are the planner's estimates for those steps, not a recorded run; your sim 
 }
 ```
 
-Each entry in `poses` is `[timeS, xIn, yIn, headingRad]`. `capabilities` lists what this sim build
-can measure. A check whose capability is missing is reported as inert rather than passed.
+Each entry in `poses` is `[timeS, xIn, yIn, headingRad]`. Each step's `startS` and `endS` are
+finite, with `endS` no earlier than `startS`; steps are listed in the order they start, and the run
+lasts until its last pose or its latest step end, whichever is later. `capabilities` lists what this
+sim build can measure. A check whose capability is missing is reported as inert rather than passed.
+
+The other sections are optional, and each one is what your sim models beyond the drive:
+
+- `structureContacts`: each time the chassis touched a field structure, with the structure's name
+  and how far it went in, in inches.
+- `ledger`: the robot's game state when it changed. `held` is how many pieces it holds, `launches`
+  how many it launched since the previous row (the report adds them up), and `tips` how many tips
+  each alliance has so far. A value a row leaves out is not reported, not zero.
+- `events`: anything worth marking on the timeline, such as `{ "timeS": 6.3, "kind": "tipStarted",
+  "alliance": "RED" }`.
+- `sha`: the commit the sim ran.
+
+The runtime's `AutoTraceWriter` writes all of them. Each is recorded at the time of the last
+`trace.tick(timeS)`:
+
+```java
+trace.capability(AutoTrace.STRUCTURE_CONTACTS);   // once, before the run, if your sim checks contacts
+trace.capability(AutoTrace.LEDGER);               // and if it counts game pieces
+trace.sha(commit);
+// each tick, as things happen:
+trace.structureContact("hiveRedPivotBar", 1.3);
+trace.ledger().held(1).launches(3).tips("RED", 0);
+trace.event("tipStarted", "RED");
+```
+
+A clean run records no contacts, so declare the capability yourself. Without it, an empty
+`structureContacts` reads as "not checked", and the report calls the check inert.
 
 ### The report
 
@@ -298,5 +408,5 @@ A number fitted from the sim can only be as good as the sim's model of your driv
 fitted from the real robot is a measurement. Recalibrate from the robot when you can.
 
 !!! warning
-    In v0.1.0, `zenith calibrate --write` always writes `CALIBRATED FROM SIM`. If your traces came
+    `zenith calibrate --write` always writes `CALIBRATED FROM SIM`. If your traces came
     from the real robot, change the label to `CALIBRATED FROM ROBOT` by hand.

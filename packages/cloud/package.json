@@ -1,0 +1,51 @@
+{
+  "name": "@horizon36596/zenith-cloud",
+  "version": "0.1.2",
+  "private": true,
+  "description": "Teams, the team library and sharing for Zenith: a typed CloudBackend interface with a Firebase implementation and an in-memory one for tests.",
+  "license": "MIT",
+  "author": "Horizon (FTC 36596)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./memory": {
+      "types": "./dist/memory/index.d.ts",
+      "default": "./dist/memory/index.js"
+    },
+    "./verification": {
+      "types": "./dist/verification.d.ts",
+      "default": "./dist/verification.js"
+    },
+    "./sharing": {
+      "types": "./dist/sharing.d.ts",
+      "default": "./dist/sharing.js"
+    },
+    "./bugReports": {
+      "types": "./dist/bugReports.d.ts",
+      "default": "./dist/bugReports.js"
+    },
+    "./crypto": {
+      "types": "./dist/crypto/index.d.ts",
+      "default": "./dist/crypto/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test:rules": "firebase emulators:exec --only firestore,auth --project demo-zenith --config ../../cloud/firebase.json \"vitest run --config ../../vitest.config.ts --project cloud\""
+  },
+  "dependencies": {
+    "firebase": "12.19.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase-tools": "15.31.0",
+    "google-auth-library": "11.1.0"
+  }
+}

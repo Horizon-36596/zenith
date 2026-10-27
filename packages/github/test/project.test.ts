@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PatAuth } from "../src/auth.js";
 import { GitHubClient } from "../src/client.js";
-import { BaseBranchWriteError, PathNotAllowedError } from "../src/errors.js";
+import { BaseBranchWriteError, ConflictError, PathNotAllowedError } from "../src/errors.js";
 import { GitHubProject } from "../src/project.js";
 import { createFetchStub, noSleep } from "./fetchStub.js";
 
@@ -166,5 +166,40 @@ describe("GitHubProject.save", () => {
     await project.save("auto/first-auto/octocat", "first-auto", "autos/first-auto.auto.json", "{}", "edit");
     const put = stub.calls.find((c) => c.method === "PUT");
     expect(put?.body).toMatchObject({ sha: "old-sha" });
+  });
+
+  it("refuses, before it writes, when the branch's copy is not the one the text was edited from (issue #407)", async () => {
+    const { project, stub } = buildProject([
+      {
+        method: "GET",
+        match: contentsGetPattern("autos/first-auto.auto.json"),
+        handler: () => ({ status: 200, body: { type: "file", path: "autos/first-auto.auto.json", sha: "newer-sha", content: b64("{}"), encoding: "base64" } }),
+      },
+      { method: "PUT", match: /\/contents\/autos\/first-auto\.auto\.json$/, handler: () => ({ status: 200, body: { content: { sha: "s" }, commit: { sha: "c" } } }) },
+    ]);
+    const save = (expectedSha: string) =>
+      project.save("auto/first-auto/octocat", "first-auto", "autos/first-auto.auto.json", "{}", "edit", { expectedSha });
+
+    const refused = await save("opened-sha").catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(ConflictError);
+    expect((refused as Error).message).toMatch(/changed on auto\/first-auto\/octocat since you opened it/);
+    expect(stub.calls.some((c) => c.method === "PUT")).toBe(false);
+
+    await save("newer-sha");
+    expect(stub.calls.find((c) => c.method === "PUT")?.body).toMatchObject({ sha: "newer-sha" });
+  });
+
+  it("words GitHub's own stale-sha refusal the same way when a commit lands between the check and the write", async () => {
+    const { project } = buildProject([
+      {
+        method: "GET",
+        match: contentsGetPattern("autos/first-auto.auto.json"),
+        handler: () => ({ status: 200, body: { type: "file", path: "autos/first-auto.auto.json", sha: "opened-sha", content: b64("{}"), encoding: "base64" } }),
+      },
+      { method: "PUT", match: /\/contents\/autos\/first-auto\.auto\.json$/, handler: () => ({ status: 409, body: { message: "is at x but expected opened-sha" } }) },
+    ]);
+    await expect(
+      project.save("auto/first-auto/octocat", "first-auto", "autos/first-auto.auto.json", "{}", "edit", { expectedSha: "opened-sha" }),
+    ).rejects.toThrow(/since you opened it/);
   });
 });

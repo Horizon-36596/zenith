@@ -2,7 +2,7 @@
 // The npm release smoke test (PUBLISHING.md). Run it after `pnpm build`
 // and before any publish. It changes nothing in the repository and publishes nothing.
 //
-// 1. Packs the seven published packages with `pnpm pack`, which rewrites `workspace:*` the way
+// 1. Packs the eight published packages with `pnpm pack`, which rewrites `workspace:*` the way
 //    `pnpm publish` does, and checks each tarball: the version is the root version, every internal
 //    dependency is pinned to it, no source or test file is inside, and README, LICENSE and
 //    package.json are.
@@ -28,7 +28,7 @@ const keep = args.includes("--keep");
 const isWindows = process.platform === "win32";
 
 /** Publish order: every package after the ones it depends on. */
-const PUBLISH_ORDER = ["schema", "core", "season-biobuzz", "seasons", "github", "cli", "mcp"];
+const PUBLISH_ORDER = ["schema", "core", "season-biobuzz", "seasons", "import", "github", "cli", "mcp"];
 const SCOPE = "@horizon36596/";
 
 const version = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).version;

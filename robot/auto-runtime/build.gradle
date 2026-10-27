@@ -88,10 +88,11 @@ androidComponents {
     }
 }
 
-// examples/starter/generated/ holds what `zenith codegen` writes for the starter's cycle-and-park auto,
-// once for each command library. Both classes are called CycleAndParkGenerated in the team's package, so
-// each copy is moved into a package of its own and compiled with the unit tests, where the conformance
-// suite runs it against the routine the runtime builds from the file. They are test sources only: the
+// examples/starter/generated/ holds what `zenith codegen` and `zenith codegen --export` write for the
+// starter's cycle-and-park auto, once for each command library. Each library's classes are called
+// CycleAndParkGenerated and CycleAndParkExported in the team's package, so each copy is moved into a
+// package of its own and compiled with the unit tests, where the conformance suite runs it against the
+// routine the runtime builds from the file. They are test sources only: the
 // published AAR, the dex checks and the link check never see them.
 def generatedExamples = tasks.register('copyGeneratedExamples', Sync) {
     description = 'Copies the generated starter classes into the unit test sources, one package per library.'
@@ -99,10 +100,13 @@ def generatedExamples = tasks.register('copyGeneratedExamples', Sync) {
     inputs.property('libraries', libraries)
     libraries.each { library ->
         from(rootProject.file("../examples/starter/generated/$library")) {
-            include 'CycleAndParkGenerated.java'
+            include 'CycleAndParkGenerated.java', 'CycleAndParkExported.java'
             into "org/horizon36596/zenith/examples/$library"
+            // The exported class constructs the starter's robot class, which only a team's TeamCode has.
+            // The suite subclasses it and supplies its own robot, so the call becomes null here.
             filter { String line ->
-                line.startsWith('package ') ? "package org.horizon36596.zenith.examples.$library;" : line
+                line.startsWith('package ') ? "package org.horizon36596.zenith.examples.$library;"
+                        : line.replace('new org.firstinspires.ftc.teamcode.zenith.MyRobot()', 'null')
             }
         }
     }

@@ -5,6 +5,7 @@
  * (`model.test.ts`); `Tour.tsx` renders whatever state this says and feeds events back in.
  */
 import type { TourProgress } from "../state/prefs";
+import type { PresetRef } from "../settings/presets";
 
 /**
  * Something the person did in the editor that a stop can wait for. The shell raises these from
@@ -85,7 +86,9 @@ export type TourEvent =
   | { type: "chooseFull" }
   | { type: "jumpIn" }
   | { type: "exit" }
-  | { type: "signal"; signal: TourSignal };
+  | { type: "signal"; signal: TourSignal }
+  /** The stops changed under the tour, as when Settings hides a toolbar button: `withinStops`. */
+  | { type: "sync" };
 
 export const TOUR_OFF: TourState = { phase: "off", index: 0 };
 
@@ -97,6 +100,20 @@ export function currentStop(state: TourState, stops: TourStops): TourStop | null
   return listOf(state.phase, stops)[state.index] ?? null;
 }
 
+/**
+ * The state held to the stops there are now. Settings can hide a stop while the tour is on it or
+ * before it, which left the index past the end of the list: no stop and no card showed, and the tour
+ * stayed on with nothing on screen (issue #403). Past the end it is the last stop, and with no stops
+ * left it is the card that follows the phase.
+ */
+export function withinStops(state: TourState, stops: TourStops): TourState {
+  if (state.phase !== "core" && state.phase !== "full") return state;
+  const list = listOf(state.phase, stops);
+  if (state.index < list.length) return state;
+  if (list.length === 0) return { phase: state.phase === "core" ? "choice" : "finished", index: 0 };
+  return { phase: state.phase, index: list.length - 1 };
+}
+
 function advance(state: TourState, stops: TourStops): TourState {
   const list = listOf(state.phase, stops);
   if (state.index + 1 < list.length) return { phase: state.phase, index: state.index + 1 };
@@ -105,8 +122,11 @@ function advance(state: TourState, stops: TourStops): TourState {
   return state;
 }
 
-export function tourReducer(state: TourState, event: TourEvent, stops: TourStops): TourState {
+export function tourReducer(given: TourState, event: TourEvent, stops: TourStops): TourState {
+  const state = withinStops(given, stops);
   switch (event.type) {
+    case "sync":
+      return state;
     case "startCore":
       return stops.core.length === 0 ? { phase: "choice", index: 0 } : { phase: "core", index: 0 };
     case "startFull": {
@@ -157,9 +177,32 @@ export function progressAfter(
   return next;
 }
 
+/**
+ * Whether a first visit at this address may load the example and start the tour: the editor's own
+ * page (`base`, with or without its trailing slash or `index.html`), with no review route in the
+ * hash and no query key that opens something else (`host`, which is host mode, or `review`). Any
+ * other query, such as a link's tracking parameters, is ignored; it once kept the tour from ever
+ * starting for a visitor who arrived by such a link.
+ */
+export function isFirstRunAddress(pathname: string, search: string, hash: string, base: string): boolean {
+  const root = base.endsWith("/") ? base : `${base}/`;
+  const home = pathname === root || `${pathname}/` === root || pathname === `${root}index.html`;
+  if (!home || hash !== "") return false;
+  const query = new URLSearchParams(search);
+  return !query.has("host") && !query.has("review");
+}
+
 /** Whether the tour should start by itself: only on a first visit, once there is something to show. */
 export const shouldAutoStart = (progress: TourProgress, hasDocument: boolean): boolean =>
   !progress.seen && hasDocument;
+
+/**
+ * Whether the first visit asks for a preset before the tour: only on the true first run, with the
+ * example open to point at, and while no preset has been chosen. A person who has seen the tour, or who
+ * chose a preset in Settings, never sees the card.
+ */
+export const shouldOfferPreset = (progress: TourProgress, preset: PresetRef, hasDocument: boolean): boolean =>
+  !progress.seen && !preset.chosen && hasDocument;
 
 /** "3 / 6", for the card (UI_GUIDE section 10.2). The choice and closing cards have no position. */
 export function positionLabel(state: TourState, stops: TourStops): string | null {

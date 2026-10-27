@@ -1,6 +1,67 @@
 import type { Heading, HeadingRange, RangeHeading } from "@horizon36596/zenith-schema";
 import { wrapAngle } from "./geometry/angle.js";
 import type { PathGeometry } from "./geometry/path.js";
+import { makeSimCurve, type SimCurve } from "./sim/curves.js";
+import {
+  pieceAt,
+  piecewiseSegmentPieces,
+  runtimeSegmentFractions,
+  segmentHeading,
+  type SegmentFractions,
+} from "./sim/pedroPath.js";
+
+/**
+ * A path with a Bezier in it, as the runtime sees it: each segment as Pedro's curve, and each
+ * segment's share of the step by the runtime's own lengths (`sim/pedroPath.ts`).
+ */
+interface RuntimeSegments {
+  readonly curves: readonly SimCurve[];
+  readonly fractions: readonly SegmentFractions[];
+}
+
+const runtimeCache = new WeakMap<PathGeometry, RuntimeSegments | null>();
+
+/**
+ * The runtime's segments for a path with at least one Bezier, or null for a path of lines only.
+ *
+ * The runtime turns `linear` and the linear ranges of `piecewise` linearly in each segment's own
+ * parametric t (OPT-01, owner ruling 2026-10-08). On a line that parameter is the arc-length fraction
+ * exactly, so a path of lines keeps the arc-length arithmetic below and does not move by even a
+ * rounding error; on a Bezier the two differ, and the heading is read from the runtime's mapping.
+ */
+function runtimeSegments(path: PathGeometry): RuntimeSegments | null {
+  const cached = runtimeCache.get(path);
+  if (cached !== undefined) return cached;
+  let found: RuntimeSegments | null = null;
+  if (path.curves.some((curve) => curve.degree >= 2)) {
+    const curves = path.curves.map((curve) => makeSimCurve(curve.points.map((point) => ({ x: point.xIn, y: point.yIn }))));
+    found = { curves, fractions: runtimeSegmentFractions(curves) };
+  }
+  runtimeCache.set(path, found);
+  return found;
+}
+
+/** How a heading function places a `linear` turn along a Bezier. */
+export interface HeadingOptions {
+  /**
+   * `"runtime"`, the default, is what the robot does: linear in each segment's own parametric t
+   * (OPT-01). `"arcLength"` is linear in the step's arc length, which is how the Pedro Visualizer
+   * draws a heading and how this function read every heading before OPT-01; nothing that plans,
+   * estimates or plays an auto back uses it. On a path of lines the two are the same.
+   */
+  along?: "runtime" | "arcLength";
+}
+
+const segmentsFor = (path: PathGeometry, options: HeadingOptions): RuntimeSegments | null =>
+  options.along === "arcLength" ? null : runtimeSegments(path);
+
+/** Reads a per-segment heading, in each segment's own parametric t, at the step's t. */
+function bySegment(path: PathGeometry, perSegment: (index: number, u: number, t: number) => number): (t: number) => number {
+  return (t) => {
+    const at = path.segmentAt(path.distanceAt(t));
+    return wrapAngle(perSegment(at.index, at.u, t));
+  };
+}
 
 /** The direction of travel at t, wrapped to (-pi, pi]. */
 export function tangentHeading(path: PathGeometry, t: number): number {
@@ -25,7 +86,7 @@ type LinearHeading = Extract<Heading, { mode: "linear" }>;
 export const HALF_TURN_TOLERANCE_RAD = 1e-3;
 
 /** Pedro's `Angle.normalizeSigned`: [-pi, pi), so an exact half turn goes clockwise, as it does on the robot. */
-const pedroSigned = (rad: number): number => {
+export const pedroSigned = (rad: number): number => {
   const wrapped = wrapAngle(rad);
   return wrapped === Math.PI ? -Math.PI : wrapped;
 };
@@ -55,16 +116,25 @@ export interface LinearHeadingPiece {
  * more than half a turn goes the other way round on the robot. A deliberate 270 degree sweep split
  * over two segments of equal length therefore does turn 270 degrees, and the same sweep on one
  * segment turns 90 degrees the other way.
+ *
+ * On a path with a Bezier the shares are by the runtime's own segment lengths
+ * (`runtimeSegmentFractions`), so `fromRad` and `toRad` are the numbers the runtime passes Pedro.
  */
-export function linearHeadingPieces(heading: LinearHeading, path: PathGeometry): LinearHeadingPiece[] {
+export function linearHeadingPieces(
+  heading: LinearHeading,
+  path: PathGeometry,
+  options: HeadingOptions = {},
+): LinearHeadingPiece[] {
   const sweep = heading.toRad - heading.fromRad;
   const total = path.lengthIn;
+  const runtime = segmentsFor(path, options);
   const pieces: LinearHeadingPiece[] = [];
   for (let index = 0; index + 1 < path.breaks.length; index += 1) {
     const startT = total === 0 ? 0 : (path.breaks[index] as number) / total;
     const endT = total === 0 ? 1 : (path.breaks[index + 1] as number) / total;
-    const fromRad = heading.fromRad + sweep * startT;
-    const toRad = heading.fromRad + sweep * endT;
+    const share = runtime?.fractions[index];
+    const fromRad = heading.fromRad + sweep * (share === undefined ? startT : share.startFraction);
+    const toRad = heading.fromRad + sweep * (share === undefined ? endT : share.endFraction);
     const turnRad = pedroSigned(toRad - fromRad);
     const reversed = Math.abs(toRad - fromRad) > Math.PI + HALF_TURN_TOLERANCE_RAD;
     pieces.push({ startT, endT, fromRad, toRad, turnRad, reversed });
@@ -80,16 +150,31 @@ export function linearHeadingPieces(heading: LinearHeading, path: PathGeometry):
  * and the preview must show what the robot does. A share of more than half a turn is what the
  * HEADING warning points out. `tangent` and `facePoint` interpolate nothing: they read the geometry
  * at t.
+ *
+ * On a path with a Bezier, `linear` and the linear ranges of `piecewise` are the runtime's: linear in
+ * each segment's own parametric t, not in arc length, and a piecewise range starts and ends where the
+ * runtime's chord table puts it (`sim/pedroPath.ts`, OPT-01). The plan sweeps the footprint, the
+ * estimator caps the speed and the ideal playback turns the robot all at those headings.
  */
-export function headingFunction(heading: Heading, path: PathGeometry): (t: number) => number {
+export function headingFunction(heading: Heading, path: PathGeometry, options: HeadingOptions = {}): (t: number) => number {
   switch (heading.mode) {
     case "piecewise": {
       const ranges = heading.ranges;
       const inner = ranges.map((range) => rangeHeadingFunction(range, path));
-      return (t) => {
-        const index = rangeIndexAt(ranges, t);
-        return (inner[index] as (t: number) => number)(t);
-      };
+      const byArcLength = (t: number): number => (inner[rangeIndexAt(ranges, t)] as (t: number) => number)(t);
+      const runtime = segmentsFor(path, options);
+      if (runtime === null) return byArcLength;
+      const perSegment = runtime.curves.map((curve, index) => {
+        const share = runtime.fractions[index] as SegmentFractions;
+        return piecewiseSegmentPieces(ranges, curve, share.startFraction, share.endFraction, 0);
+      });
+      return bySegment(path, (index, u, t) => {
+        const piece = pieceAt(perSegment[index] ?? [], u);
+        if (piece === undefined) return byArcLength(t);
+        // Only the linear ranges move: every other mode reads the geometry at the point, as before.
+        const range = ranges[piece.rangeIndex] as HeadingRange;
+        return range.heading.mode === "linear" ? piece.evaluate(u) : (inner[piece.rangeIndex] as (t: number) => number)(t);
+      });
     }
     case "tangent":
       return (t) => tangentHeading(path, t);
@@ -98,7 +183,15 @@ export function headingFunction(heading: Heading, path: PathGeometry): (t: numbe
     case "constant":
       return () => wrapAngle(heading.headingRad);
     case "linear": {
-      const pieces = linearHeadingPieces(heading, path);
+      const runtime = segmentsFor(path, options);
+      if (runtime !== null) {
+        const perSegment = runtime.curves.map((curve, index) => {
+          const share = runtime.fractions[index] as SegmentFractions;
+          return segmentHeading(heading, curve, share.startFraction, share.endFraction, 0);
+        });
+        return bySegment(path, (index, u) => (perSegment[index] as (u: number) => number)(u));
+      }
+      const pieces = linearHeadingPieces(heading, path, options);
       return (t) => {
         const clamped = t < 0 ? 0 : t > 1 ? 1 : t;
         const piece =
@@ -139,8 +232,10 @@ export function rangeIndexAt(ranges: readonly HeadingRange[], t: number): number
 
 /**
  * h(t) inside one range, with t still the step's own. `linear` turns the short way from `fromRad`
- * at the range's start to `toRad` at its end, which is what the runtime's range interpolator does;
- * every other mode reads the whole path at t, exactly as it would outside a range.
+ * at the range's start to `toRad` at its end, linear in arc length, which is what the runtime's range
+ * interpolator does on a line; every other mode reads the whole path at t, exactly as it would
+ * outside a range. On a path with a Bezier, `headingFunction` takes a linear range from the runtime's
+ * per-segment mapping instead.
  */
 export function rangeHeadingFunction(range: HeadingRange, path: PathGeometry): (t: number) => number {
   const heading: RangeHeading = range.heading;

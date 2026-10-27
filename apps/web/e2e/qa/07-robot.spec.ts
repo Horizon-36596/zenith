@@ -35,12 +35,12 @@ test.beforeEach(async ({ page }) => {
 const simTotal = (page: Page): Promise<number> =>
   withCore<number>(
     page,
-    `(() => { const d = m.currentDerived(); if (!d.plan) return 0; const t = c.simulate(d.plan, s.autoRobot, s.autoField); let end = 0; for (const x of t.steps) if (x.parentId === null) end = Math.max(end, x.endS); return end; })()`,
+    `(() => { const d = m.currentDerived(); if (!d.plan) return 0; const t = c.simulate(d.plan, s.autoRobot, s.autoField, { ledger: d.ledgerRun ?? undefined, season: d.season }); let end = 0; for (const x of t.steps) if (x.parentId === null) end = Math.max(end, x.endS); return end; })()`,
   );
 
 /** Where core puts the robot at a time, from the editor's own plan, robot and field. */
 const simPose = (page: Page, timeS: number): Promise<{ xIn: number; yIn: number; headingRad: number }> =>
-  withCore(page, `(() => { const d = m.currentDerived(); const t = c.simulate(d.plan, s.autoRobot, s.autoField); return c.simPoseAt(t, ${String(timeS)}); })()`);
+  withCore(page, `(() => { const d = m.currentDerived(); const t = c.simulate(d.plan, s.autoRobot, s.autoField, { ledger: d.ledgerRun ?? undefined, season: d.season }); return c.simPoseAt(t, ${String(timeS)}); })()`);
 
 async function outlines(page: Page) {
   const frame = await nextFrame(page);
@@ -90,11 +90,12 @@ test("the scrubber control itself moves the robot", async ({ page }) => {
 });
 
 test("hovering a path shows the one outline there, and nothing is stamped along it", async ({ page }) => {
-  await page.getByTestId("step-row-toGarden").getByRole("button").first().click();
-  // A point on toGarden's curve, about halfway: sample the plan for it.
+  await page.getByTestId("step-row-toOtherSide").getByRole("button").first().click();
+  // A point on toOtherSide's curve, about halfway, out on the west of the hive frame and away from
+  // the curve's handles: sample the plan for it.
   const mid = await editor<{ xIn: number; yIn: number }>(
     page,
-    `(() => { const step = m.currentDerived().plan.steps.find((x) => x.id === "toGarden"); return step.samples[Math.floor(step.samples.length / 2)].pose; })()`,
+    `(() => { const step = m.currentDerived().plan.steps.find((x) => x.id === "toOtherSide"); return step.samples[Math.floor(step.samples.length / 2)].pose; })()`,
   );
   const at = await worldToScreen(page, mid.xIn, mid.yIn);
   await page.mouse.move(at.x + 30, at.y + 30);

@@ -1,13 +1,14 @@
 import { parseAuto, parseRobot, SCHEMA_ID, type Auto, type Robot } from "@horizon36596/zenith-schema";
 import { describe, expect, it } from "vitest";
 import { check } from "./check.js";
+import { compareFindings } from "./checks/approachFix.js";
 import { estimate } from "./estimate.js";
 import { applyFix } from "./fix.js";
 import { plan } from "./plan.js";
 import { resolve } from "./resolve.js";
 import type { SeasonRules, SeasonState } from "./season.js";
 import { testField, testRobot, testWaypoints } from "./testing/fixtures.js";
-import type { Finding, FindingCode } from "./types.js";
+import type { Finding, FindingCode, Fix } from "./types.js";
 
 /**
  * The core checks site/docs/checks-and-findings.md lists. The season-shaped ones
@@ -134,7 +135,21 @@ describe("STRAFE_FRACTION", () => {
     expect(findings).toHaveLength(1);
     expect(findings[0]?.message).toContain("100 %");
     expect(findings[0]?.message).toMatch(/costs \d+\.\d\d s/);
-    expect(findings[0]?.fixes?.map((fix) => fix.kind)).toEqual(["makeTangent"]);
+    expect(findings[0]?.fixes?.map((fix) => fix.kind)).toEqual(["makeTangent", "optimizeRoute"]);
+  });
+
+  it("claims no saving and offers no nose-first fix when the turn it needs makes nose-first slower (0.1.2 UX sweep W2-3)", () => {
+    // 10 in north, already facing +x: driving it nose-first needs a quarter turn on the spot first.
+    const short = leg("sideways", {
+      heading: { mode: "constant", headingRad: 0 },
+      segments: [{ kind: "line", from: "current", to: { xIn: -40, yIn: -50 } }],
+    });
+    const findings = of(run([short]), "STRAFE_FRACTION");
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.message).toBe(
+      "This path is driven sideways for 100 % of its length, over the 20 % warning threshold. Driving it nose-first would be no faster here, counting the turn on the spot that needs first.",
+    );
+    expect(findings[0]?.fixes?.map((fix) => fix.kind)).toEqual(["optimizeRoute"]);
   });
 
   it("stays quiet on a tangent leg", () => {
@@ -200,7 +215,7 @@ describe("STRAFE_FRACTION", () => {
       "STRAFE_FRACTION",
     );
     const kinds = findings[0]?.fixes?.map((fix) => fix.kind);
-    expect(kinds).toEqual(["makeTangent", "turnAtPreviousStop"]);
+    expect(kinds).toEqual(["makeTangent", "turnAtPreviousStop", "optimizeRoute"]);
   });
 });
 
@@ -268,18 +283,156 @@ describe("MOUTH_LEADING and SWEEP_SPEED", () => {
 describe("the season checks", () => {
   const volley = { id: "volley", kind: "command", name: "shootAll", args: { count: 3 } };
 
-  it("reports LEGAL_APPROACH with a fix that moves the leg before it", () => {
+  it("reports LEGAL_APPROACH with no move fix when the season has no legal spot near enough", () => {
     const findings = of(
       run([leg("approach"), volley], { season: holdsSeason({ pollen: 4 }, false) }),
       "LEGAL_APPROACH",
     );
     expect(findings).toHaveLength(1);
     expect(findings[0]?.severity).toBe("error");
-    expect(findings[0]?.fixes?.[0]).toMatchObject({
-      kind: "moveToLegalApproach",
-      stepId: "approach",
-      params: { xIn: -30, yIn: -30 },
+    expect(findings[0]?.fixes).toBeUndefined();
+  });
+
+  describe("Move to approach (0.1.2 UX sweep W2-2)", () => {
+    // Legal south of y = -30 only; the season's nearest legal spot is (-30, -30) and the target sits
+    // at the origin. approach ends at (-40, -20), which is not legal.
+    const south: SeasonRules = {
+      ...holdsSeason({ pollen: 4 }),
+      legalApproach: (_state, _target, pose) => pose.yIn <= -30,
+    };
+    const document = (heading: unknown): Auto => auto([leg("approach", { heading }), volley]);
+    const findingsOf = (written: Auto, which: Robot = robot): Finding[] => {
+      const planned = plan(resolve(written, testWaypoints), which, testField);
+      return check(planned, estimate(planned, which), which, testField, south);
+    };
+    const moveOf = (findings: readonly Finding[]): Extract<Fix, { kind: "moveToLegalApproach" }> => {
+      const fix = of(findings, "LEGAL_APPROACH")[0]?.fixes?.find((candidate) => candidate.kind === "moveToLegalApproach");
+      if (fix?.kind !== "moveToLegalApproach") throw new Error("expected a moveToLegalApproach fix");
+      return fix;
+    };
+
+    it("moves the end to a legal spot, labelled SET FROM EDITOR, and the fixed auto has no LEGAL_APPROACH and nothing new", () => {
+      const written = document({ mode: "tangent" });
+      const before = findingsOf(written);
+      const fix = moveOf(before);
+      expect(fix.stepId).toBe("approach");
+      expect(fix.params.yIn).toBeLessThanOrEqual(-30);
+      const fixed = applyFix(written, fix);
+      const end = (fixed.steps[0] as { segments: { to: Record<string, unknown> }[] }).segments[0]?.to;
+      expect(end).toMatchObject({ xIn: fix.params.xIn, yIn: fix.params.yIn, provenance: "SET FROM EDITOR" });
+      const after = findingsOf(fixed);
+      expect(of(after, "LEGAL_APPROACH")).toEqual([]);
+      expect(of(after, "PROVENANCE")).toEqual([]);
+      const errors = (findings: readonly Finding[]): string[] =>
+        findings.filter((finding) => finding.severity === "error").map((finding) => `${finding.code}@${finding.stepId}`);
+      expect(errors(after).filter((error) => !errors(before).includes(error))).toEqual([]);
     });
+
+    it("turns the robot so a turret's range holds the target", () => {
+      // Facing +x the whole way, the target at the origin is in the turret's +-1 rad wherever the
+      // fix moves the end, so the heading stays as written; facing -x it is not, so the leg turns.
+      expect(moveOf(findingsOf(document({ mode: "constant", headingRad: 0 }))).params.heading).toBeUndefined();
+      const away = document({ mode: "constant", headingRad: Math.PI });
+      const fix = moveOf(findingsOf(away));
+      expect(fix.params.aim).toBe("turret");
+      expect(fix.params.heading?.mode).toBe("constant");
+      expect(of(findingsOf(applyFix(away, fix)), "TURRET_RANGE")).toEqual([]);
+    });
+
+    it("keeps the side of a fixed launcher's robot the shot pointed at the target pointed at it", () => {
+      const fixed: Robot = { ...robot, shooter: { kind: "fixed" } };
+      const bearingFrom = (xIn: number, yIn: number): number => Math.atan2(-yIn, -xIn);
+      const wrap = (rad: number): number => Math.atan2(Math.sin(rad), Math.cos(rad));
+      // The back, and then the left side, toward the target as written: wherever the end moves, the
+      // target sits at the same bearing from the robot's body.
+      for (const bodyBearingRad of [Math.PI, Math.PI / 2]) {
+        const written = document({ mode: "constant", headingRad: bearingFrom(-40, -20) - bodyBearingRad });
+        const fix = moveOf(findingsOf(written, fixed));
+        expect(fix.label).toBe("Move the end of approach to a legal spot, turned so the same side faces the target");
+        expect(fix.params.aim).toBe("fixed");
+        const moved = plan(resolve(applyFix(written, fix), testWaypoints), fixed, testField);
+        const headingRad = moved.steps.find((step) => step.id === "approach")?.endPose?.headingRad ?? NaN;
+        expect(Math.abs(wrap(bearingFrom(fix.params.xIn, fix.params.yIn) - headingRad - bodyBearingRad))).toBeLessThan(1e-3);
+      }
+    });
+
+    it("skips a spot that would make a PERIMETER the auto already has go deeper", () => {
+      // Legal south of y = -30. The shot at (-64.5, -20) faces +x, so the back already pokes
+      // past the west wall, on approach and on leave, which drives on from there. The legal spots
+      // nearest the shot is further west, (-66, -30), where it would poke
+      // further; the fix passes over it for one no further west than the shot.
+      const west: SeasonRules = {
+        ...holdsSeason({ pollen: 4 }),
+        legalApproach: (_state, _target, pose) => pose.yIn <= -30,
+        nearestLegalApproach: () => ({ xIn: -66, yIn: -34, headingRad: 0 }),
+      };
+      const written = auto([
+        leg("approach", { segments: [{ kind: "line", from: "current", to: { xIn: -64.5, yIn: -20 } }], heading: { mode: "constant", headingRad: 0 } }),
+        volley,
+        leg("leave", { segments: [{ kind: "line", from: "current", to: { xIn: -50, yIn: 0 } }], heading: { mode: "constant", headingRad: 0 } }),
+      ]);
+      const findingsWith = (document: Auto): Finding[] => {
+        const planned = plan(resolve(document, testWaypoints), robot, testField);
+        return check(planned, estimate(planned, robot), robot, testField, west);
+      };
+      const depthOn = (findings: readonly Finding[], stepId: string): number =>
+        Math.max(0, ...of(findings, "PERIMETER").filter((finding) => finding.stepId === stepId).map((finding) => finding.geometry?.penetrationIn ?? 0));
+      const before = findingsWith(written);
+      expect(depthOn(before, "leave")).toBeGreaterThan(0);
+      const fix = moveOf(before);
+      expect(fix.params.xIn).toBeGreaterThanOrEqual(-64.5);
+      const after = findingsWith(applyFix(written, fix));
+      expect(of(after, "LEGAL_APPROACH")).toEqual([]);
+      for (const stepId of ["approach", "leave"]) expect(depthOn(after, stepId)).toBeLessThanOrEqual(depthOn(before, stepId) + 0.01);
+    });
+
+    it("judges a moved auto worse on a new error or a deeper or nearer finding, and names the first warning it adds", () => {
+      const finding = (code: FindingCode, severity: Finding["severity"], geometry: Finding["geometry"] = {}): Finding => ({
+        code,
+        severity,
+        stepId: "approach",
+        message: `${code} message`,
+        geometry,
+      });
+      const before = [finding("PERIMETER", "error", { penetrationIn: 1.64 }), finding("CLEARANCE", "warning", { obstacleId: "post", gapIn: 0.5 })];
+      expect(compareFindings(before, [finding("PERIMETER", "error", { penetrationIn: 3.21 })]).worse).toBe(true);
+      expect(compareFindings(before, [finding("PERIMETER", "error", { penetrationIn: 1.64 })])).toEqual({ worse: false, added: null });
+      expect(compareFindings(before, [finding("CLEARANCE", "warning", { obstacleId: "post", gapIn: 0.2 })]).worse).toBe(true);
+      expect(compareFindings(before, [finding("CLEARANCE", "error", { obstacleId: "post", gapIn: 0.5 })]).worse).toBe(true);
+      expect(compareFindings(before, [finding("STRUCTURE", "error", { obstacleId: "post", penetrationIn: 0.1 })]).worse).toBe(true);
+      const strafe = finding("STRAFE_FRACTION", "warning");
+      expect(compareFindings(before, [strafe, finding("PROVENANCE", "info")])).toEqual({ worse: false, added: strafe });
+    });
+
+    it("is not offered when every legal spot near the nearest one puts the robot into a structure", () => {
+      // Legal only inside hiveRedBase (x -16.75 to -8.75, y -6 to 6).
+      const inside: SeasonRules = {
+        ...holdsSeason({ pollen: 4 }),
+        legalApproach: (_state, _target, pose) => pose.xIn >= -16.75 && pose.xIn <= -8.75 && pose.yIn >= -6 && pose.yIn <= 6,
+        nearestLegalApproach: () => ({ xIn: -12.75, yIn: 0, headingRad: 0 }),
+      };
+      const findings = of(run([leg("approach"), volley], { season: inside }), "LEGAL_APPROACH");
+      expect(findings).toHaveLength(1);
+      expect(findings[0]?.fixes).toBeUndefined();
+    });
+  });
+
+  it("says which earlier step made LEGAL_APPROACH fail, and says nothing when it never passed", () => {
+    // A stand-in season whose target turns illegal once anything has been launched at it.
+    const flips: SeasonRules = {
+      ...holdsSeason({ pollen: 4 }),
+      legalApproach: (state) => ((state as { holds: Record<string, number> }).holds["pollen"] ?? 0) >= 4,
+      describe: () => "the target moved",
+    };
+    const first = { id: "first", kind: "command", name: "shootAll", args: { count: 1 } };
+    const findings = of(run([leg("approach"), first, volley], { season: flips, startHolds: { pollen: 4 } }), "LEGAL_APPROACH");
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.stepId).toBe("volley");
+    expect(findings[0]?.message).toBe(
+      "This step launches at theTarget from a pose that is not a legal approach to it. It was legal until first, after which the ledger says the target moved.",
+    );
+    const never = of(run([leg("approach"), volley], { season: holdsSeason({ pollen: 4 }, false) }), "LEGAL_APPROACH");
+    expect(never[0]?.message).toBe("This step launches at theTarget from a pose that is not a legal approach to it.");
   });
 
   it("warns about TURRET_RANGE when the target is behind the robot", () => {
@@ -291,6 +444,38 @@ describe("the season checks", () => {
       volley,
     ]);
     expect(of(behind, "TURRET_RANGE")).toHaveLength(1);
+  });
+
+  it("issue #373: warns with LAUNCH_TARGET when expect.launchesInto names no target the season knows", () => {
+    const knowing: SeasonRules = { ...holdsSeason({ pollen: 4 }), knowsTarget: (_state, target) => target === "theTarget" };
+    const lob = (into: string): unknown => ({ ...volley, id: "lob", expect: { launchesInto: into, count: 1 } });
+    const findings = of(run([lob("hiveRedUpCel")], { season: knowing }), "LAUNCH_TARGET");
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.severity).toBe("warning");
+    expect(findings[0]?.stepId).toBe("lob");
+    expect(findings[0]?.message).toBe(
+      'expect.launchesInto names "hiveRedUpCel", which is not a target on this field, so the ledger lands the pieces loose. The current target is theTarget.',
+    );
+    expect(of(run([lob("theTarget")], { season: knowing }), "LAUNCH_TARGET")).toEqual([]);
+    // A season that cannot tell targets apart takes every name on trust.
+    expect(of(run([lob("hiveRedUpCel")]), "LAUNCH_TARGET")).toEqual([]);
+  });
+
+  it("issue #373: judges a marker's launch from the marker's pose and offers no move fix for it", () => {
+    // Illegal only east of x = -20: the start (-40, -60) is legal, the marker near the end is not.
+    const east: SeasonRules = { ...holdsSeason({ pollen: 4 }), legalApproach: (_state, _target, pose) => pose.xIn < -20 };
+    const across = {
+      id: "across",
+      kind: "path",
+      segments: [{ kind: "line", from: "current", to: { xIn: 0, yIn: -60 } }],
+      heading: { mode: "tangent" },
+      markers: [{ at: { t: 0.9 }, command: { name: "shootAll", args: { count: 1 } } }],
+    };
+    const findings = of(run([across], { season: east }), "LEGAL_APPROACH");
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.stepId).toBe("across");
+    expect(findings[0]?.geometry?.pointIn?.xIn).toBeGreaterThan(-20);
+    expect(findings[0]?.fixes).toBeUndefined();
   });
 
   it("warns about an empty shot", () => {
@@ -494,7 +679,7 @@ describe("applyFix", () => {
       params: { xIn: -30, yIn: -30, headingRad: 1 },
     });
     const step = next.steps[0] as { segments: { to: { xIn: number; yIn: number } }[] };
-    expect(step.segments[0]?.to).toEqual({ xIn: -30, yIn: -30, headingRad: 1 });
+    expect(step.segments[0]?.to).toEqual({ xIn: -30, yIn: -30, headingRad: 1, provenance: "SET FROM EDITOR" });
   });
 
   it("splits a segment into two that meet where it was cut", () => {
@@ -523,8 +708,8 @@ describe("applyFix", () => {
       segments: { kind: string; from: unknown; to: { xIn: number; yIn: number } }[];
     };
     expect(step.segments).toHaveLength(2);
-    expect(step.segments[0]?.to).toEqual({ xIn: 10, yIn: 10 });
-    expect(step.segments[1]?.from).toEqual({ xIn: 10, yIn: 10 });
+    expect(step.segments[0]?.to).toEqual({ xIn: 10, yIn: 10, provenance: "SET FROM EDITOR" });
+    expect(step.segments[1]?.from).toEqual({ xIn: 10, yIn: 10, provenance: "SET FROM EDITOR" });
     expect(step.segments[0]?.kind).toBe("bezier");
   });
 

@@ -19,18 +19,22 @@ MIT, copyright Horizon (FTC 36596).
 
 | | |
 |---|---|
-| JitPack coordinate | `com.github.Horizon-36596:zenith:v0.1.1` |
+| JitPack coordinate | `com.github.Horizon-36596:zenith:v0.1.2` |
 | Maven group, artifact | `org.horizon36596:zenith-runtime` (what `publishToMavenLocal` writes) |
 | Java packages | `org.horizon36596.zenith.ivy` (Ivy), `org.horizon36596.zenith.solverslib` (SolversLib), `org.horizon36596.zenith` (shared) |
 | Packaging | Android library (AAR), `minSdk` 24 |
 
 The JitPack version is the git tag exactly as it was pushed, leading `v` included. That is how JitPack
-names a build, and it was measured on a real JitPack release.
+names a build, and it is what Horizon's SimLoop library measured on its first JitPack release.
 
 ## Install
 
 Paste one of these into `build.dependencies.gradle` at the root of your FTC project, keeping the lines
 already there.
+
+Match the runtime to the editor and CLI that wrote your files. These dependency examples name the
+last published version; unreleased source can use a newer file format. For development files, build
+the matching runtime source or wait for its release rather than changing `formatVersion` by hand.
 
 For Ivy:
 
@@ -47,7 +51,7 @@ dependencies {
 
     implementation 'com.pedropathing.ivy:pedro:1.1.1'
     implementation 'com.pedropathing:core:3.0.0-20260828.185437-17'
-    implementation 'com.github.Horizon-36596:zenith:v0.1.1'
+    implementation 'com.github.Horizon-36596:zenith:v0.1.2'
 }
 ```
 
@@ -67,7 +71,7 @@ dependencies {
 
     implementation 'org.solverslib:core:0.3.6'
     implementation 'com.pedropathing:core:3.0.0-20260828.185437-17'
-    implementation 'com.github.Horizon-36596:zenith:v0.1.1'
+    implementation 'com.github.Horizon-36596:zenith:v0.1.2'
 }
 ```
 
@@ -114,11 +118,15 @@ generates constructs one.
 | `nanoTime()` | no, `System.nanoTime()` | the robot clock every wait and timeout reads; a headless sim returns its stepped clock |
 | `setStartPose(Pose2d)` | no, `follower().setPose(...)` | put the robot at the start pose at init |
 | `currentPose()` | no, the follower's pose | the live pose a `"current"` start is built from |
-| `defaultSpeedFraction()` | no, `1.0` | the speed a path runs at when the file gives none |
-| `atSpeed(Path, double)` | no, unchanged | apply your velocity cap as a path is handed to the follower |
+| `defaultSpeedFraction()` | no, `kinematics.defaultPathSpeedFraction` from the deployed `robot.json`, or `1.0` with a warning | the speed a path runs at when the file gives none |
+| `atSpeed(Path, double)` | no, unchanged, **but needed for path speeds** | apply your velocity cap as a path is handed to the follower; without it a speed below 1 changes the editor's times and not the robot, and init warns |
 | `followPath(Path, double)` | no, the runtime's `FollowPath` | your own path-following command, if you have one |
 | `step(String id, Command)` | no, unchanged | wrap each step for logging or tracing; `id` is the editor's step id |
 | `initLoop(AutoFromFile)` | no, nothing | run on every loop while waiting for start |
+| `onStart(AutoFromFile)` | no, nothing | run once at start, before the routine is scheduled |
+| `periodic(AutoFromFile)` | no, nothing | run on every loop after start, before the scheduler (on Ivy, it updates the follower by default) |
+| `afterLoop(AutoFromFile)` | no, nothing | run on every loop after start, after the scheduler |
+| `onStop(AutoFromFile)` | no, nothing | run once when the OpMode stops, however it stops, whenever the robot was created |
 
 Something must call `follower.update(...)` once per loop. The usual place is your drivetrain
 subsystem's `periodic()`, which the SolversLib scheduler runs every loop; the runtime does not call it,
@@ -151,11 +159,21 @@ public class MyRobot implements ZenithRobot {
     @Override public Pose2d mirror(Pose2d p) {
         return new Pose2d(-p.getX(), -p.getY(), new Rotation2d(p.getHeading() + Math.PI));
     }
+
+    // Needed for path speeds: without it every path drives at full speed. Apply the cap the way your
+    // follower setup does; for a ForesightV3 follower built from a config you keep, this is the line.
+    @Override public Path atSpeed(Path path, double fraction) {
+        return path.with(foresightConfig.setPathSpeed(fraction));
+    }
 }
 ```
 
-`PedroSetup`, `DriveSubsystem`, `Intake`, `ScoreCommand` and `AllianceSelector` stand for your own
-code. Register only commands that exist: an auto that names an unregistered command or condition fails
+This is an integration outline, not a standalone class. `PedroSetup`, `DriveSubsystem`, `Intake`,
+`ScoreCommand` and `AllianceSelector` stand for your own code. `foresightConfig` is the configuration
+retained by your ForesightV3 follower setup; supply it or replace `atSpeed` with your follower's
+speed-cap hook. Removing the override leaves path speeds unapplied.
+
+Register only commands that exist: an auto that names an unregistered command or condition fails
 at init with the list of what *is* registered, while the robot is still on the tile. Argument values
 arrive from the JSON reader, so a number is a `Double`, a string a `String` and a flag a `Boolean`; the
 `NamedCommands.arg*` helpers check them and name the command and argument when they are wrong.
@@ -260,7 +278,9 @@ Command routine = AutoBuilder.build(spec, myContext);
 ```
 
 `AutoTraceWriter` writes the `<auto>.trace.json` the editor reads back from a headless sim; its
-`traced(id, command)` has the same shape as `ZenithRobot.step`.
+`traced(id, command)` has the same shape as `ZenithRobot.step`. Beside steps and poses, it records
+structure contacts, ledger rows, events and the commit (`structureContact`, `ledger()`, `event`,
+`sha`), which `site/docs/simulation.md` describes.
 
 ## What is here
 
@@ -345,7 +365,14 @@ still short of 1, and the deadline group interrupts the runner on the same loop,
 `{"t": 1}` or `{"distanceFromEndIn": 0}` would be stepped over and never run. Once the follower has been
 seen driving this path, a follower that has stopped following counts as the whole length travelled,
 which fires those markers on the last loop the runner gets; the "has been seen" latch keeps that from
-firing everything at `initialize()`, before the path was handed over.
+firing everything at `initialize()`, before the path was handed over, and until then progress reads 0.
+Only a path that finished gets there: an `endCondition` races the marker group as a whole, never the
+path inside it, so a path cut short ends the runner on the same loop, before it could read the held
+follower as a path driven to its end. A marker past the cut never fires.
+
+When a marker starts, the runner interrupts any marker it is still running that needs one of the new
+marker's subsystems, as the scheduler would; otherwise both would drive that subsystem every loop and
+the older one, run last, would win.
 
 One Pedro path per file segment makes `pathIndex()` the index of the file's own segment, and
 `curveCompletion()` is `1 - remainingDistance / curve.length()`, already an arc-length fraction rather

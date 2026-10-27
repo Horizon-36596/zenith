@@ -1,0 +1,41 @@
+/* The one segmented switch (UI_GUIDE 9.16): a `--bg-inset` well with a `--border-default` edge,
+   the pressed segment `--bg-raised` with `--text-hi`, the others `--text-lo`. */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-self: flex-start;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+}
+
+.segment {
+  height: var(--ctl-h-sm);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: var(--text-lo);
+  transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+
+.segmented[data-size="small"] .segment {
+  padding-inline: var(--space-2);
+  font-size: var(--fs-xs);
+}
+
+.segment:hover:not([aria-disabled="true"]) {
+  color: var(--text-hi);
+}
+
+.segment[aria-pressed="true"] {
+  background: var(--bg-raised);
+  color: var(--text-hi);
+  font-weight: var(--fw-medium);
+}
+
+.segment[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
+}

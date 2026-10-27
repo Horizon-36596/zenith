@@ -1,8 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
-import { mirrorForField } from "@horizon36596/zenith-core";
+import { autoSkeleton, mirrorForField } from "@horizon36596/zenith-core";
 import { findProjectRoot, loadProject, ProjectError } from "../project.js";
-import { autoSkeleton } from "../skeletons.js";
 
 export interface NewOptions {
   cwd?: string;

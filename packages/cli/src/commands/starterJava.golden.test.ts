@@ -8,13 +8,13 @@ import { runCodegen } from "./codegen.js";
 import { runDeploy } from "./deploy.js";
 
 /**
- * examples/starter/generated/ holds what `zenith codegen` and `zenith deploy` write for the starter's
+ * examples/starter/generated/ holds what `zenith codegen`, `zenith codegen --export` and `zenith deploy` write for the starter's
  * `cycle-and-park` auto, once for each command library, so a reader can see Zenith's Java output
  * without running anything. This runs both commands on a copy of the starter project and fails if
  * the checked-in files have drifted from what they write now.
  *
  * Set `ZENITH_UPDATE_GOLDEN=1` to write the files instead of comparing against them. The robot build
- * compiles and runs the two generated classes (the conformance suite in robot/auto-runtime), so an
+ * compiles and runs the generated and exported classes (the conformance suite in robot/auto-runtime), so an
  * update is checked there too.
  */
 const starter = fileURLToPath(new URL("../../../../examples/starter/", import.meta.url));
@@ -24,6 +24,7 @@ const PACKAGE_PATH = "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/zeni
 /** Each file the commands write, by the name it is checked in under. */
 const OUTPUTS: ReadonlyArray<readonly [string, string]> = [
   ["CycleAndParkGenerated.java", `${PACKAGE_PATH}/CycleAndParkGenerated.java`],
+  ["CycleAndParkExported.java", `${PACKAGE_PATH}/CycleAndParkExported.java`],
   ["CycleAndParkAuto.java", `${PACKAGE_PATH}/generated/CycleAndParkAuto.java`],
 ];
 
@@ -49,6 +50,7 @@ function generate(library: CommandLibrary): Map<string, string> {
   writeFileSync(linkPath, JSON.stringify(link, null, 2));
 
   expect(runCodegen(AUTO, { cwd: root })).toBe(0);
+  expect(runCodegen(AUTO, { cwd: root, export: true })).toBe(0);
   expect(runDeploy({ cwd: root })).toBe(0);
   return new Map(OUTPUTS.map(([name, written]) => [name, readFileSync(join(root, written), "utf8")]));
 }

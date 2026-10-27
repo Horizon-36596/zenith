@@ -1,58 +1,559 @@
+/* The Inspector as one calm panel (issue #431, UI_GUIDE sections 9.3 and 9.5): a selection header
+   that never scrolls, then sections separated by hairlines, every row on one grid. */
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
 .inspector {
   display: flex;
   flex-direction: column;
-  padding-bottom: var(--space-6);
+  /* A little room under the last section. */
+  padding-bottom: var(--space-3);
 }
+
+/* ---- The selection header (issue #431) ---------------------------------- */
+
+/* 40 px, a hairline under it: the kind's icon, the id in Jost, then the facts, the action and the ?. */
+.selHead {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  height: 40px;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.selKind {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon);
+  color: var(--text-lo);
+}
+
+.selTitle {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-hi);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A marker's path, before its title: a quiet button that selects the path. */
+.crumb {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  padding: 0 2px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  color: var(--text-lo);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crumb:hover {
+  color: var(--text-hi);
+  background: var(--bg-hover);
+}
+
+.crumb:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+}
+
+.crumbSep {
+  flex: none;
+  margin: 0 -4px;
+  color: var(--text-disabled);
+}
+
+.selGrow {
+  flex: 1;
+  min-width: 0;
+}
+
+.selEstimate {
+  flex: none;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+.selEstimate:focus-visible,
+.selMark:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+}
+
+/* A fact shown as a quiet icon, such as Stands still; its words beside it only in With descriptions. */
+.selMark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  border-radius: var(--radius-xs);
+  color: var(--text-lo);
+}
+
+.selMarkWords {
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.selAction {
+  display: inline-flex;
+  flex: none;
+  margin-right: -4px;
+}
+
+.selAction button {
+  color: var(--text-lo);
+}
+
+.selHelp {
+  display: inline-flex;
+  flex: none;
+}
+
+/* ---- Banners under the header ------------------------------------------- */
+
+/* A line that comes and goes with the selection, such as `3 points in 2 steps` with Clear selection
+   or the made-with chip: one 28 px row under the header, above the first section (issue #431). */
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--space-2);
+  min-height: var(--row-h-inspector);
+  padding: 2px var(--space-1) 2px var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.bannerText {
+  font-size: var(--fs-label);
+  color: var(--text-mid);
+}
+
+/* The header's brief, such as the estimate's, drawn only in With descriptions. */
+.headBrief {
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-default);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* "Made with Step groups, which your settings turn off" and its Turn on (`MadeWithChip.tsx`). */
+.madeWith {
+  composes: banner;
+}
+
+.madeWithText {
+  font-size: var(--fs-label);
+  color: var(--text-mid);
+}
+
+/* ---- Values ------------------------------------------------------------- */
 
 .readout {
   font-family: var(--font-mono);
   font-variant-numeric: var(--numeric);
+  font-size: 12.5px;
+  color: inherit;
+  white-space: nowrap;
+}
+
+/* A quiet value in the UI face, such as `End of Path 1`. */
+.quietValue {
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+  white-space: nowrap;
+}
+
+/* A value that is words rather than a number, such as a branch's `If true`: the UI face. */
+.wordValue {
+  font-family: var(--font-ui);
   font-size: var(--fs-sm);
   color: var(--text-hi);
 }
 
-.pose {
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--border-subtle);
+/* A pose read only, such as a followed waypoint's: two numbers and the unit once. */
+.poseReadout {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: 12.5px;
+  white-space: nowrap;
 }
 
-.pose:last-child {
-  border-bottom: 0;
+.poseNumber {
+  min-width: 52px;
 }
 
-.marker {
-  margin: var(--space-2) var(--pad-row-x);
-  padding-bottom: var(--space-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+.poseReadout :global(.unit) {
+  margin-left: -2px;
 }
 
-.markerHead {
+/* A non-selected end's followed pose, in With descriptions: a quiet brief under its row. */
+.followedBrief {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+/* The full sim's delta beside its time, `1.62 s +0.03 s`. */
+.delta {
+  margin-left: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+/* Speed at the robot's default: `80% default`, the percent tight against its placeholder. */
+.percentSign {
+  margin-left: -2px;
+}
+
+.defaultNote {
+  margin-left: 6px;
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+/* A brief under a control that draws its own row, as a FieldRow's brief is drawn (issue #238). */
+.brief {
+  margin: -6px 0 var(--space-1);
+  padding: 0 var(--space-3) 0 var(--inspector-gutter);
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---- A path's ends and control points ----------------------------------- */
+
+/*
+ * One end or control point of a path. A point selected on the field takes the selected style as one
+ * block, --bg-selected with a 2 px accent bar (issue #243), drawn as an inset shadow so selecting
+ * never moves a value.
+ */
+.pose,
+.pointRow {
+  position: relative;
+}
+
+.pose[data-selected="true"],
+.pointRow[data-selected="true"] {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* ---- Lists: group members and markers ------------------------------------ */
+
+/* A group's members, one 24 px row each (INS-22): icon, id, a flag on the one that ends it, time. */
+.members {
+  display: flex;
+  flex-direction: column;
+}
+
+.memberRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: var(--row-h-compact);
-  padding-inline: var(--pad-row-x);
-  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-2);
+  width: 100%;
+  height: var(--row-h-list);
+  padding: 0 var(--space-3) 0 var(--inspector-gutter);
+  border: 0;
+  background: none;
+  color: var(--text-hi);
+  text-align: left;
+  cursor: pointer;
+}
+
+.memberRow:hover {
+  background: var(--bg-hover);
+}
+
+.memberRow:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+}
+
+.memberIcon {
+  flex: none;
+  color: var(--text-lo);
+}
+
+.memberId {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memberEnds {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-lo);
+}
+
+.memberEndsWords {
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.memberTime {
+  flex: none;
+  min-width: 40px;
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+  text-align: right;
+}
+
+/* One marker in the path's list: the whole row opens it, the bin on hover removes it. */
+.markerRow {
+  display: flex;
+  align-items: center;
+  height: var(--row-h-list);
+  padding-right: var(--space-1);
+}
+
+.markerRow:hover {
+  background: var(--bg-hover);
+}
+
+.markerOpen {
+  display: grid;
+  flex: 1;
+  grid-template-columns: calc(var(--inspector-label-w) + var(--space-2)) minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0 0 var(--inspector-gutter);
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.markerOpen:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
 }
 
 .markerTitle {
+  overflow: hidden;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--text-mid);
-  letter-spacing: var(--tracking-wide);
+  font-size: var(--fs-label);
+  color: var(--text-hi);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.markerWhere {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+/* A list row's bin or scissors: shown on the row's hover or focus, and always on a touch screen. */
+.hoverAction {
+  display: inline-flex;
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.hoverAction button {
+  color: var(--text-lo);
+}
+
+.markerRow:hover .hoverAction,
+.markerRow:focus-within .hoverAction {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .hoverAction {
+    opacity: 1;
+  }
+}
+
+/* A row of buttons inside a section, such as an envelope's Cancel. */
 .markerAdd {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   justify-content: flex-start;
-  padding: var(--space-1) var(--pad-row-x);
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--inspector-gutter);
 }
 
+/* An entry in Advanced that adds something, such as a stay-inside box: its text buttons in a row. */
+.entryButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-1);
+  /* The first button's words start on the value column, past its own padding. */
+  margin-left: calc(-1 * var(--space-1));
+}
+
+/* A sentence that states a fact or an empty state, such as the envelope being drawn. */
 .note {
   margin: 0;
-  padding: var(--space-1) var(--pad-row-x) var(--space-2);
+  padding: var(--space-1) var(--space-3) var(--space-2) var(--inspector-gutter);
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
   color: var(--text-mid);
+}
+
+/* ---- The Waypoints list (issue #245) ------------------------------------- */
+
+/* One 24 px line per waypoint: the eye in the gutter, the name at 24 px, x, y and heading, the ⋯. */
+.waypointRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: var(--row-h-list);
+  padding: 0 2px 0 var(--inspector-gutter);
+}
+
+.waypointRow:hover {
+  background: var(--bg-hover);
+}
+
+.waypointRow[data-selected] {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.waypointName {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.waypointName:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+}
+
+.waypointName[aria-pressed="true"] {
+  color: var(--text-hi);
+}
+
+/* A hidden pin's row is dimmed; its eye stays as clear as any other, so it is easy to show again. */
+.waypointRow[data-hidden] .waypointName,
+.waypointRow[data-hidden] input {
+  color: var(--text-lo);
+}
+
+/* The row's three numbers, kept as flex items of the row itself. */
+.waypointNumbers {
+  display: contents;
+}
+
+/* The quiet line under a waypoint's row when no auto in the project follows it (issue #217). */
+.waypointUnused {
+  margin: 0;
+  padding: 0 var(--space-3) 0 var(--inspector-gutter);
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  line-height: var(--ctl-h-sm);
+  color: var(--text-lo);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The selected pin's Used by: quiet, one line, its hint the whole list. */
+.waypointUsedBy {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waypointUsedBy:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+}
+
+/* What typing a number does to a MEASURED pin's label (decision D12), said before it is committed. */
+.waypointNotice {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-1) var(--inspector-gutter);
+  font-size: var(--fs-label);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.waypointTools {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--space-3);
 }

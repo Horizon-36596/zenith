@@ -10,5 +10,5 @@
     "types": []
   },
   "include": ["src"],
-  "references": [{ "path": "../../packages/schema" }, { "path": "../../packages/core" }, { "path": "../../packages/github" }, { "path": "../../packages/season-biobuzz" }, { "path": "../../packages/seasons" }]
+  "references": [{ "path": "../../packages/schema" }, { "path": "../../packages/core" }, { "path": "../../packages/github" }, { "path": "../../packages/import" }, { "path": "../../packages/season-biobuzz" }, { "path": "../../packages/seasons" }, { "path": "../../packages/cloud" }]
 }

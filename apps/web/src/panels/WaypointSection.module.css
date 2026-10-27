@@ -1,0 +1,131 @@
+/* The Waypoints list's own rules, beside the row rules in Inspector.module.css (issues #410, #431). */
+
+/* A row's name is cut in the middle, so the word that tells two long names apart always shows:
+   flowerNo…Approach. The head shrinks and takes the ellipsis; the tail never does. */
+.nameFlex {
+  display: flex;
+  align-items: center;
+}
+
+.nameHead {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameTail {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* A row's numbers have 1 px of padding, which with the border leaves "-76.0" and "-179.9" their whole
+   width in the 38 px and 44 px boxes (JetBrains Mono at 11 px is 6.6 px a digit). The heading's box is
+   the one followed by its degree sign. */
+.row input {
+  padding-inline: 1px;
+}
+
+.row input:has(+ :global(.unit)) {
+  width: 44px;
+}
+
+/* A heading's degree sign sits right against its number, pulling back over the row's gap and the
+   box's own padding and border. */
+.row input + :global(.unit) {
+  margin-left: -5px;
+}
+
+/* The eye sits in the row's 24 px gutter, so the names line up with every label above them. It
+   shows on the row's hover or focus, always on a touch screen, and always on a hidden pin. */
+.eye {
+  position: absolute;
+  top: 0;
+  left: 1px;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.eye button,
+.more button {
+  width: 20px;
+  color: var(--text-lo);
+}
+
+/* The ⋯ at the row's end, shown as the eye is. */
+.more {
+  display: flex;
+  flex: none;
+  width: 20px;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.row:hover .eye,
+.row:focus-within .eye,
+.row[data-hidden] .eye,
+.row:hover .more,
+.row:focus-within .more,
+.row[data-menu-open] .more {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .eye,
+  .more {
+    opacity: 1;
+  }
+}
+
+/* The list's first line: the Pins choice, then x, y and heading over their columns. It has the
+   row's padding and the widths of the row's controls, so each word sits over its column: a number
+   box 38 px, an angle box 44 px and its degree sign, then the ⋯'s 20 px. */
+.columns {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: var(--row-h-list);
+  padding: 0 2px 0 var(--inspector-gutter);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.columnName,
+.pins {
+  flex: 1;
+  min-width: 0;
+}
+
+.pins {
+  display: flex;
+  margin-left: -5px;
+}
+
+.columnNumber,
+.columnAngle {
+  flex: none;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.columnNumber {
+  width: 38px;
+  padding-right: 2px;
+}
+
+/* 44 px box, less the degree sign's pull-back, plus the sign itself, so the word ends over the digits. */
+.columnAngle {
+  width: 47px;
+  padding-right: 5px;
+}
+
+.columnMore {
+  flex: none;
+  width: 20px;
+}

@@ -27,37 +27,59 @@ const autoV1 = {
   ],
 };
 
-describe("format versions 2 and 3: migration", () => {
-  it("writes autos at 3, fields at 2 and every other kind at 1", () => {
-    expect(FORMAT_VERSIONS).toEqual({ link: 1, robot: 1, field: 2, waypoints: 1, auto: 3 });
-    expect(FORMAT_VERSION).toBe(3);
+describe("format versions 2, 3 and 4: migration", () => {
+  it("writes autos at 4, fields at 3 and every other kind at 1", () => {
+    expect(FORMAT_VERSIONS).toEqual({ link: 1, robot: 1, field: 3, waypoints: 1, auto: 4, projection: 1, proposal: 1 });
+    expect(FORMAT_VERSION).toBe(4);
   });
 
-  it("takes the v1 auto fixture through v2 to the v3 fixture: the identity plus the version bumps", () => {
+  it("takes the v1 auto fixture through v2 and v3 to the v4 fixture: the identity plus the version bumps", () => {
     const result = migrate(fixture("auto.v1.json"));
     expect(result.kind).toBe("auto");
     expect(result.fromVersion).toBe(1);
-    expect(result.formatVersion).toBe(3);
-    expect(result.data).toEqual(fixture("auto.v3.json"));
+    expect(result.formatVersion).toBe(4);
+    expect(result.data).toEqual(fixture("auto.v4.json"));
   });
 
-  it("takes the v2 auto fixture to the v3 fixture unchanged but for the version", () => {
+  it("takes the v2 auto fixture to the v4 fixture unchanged but for the version", () => {
     const result = migrate(fixture("auto.v2.json"));
     expect(result.fromVersion).toBe(2);
-    expect(result.data).toEqual(fixture("auto.v3.json"));
+    expect(result.data).toEqual(fixture("auto.v4.json"));
   });
 
-  it("takes the v1 field fixture to the v2 fixture: the identity plus the version bump", () => {
+  it("takes the v3 auto fixture to the v4 fixture unchanged but for the version", () => {
+    const result = migrate(fixture("auto.v3.json"));
+    expect(result.fromVersion).toBe(3);
+    expect(result.formatVersion).toBe(4);
+    expect(result.data).toEqual(fixture("auto.v4.json"));
+  });
+
+  it("takes the v1 field fixture through v2 to the v3 fixture: the identity plus the version bumps", () => {
     const result = migrate(fixture("field.v1.json"));
     expect(result.kind).toBe("field");
-    expect(result.formatVersion).toBe(2);
-    expect(result.data).toEqual(fixture("field.v2.json"));
+    expect(result.fromVersion).toBe(1);
+    expect(result.formatVersion).toBe(3);
+    expect(result.data).toEqual(fixture("field.v3.json"));
   });
 
-  it("leaves a v3 file exactly as it is", () => {
-    const v3 = fixture("auto.v3.json");
-    expect(migrate(v3).data).toEqual(v3);
-    expect(migrate(v3).fromVersion).toBe(3);
+  it("takes the v2 field fixture to the v3 fixture unchanged but for the version (issue #228)", () => {
+    const result = migrate(fixture("field.v2.json"));
+    expect(result.fromVersion).toBe(2);
+    expect(result.formatVersion).toBe(3);
+    expect(result.data).toEqual({ ...(fixture("field.v2.json") as object), formatVersion: 3 });
+    expect(result.data).toEqual(fixture("field.v3.json"));
+  });
+
+  it("refuses a field from a later version by name and number, the way an older build refuses a v3 field", () => {
+    expect(() => migrate({ ...(fixture("field.v3.json") as object), formatVersion: 4 })).toThrow(
+      /field file is formatVersion 4; this build of Zenith knows 3/,
+    );
+  });
+
+  it("leaves a v4 file exactly as it is", () => {
+    const v4 = fixture("auto.v4.json");
+    expect(migrate(v4).data).toEqual(v4);
+    expect(migrate(v4).fromVersion).toBe(4);
   });
 
   it("never mutates the file it migrates", () => {
@@ -66,11 +88,13 @@ describe("format versions 2 and 3: migration", () => {
     expect(v1["formatVersion"]).toBe(1);
   });
 
-  it("parses a v1 or v2 auto as v3, so the loader accepts all three", () => {
-    expect(parseAuto(autoV1).formatVersion).toBe(3);
-    expect(parseAuto(fixture("auto.v1.json"))).toEqual(parseAuto(fixture("auto.v3.json")));
-    expect(parseAuto(fixture("auto.v2.json"))).toEqual(parseAuto(fixture("auto.v3.json")));
-    expect(parseField(fixture("field.v1.json")).formatVersion).toBe(2);
+  it("parses a v1, v2 or v3 auto as v4, so the loader accepts all four", () => {
+    expect(parseAuto(autoV1).formatVersion).toBe(4);
+    expect(parseAuto(fixture("auto.v1.json"))).toEqual(parseAuto(fixture("auto.v4.json")));
+    expect(parseAuto(fixture("auto.v2.json"))).toEqual(parseAuto(fixture("auto.v4.json")));
+    expect(parseAuto(fixture("auto.v3.json"))).toEqual(parseAuto(fixture("auto.v4.json")));
+    expect(parseField(fixture("field.v1.json")).formatVersion).toBe(3);
+    expect(parseField(fixture("field.v2.json"))).toEqual(parseField(fixture("field.v3.json")));
   });
 
   it("keeps robot and waypoints files at 1", () => {
@@ -82,8 +106,8 @@ describe("format versions 2 and 3: migration", () => {
   });
 
   it("refuses a file from the future by name and number", () => {
-    expect(() => migrate({ ...autoV1, formatVersion: 4 })).toThrow(
-      /auto file is formatVersion 4; this build of Zenith knows 3/,
+    expect(() => migrate({ ...autoV1, formatVersion: 5 })).toThrow(
+      /auto file is formatVersion 5; this build of Zenith knows 4/,
     );
   });
 

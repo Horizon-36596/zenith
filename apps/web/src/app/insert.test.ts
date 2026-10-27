@@ -106,6 +106,15 @@ describe("insert in the middle", () => {
     expect(resolved?.startPose.yIn).toBeCloseTo(0);
   });
 
+  it("names new paths path1, path2, not leg or path-2", () => {
+    selectStep("leg1");
+    expect(addPathStep()).toBe("path1");
+    expect(addPathStep()).toBe("path2");
+    const sequenceId = addSequenceStep();
+    const group = auto().steps.find((step) => step.id === sequenceId);
+    expect(group?.kind === "sequence" && ids(group.steps)).toEqual(["path3"]);
+  });
+
   it("leaves no gap when the next step already starts where the robot is", () => {
     selectStep("leg1");
     addPathStep();

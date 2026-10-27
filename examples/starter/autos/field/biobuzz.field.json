@@ -1,6 +1,6 @@
 {
   "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/field.json",
-  "formatVersion": 2,
+  "formatVersion": 3,
   "season": "biobuzz",
   "name": "BIOBUZZ presented by RTX (FTC 2026-27)",
   "frame": {
@@ -19,27 +19,6 @@
   "sizeIn": {
     "xIn": 144,
     "yIn": 144
-  },
-  "image": {
-    "src": "app:fields/biobuzz/biobuzz-dark.webp",
-    "credit": "Field image by Team Juice 16236",
-    "pxBoundsIn": "fullBleed",
-    "rotationDeg": 90,
-    "variants": [
-      {
-        "name": "dark",
-        "src": "app:fields/biobuzz/biobuzz-dark.webp"
-      },
-      {
-        "name": "black",
-        "src": "app:fields/biobuzz/biobuzz-black.webp"
-      },
-      {
-        "name": "light",
-        "src": "app:fields/biobuzz/biobuzz-light.webp"
-      }
-    ],
-    "provenance": "SET BY HAND 2026-09-22: full bleed (1080 px spans 144 in, grid every 180 px = one tile) and a 90 degree clockwise turn, checked against the RED loading zone, the four flowers and hiveRed (apps/web/public/fields/biobuzz/SOURCE.md)"
   },
   "periods": {
     "autoS": 30,
@@ -73,26 +52,94 @@
     {
       "id": "frameBarEast",
       "kind": "box",
-      "minXIn": 24,
-      "maxXIn": 25,
-      "minYIn": -19.4,
-      "maxYIn": 19.4,
+      "minXIn": 22.54,
+      "maxXIn": 24.76,
+      "minYIn": -19.48,
+      "maxYIn": 19.48,
       "minZIn": 0,
-      "maxZIn": 2,
+      "maxZIn": 2.15,
       "solidToRobot": true,
-      "provenance": "APPROX: a 1 in envelope around the east base bar of the hive frame, derived from the public field drawings: the frame is 49.46 in wide and 38.95 in deep at its base (BIOBUZZ Competition Manual V1 §9.6.1, Fig 9-8), so the bar sits just outside the x = +24 tile seam (Figs 9-4 and 9-5) with its feet near y = ±19.4. The 2 in height is NEEDS MEASUREMENT: no public drawing gives the base bar's height."
+      "provenance": "SPEC (FIRST's BIOBUZZ field CAD, STEP v26-27.2, sha256 5e768b73…fe00: the east foot bar, part am-5878 Sheet Metal Foot Bar, spans x 22.750 to 24.735, |y| up to 19.472 and z 0 to 2.148; this box widens it to hold the two feet on it, parts am-5879-A and am-5879-B, which reach |y| 19.477, and their fasteners, whose screw heads reach x 22.548 and 24.754, rounded outward to 0.01 in). Agrees with BIOBUZZ Competition Manual V1 §9.6.1: the frame is 49.46 in wide and 38.95 in deep at its base, so the bar's outer face is 24.73 in from the centre and its ends 19.475 in. See TRANSCRIPTION.md, Hive frame."
     },
     {
       "id": "frameBarWest",
       "kind": "box",
-      "minXIn": -25,
-      "maxXIn": -24,
-      "minYIn": -19.4,
-      "maxYIn": 19.4,
+      "minXIn": -24.76,
+      "maxXIn": -22.54,
+      "minYIn": -19.48,
+      "maxYIn": 19.48,
       "minZIn": 0,
-      "maxZIn": 2,
+      "maxZIn": 2.15,
       "solidToRobot": true,
-      "provenance": "APPROX: a 1 in envelope around the west base bar of the hive frame, derived from the public field drawings: the frame is 49.46 in wide and 38.95 in deep at its base (BIOBUZZ Competition Manual V1 §9.6.1, Fig 9-8), so the bar sits just outside the x = -24 tile seam (Figs 9-4 and 9-5) with its feet near y = ±19.4. The 2 in height is NEEDS MEASUREMENT: no public drawing gives the base bar's height."
+      "provenance": "SPEC (FIRST's BIOBUZZ field CAD, STEP v26-27.2, sha256 5e768b73…fe00: part am-5878 Sheet Metal Foot Bar, the west one, with its feet and fasteners. It is frameBarEast's point mirror, which the CAD's west bar matches to within 0.015 in). See TRANSCRIPTION.md, Hive frame."
+    },
+    {
+      "id": "frameLegNorthEast",
+      "kind": "strut",
+      "fromIn": {
+        "xIn": 23.8,
+        "yIn": 18.56,
+        "zIn": 0.53
+      },
+      "toIn": {
+        "xIn": 12.74,
+        "yIn": 0.51,
+        "zIn": 41.08
+      },
+      "radiusIn": 0.73,
+      "solidToRobot": true,
+      "provenance": "SPEC (FIRST's BIOBUZZ field CAD, STEP v26-27.2, sha256 5e768b73…fe00: part am-5876 A-Frame Leg, a 1 in square tube 45.75 in long, cut square at both ends. fromIn and toIn are the centres of its two end faces; the CAD's east and west legs differ by 0.015 in in x, so each value is the mean of the four legs over the field's point mirror, rounded to 0.01 in. radiusIn is the round envelope, rounded up to 0.01 in, that holds every point of the tube after that rounding: 0.707 in to its corners plus 0.014 in). Agrees with BIOBUZZ Competition Manual V1 §9.6.1, two triangular frames 49.46 by 38.95 in at the base, and Fig 9-10, the frames' tops under the pivots at x = ±12.75. See TRANSCRIPTION.md, Hive frame."
+    },
+    {
+      "id": "frameLegSouthEast",
+      "kind": "strut",
+      "fromIn": {
+        "xIn": 23.8,
+        "yIn": -18.56,
+        "zIn": 0.53
+      },
+      "toIn": {
+        "xIn": 12.74,
+        "yIn": -0.51,
+        "zIn": 41.08
+      },
+      "radiusIn": 0.73,
+      "solidToRobot": true,
+      "provenance": "SPEC (FIRST's BIOBUZZ field CAD, STEP v26-27.2, sha256 5e768b73…fe00: part am-5876 A-Frame Leg, the same part and extraction as frameLegNorthEast. The CAD's frame is symmetric about y = 0 to within 0.001 in, so this leg is frameLegNorthEast reflected in y = 0). See TRANSCRIPTION.md, Hive frame."
+    },
+    {
+      "id": "frameLegNorthWest",
+      "kind": "strut",
+      "fromIn": {
+        "xIn": -23.8,
+        "yIn": 18.56,
+        "zIn": 0.53
+      },
+      "toIn": {
+        "xIn": -12.74,
+        "yIn": 0.51,
+        "zIn": 41.08
+      },
+      "radiusIn": 0.73,
+      "solidToRobot": true,
+      "provenance": "SPEC (FIRST's BIOBUZZ field CAD, STEP v26-27.2, sha256 5e768b73…fe00: part am-5876 A-Frame Leg, inherited from frameLegSouthEast as its point mirror, the field being point-symmetric, BIOBUZZ Competition Manual V1 Fig 9-2). See TRANSCRIPTION.md, Hive frame."
+    },
+    {
+      "id": "frameLegSouthWest",
+      "kind": "strut",
+      "fromIn": {
+        "xIn": -23.8,
+        "yIn": -18.56,
+        "zIn": 0.53
+      },
+      "toIn": {
+        "xIn": -12.74,
+        "yIn": -0.51,
+        "zIn": 41.08
+      },
+      "radiusIn": 0.73,
+      "solidToRobot": true,
+      "provenance": "SPEC (FIRST's BIOBUZZ field CAD, STEP v26-27.2, sha256 5e768b73…fe00: part am-5876 A-Frame Leg, inherited from frameLegNorthEast as its point mirror, the field being point-symmetric, BIOBUZZ Competition Manual V1 Fig 9-2). See TRANSCRIPTION.md, Hive frame."
     },
     {
       "id": "flower0Foot",
@@ -152,7 +199,8 @@
       "minYIn": 24,
       "maxYIn": 48,
       "rule": "G304: no start here",
-      "provenance": "APPROX (BIOBUZZ Competition Manual V1 §9.3, Figs 9-2 and 9-3; FIRST's Event Field Setup Guide §8.3): 11 in deep off the x = -72 wall, between the y = +24 and y = +48 tile seams, tape included. FIRST's BIOBUZZ field CAD (STEP v26-27.2), on its 23.528 in tile pitch, puts it at x in [-70.674, -59.101], y in [23.907, 46.599], see TRANSCRIPTION.md."
+      "ledger": "loadingZone",
+      "provenance": "APPROX (BIOBUZZ Competition Manual V1 §9.3, Figs 9-2 and 9-3; FIRST's Event Field Setup Guide §8.3): 11 in deep off the x = -72 wall, between the y = +24 and y = +48 tile seams, tape included. FIRST's BIOBUZZ field CAD (STEP v26-27.2), on its 23.528 in tile pitch, puts it at x in [-70.674, -59.101], y in [23.907, 46.599], see TRANSCRIPTION.md. The ledger counts it as this alliance's LOADING ZONE (ledger: loadingZone): SPEC, Competition Manual TU01 §9.3 and G427, humans enter NECTAR only through the LOADING ZONE."
     },
     {
       "id": "loadingZoneBlue",
@@ -162,7 +210,8 @@
       "minYIn": -48,
       "maxYIn": -24,
       "rule": "G304: no start here",
-      "provenance": "APPROX, inherited from loadingZoneRed: its point mirror, x in [+61, +72], y in [-48, -24] (Fig 9-2)."
+      "ledger": "loadingZone",
+      "provenance": "APPROX, inherited from loadingZoneRed: its point mirror, x in [+61, +72], y in [-48, -24] (Fig 9-2). The ledger counts it as this alliance's LOADING ZONE (ledger: loadingZone): SPEC, Competition Manual TU01 §9.3 and G427, humans enter NECTAR only through the LOADING ZONE."
     }
   ],
   "elements": [
@@ -450,6 +499,11 @@
       1,
       0
     ],
-    "capacity": 4
+    "capacity": 4,
+    "humanPlayer": {
+      "nectar": 5,
+      "perTip": 1,
+      "provenance": "SPEC (BIOBUZZ Competition Manual V1 §10.3.1 B.ii, §10.1 and G426.A): each alliance's human player starts with 5 nectar in its ALLIANCE AREA, and may enter one of them each time that alliance's hive is TIPPED. G427.C puts an entered nectar on the tiles of the alliance's own LOADING ZONE. G426.B (all remaining nectar with 60 s or less left) is TELEOP only, so it never applies to an auto. DSim agrees: BB_NECTAR_COUNT 8 is 3 staged in the cell and 5 in stock, and bbHumanPlayerTick enters one per tip into the loading zone."
+    }
   }
 }

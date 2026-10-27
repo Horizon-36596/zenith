@@ -58,6 +58,11 @@ import com.pedropathing.paths.Path;
  *       no such hook, so the runtime provides one. A team that updates the follower somewhere else
  *       overrides this, so it is never updated twice.</li>
  * </ul>
+ *
+ * <p>Four methods run the team's own code around the routine, for logging or anything else the auto
+ * file does not model: {@link #onStart} once at start, {@link #periodic} and {@link #afterLoop} before and
+ * after the scheduler on every loop, and {@link #onStop} once when the OpMode stops. {@link #step} wraps
+ * each step. The SolversLib runtime's {@code ZenithRobot} has the same four, with the same names.
  */
 public interface ZenithRobot {
 
@@ -143,13 +148,26 @@ public interface ZenithRobot {
         return follower().pose();
     }
 
-    /** @return the speed a path runs at when the file gives none, 0 to 1; full speed by default */
+    /**
+     * The speed a path runs at when the file gives none, 0 to 1.
+     *
+     * <p>Leave this out and the runtime reads {@code kinematics.defaultPathSpeedFraction} from the
+     * deployed {@code robot.json}, so the robot and the editor start from the same number; when that
+     * file cannot be read the answer is 1.0 and a {@code Zenith warning} says why. The value this
+     * default method returns is not used: the runtime asks only a robot that replaces the method. It is
+     * still only a speed the robot applies if {@link #atSpeed} does.
+     *
+     * @return the speed, 0 to 1
+     */
     default double defaultSpeedFraction() {
         return 1.0;
     }
 
     /**
-     * See {@link AutoContext#atSpeed}. The default leaves the path unchanged.
+     * See {@link AutoContext#atSpeed}. The default leaves the path unchanged, so a path speed below 1 is
+     * not applied on the robot, only in the editor's times. Replace it to apply the speed; while it is
+     * the default (and {@link #followPath} is too), init shows a {@code Zenith warning} naming each path
+     * step set below full speed.
      *
      * @param path          the path about to be followed
      * @param speedFraction 0 to 1
@@ -189,4 +207,30 @@ public interface ZenithRobot {
      * @param opMode the running OpMode
      */
     default void initLoop(AutoFromFile opMode) {}
+
+    /**
+     * Called once at start, before the routine is scheduled: the place to start what runs for the whole
+     * auto, such as a match log, so it sees the routine's first loop. The default does nothing.
+     *
+     * @param opMode the running OpMode
+     */
+    default void onStart(AutoFromFile opMode) {}
+
+    /**
+     * Called on every loop after start, after {@link #periodic} and {@code Scheduler.execute()} have run:
+     * the place to log what the loop did. The default does nothing.
+     *
+     * @param opMode the running OpMode
+     */
+    default void afterLoop(AutoFromFile opMode) {}
+
+    /**
+     * Called once when the OpMode stops, however it stops: after the match, on a stop pressed during
+     * init, and after a failure at init or at start, as long as {@link #init} was called. The place to
+     * close what {@link #init} or {@link #onStart} opened, such as a log file. The runtime still resets
+     * the scheduler if this throws. The default does nothing.
+     *
+     * @param opMode the running OpMode
+     */
+    default void onStop(AutoFromFile opMode) {}
 }

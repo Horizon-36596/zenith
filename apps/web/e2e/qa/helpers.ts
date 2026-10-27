@@ -14,7 +14,8 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { withoutFolderPickerFromTheStart } from "../saveExample";
 
 export const SHOTS_DIR = process.env["ZENITH_QA_SHOTS"] ?? join(process.cwd(), "test-results", "qa-shots");
 
@@ -24,16 +25,43 @@ export async function shot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: join(SHOTS_DIR, `${name}.png`) });
 }
 
-/** Marks the first-run tour as done before the app reads its preferences. */
+/**
+ * Marks the first-run tour as done before the app reads its preferences, and turns every feature
+ * switch on unless something set them first, so the QA suite sees everything it was written for. It
+ * acts only while the stored preferences have no tour yet, so a reload keeps what the test changed.
+ */
 export async function skipTour(page: Page, extra: Record<string, unknown> = {}): Promise<void> {
   await page.addInitScript((prefs) => {
-    if (window.localStorage.getItem("zenith.ui") === null) {
-      window.localStorage.setItem(
-        "zenith.ui",
-        JSON.stringify({ tour: { seen: true, coreDone: true, fullDone: false }, ...prefs }),
-      );
+    let stored: Record<string, unknown> | null = null;
+    try {
+      stored = JSON.parse(window.localStorage.getItem("zenith.ui") ?? "null") as Record<string, unknown> | null;
+    } catch {
+      stored = null;
     }
+    if (stored !== null && stored["tour"] !== undefined) return;
+    window.localStorage.setItem(
+      "zenith.ui",
+      JSON.stringify({
+        ...(stored ?? {}),
+        tour: { seen: true, coreDone: true, fullDone: false },
+        // Full sim too, which Settings does not list (issue #207).
+        features: stored?.["features"] ?? { partners: true, ledger: true, commands: true, fullSim: true },
+        ...prefs,
+      }),
+    );
   }, extra);
+}
+
+/**
+ * Answers the first-run preset card with `preset`, which applies it and starts the core tour. A spec
+ * that wants the tour on a fresh profile calls this after `page.goto("/")`; a spec that seeds
+ * `tour.seen` never sees the card. Full turns every switch on, so it is the one for a walk of every
+ * stop.
+ */
+export async function choosePreset(page: Page, preset: "basic" | "essential" | "full" = "essential"): Promise<void> {
+  await expect(page.getByTestId("preset-card")).toBeVisible();
+  await page.getByTestId(`preset-card-${preset}`).click();
+  await expect(page.getByTestId("preset-card")).toHaveCount(0);
 }
 
 /** Opens the app and loads the bundled example from the welcome screen. */
@@ -41,6 +69,20 @@ export async function loadExample(page: Page): Promise<void> {
   await page.goto("/");
   await page.getByTestId("canvas-load-example").click();
   await expect(page.getByTestId("step-row-driveOut")).toBeVisible();
+}
+
+/**
+ * Puts the open collect-and-score on the wide route issue #365 first gave it: round the west of the
+ * hive frame wider than it has to, on RED's side of the centre line, so the optimizer has a faster
+ * toOtherSide to find. The shipped route is already as fast as the optimizer gets it (issue #367).
+ * The route is `packages/core/test-fixtures/wide-collect-and-score.auto.json`.
+ */
+export async function useWideRoute(page: Page): Promise<void> {
+  const file = fileURLToPath(new URL("../../../../packages/core/test-fixtures/wide-collect-and-score.auto.json", import.meta.url));
+  const wide = JSON.parse(readFileSync(file, "utf8")) as unknown;
+  await page.evaluate(
+    `import("/src/state/store.ts").then((m) => { m.commit(${JSON.stringify(wide)}); })`,
+  );
 }
 
 /**
@@ -81,6 +123,30 @@ export const rowIds = async (page: Page): Promise<string[]> =>
 /** Clicks a step's row to select it. */
 export async function selectStep(page: Page, id: string): Promise<void> {
   await page.getByTestId(`step-row-${id}`).getByRole("button").first().click();
+}
+
+/**
+ * The problems panel's rows for one finding code, matched on the row's `data-code`. Filtering the
+ * rows by the code as text also matches any row whose sentence or fix button contains the word, such
+ * as a STRAFE_FRACTION row's "Find a faster heading" for HEADING, or a HEADING_MISSING row.
+ */
+export const findingRows = (page: Page, code: string): Locator =>
+  page.locator(`[data-testid="finding-row"][data-code="${code}"]`);
+
+/**
+ * Opens the selected step's Advanced section (issues #239 and #431), where a command's Give up
+ * after, the stay-inside box and rejoin entries and the full sim's row sit. It stays open for the
+ * rest of the page's life, as the person's fold is remembered. A step with nothing rare has no
+ * Advanced, such as a path with Commands off, whose time limit is in Speed: then there is nothing to
+ * open, and the helper waits for the step's Notes, the section after it, to be sure.
+ */
+export async function openMore(page: Page): Promise<void> {
+  const inspector = page.getByTestId("inspector");
+  await expect(inspector.locator('section[data-fold="step.notes"]')).toBeVisible();
+  const head = inspector.locator('section[data-fold="step.more"] button[aria-expanded]').first();
+  if ((await head.count()) === 0) return;
+  if ((await head.getAttribute("aria-expanded")) === "false") await head.click();
+  await expect(head).toHaveAttribute("aria-expanded", "true");
 }
 
 export interface CanvasView {
@@ -341,6 +407,7 @@ export async function openProjectWith(page: Page, autos: Record<string, string>)
     writeFileSync(path, text);
     return path;
   });
+  await withoutFolderPickerFromTheStart(page);
   await page.goto("/");
   await page.getByTestId("canvas-open-other").click();
   await page.getByTestId("open-project-files").setInputFiles(paths);

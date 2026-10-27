@@ -62,7 +62,12 @@ import java.util.function.DoubleSupplier;
  * be passed over and never run. Once the follower has been seen driving this path, a follower that has
  * stopped following counts as the whole length travelled, which fires those markers on the last loop
  * the runner gets. The "has been seen" latch is what keeps that from firing every marker when the
- * runner starts, before the path has been handed over.
+ * runner starts, before the path has been handed over; until then progress is 0, because
+ * {@code pathIndex()} and {@code curveCompletion()} still describe the path before.
+ *
+ * <p>Only a path that finished counts as the whole length. A path cut short (an {@code endCondition}, a
+ * timeout) ends the runner on the same loop, before it reads the held follower, so no loop of the
+ * runner ever sees an interrupted path as "stopped following".
  *
  * @param <C> the command type of the library that runs the markers
  */
@@ -124,7 +129,7 @@ public final class MarkerProgress<C> {
 
     /**
      * Take one loop's reading of the follower. {@code stillFollowing} is read first and
-     * {@code followerDistanceIn} only when it is needed, which is the order the follower was always
+     * {@code followerDistanceIn} only while it is true, which is the order the follower was always
      * asked in.
      *
      * @param stillFollowing     true while Pedro is still driving this step's path
@@ -138,7 +143,8 @@ public final class MarkerProgress<C> {
         } else if (seenFollowing) {
             reached = totalIn();
         } else {
-            reached = followerDistanceIn.getAsDouble();
+            // Not handed over yet: whatever the follower reports is the previous path's progress.
+            reached = 0;
         }
         furthestIn = Math.max(furthestIn, reached);
     }

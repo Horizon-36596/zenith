@@ -21,13 +21,22 @@ export interface ResolvedOverrides {
   error: string | null;
 }
 
+/** A repository path in one spelling, so `./autos/robot.json` and `autos/robot.json` compare equal. */
+const samePath = (a: string, b: string): boolean => {
+  const norm = (path: string): string => path.replaceAll("\\", "/").replace(/^(\.\/)+/, "");
+  return norm(a) === norm(b);
+};
+
 async function overrideOf<T>(
   backend: ProjectBackend,
   path: string | undefined,
+  projectPath: string,
   load: (json: unknown) => T,
   fallback: T,
 ): Promise<{ value: T; error: string | null }> {
-  if (path === undefined) return { value: fallback, error: null };
+  // Naming the project's own file is no override: it is already loaded, and a project opened from
+  // picked files or the bundled example cannot read a file by its path a second time.
+  if (path === undefined || samePath(path, projectPath)) return { value: fallback, error: null };
   try {
     const text = await backend.readText(path);
     return { value: load(JSON.parse(text) as unknown), error: null };
@@ -43,8 +52,8 @@ export async function resolveAutoOverrides(
   backend: ProjectBackend,
   auto: Auto,
 ): Promise<ResolvedOverrides> {
-  const robotResult = await overrideOf(backend, auto.robot, loadRobot, project.robot);
-  const fieldResult = await overrideOf(backend, auto.field, loadField, project.field);
+  const robotResult = await overrideOf(backend, auto.robot, project.link.robot, loadRobot, project.robot);
+  const fieldResult = await overrideOf(backend, auto.field, project.link.field, loadField, project.field);
   return {
     robot: robotResult.value,
     field: fieldResult.value,

@@ -1,4 +1,4 @@
-import { FORMAT_VERSIONS, migrate, schemaByKind, withCurrentSchemaId, type Kind } from "@horizon36596/zenith-schema";
+import { FORMAT_VERSIONS, migrate, SCHEMA_ID, schemaByKind, withCurrentSchemaId, type Kind } from "@horizon36596/zenith-schema";
 import { z } from "zod";
 
 /**
@@ -18,11 +18,14 @@ export function canonicalize(kind: Kind, doc: unknown): string {
  * Every writer writes the current format version (site/docs/file-format.md, Versioning), so a
  * document handed over at an older version is migrated first. One that cannot be migrated is
  * written as it is: canonical form is about bytes, and refusing the file is the loader's job. A
- * legacy `$schema` alias is always written as the current id (Schema ids, same document).
+ * legacy `$schema` alias is always written as the current id, and a document with no `$schema` gets
+ * it (Schema ids, same document: "Zenith writes it on every save"). A file that already names its
+ * id keeps the same bytes.
  */
 function atCurrentVersion(kind: Kind, input: unknown): unknown {
-  const doc = withCurrentSchemaId(kind, input);
-  if (!isRecord(doc)) return doc;
+  const named = withCurrentSchemaId(kind, input);
+  if (!isRecord(named)) return named;
+  const doc = named["$schema"] === undefined ? { ...named, $schema: SCHEMA_ID[kind] } : named;
   const version = doc["formatVersion"];
   if (typeof version !== "number" || version >= FORMAT_VERSIONS[kind]) return doc;
   try {
@@ -53,12 +56,29 @@ export function digitsForKey(key: string): number | null {
   return null;
 }
 
-/** Rounds to `digits` decimals, without -0 and without exponent notation for our magnitudes. */
-export function formatNumber(value: number, digits: number | null): string {
+/**
+ * Rounds to `digits` decimals, without -0 and without exponent notation for our magnitudes.
+ *
+ * `positive` is set for a key whose schema requires a number greater than 0 (a `timeoutS`). Such a
+ * number that would round to 0 is written as the smallest step instead (0.001 s for a timeout), so
+ * saving a valid file never writes one that fails to load. Every other number rounds as it always
+ * has, so a canonical file keeps its bytes.
+ */
+export function formatNumber(value: number, digits: number | null, positive = false): string {
   if (!Number.isFinite(value)) throw new Error(`Cannot canonicalize the number ${String(value)}.`);
   if (digits === null) return JSON.stringify(value === 0 ? 0 : value);
   const rounded = Number(value.toFixed(digits));
+  if (positive && value > 0 && rounded <= 0) return JSON.stringify(Number((10 ** -digits).toFixed(digits)));
   return JSON.stringify(rounded === 0 ? 0 : rounded);
+}
+
+/** Whether a number schema requires a value greater than 0 (zod's `.positive()`). */
+function requiresPositive(schema: AnySchema): boolean {
+  const current = unwrap(schema);
+  if (!(current instanceof z.ZodNumber)) return false;
+  return (current._def.checks as { kind: string; value?: number; inclusive?: boolean }[]).some(
+    (check) => check.kind === "min" && check.value === 0 && check.inclusive === false,
+  );
 }
 
 type AnySchema = z.ZodTypeAny | null;
@@ -172,7 +192,8 @@ function write(value: unknown, schema: AnySchema, unitKey: string | null, indent
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "string") return JSON.stringify(value);
   if (typeof value === "number") {
-    return formatNumber(value, unitKey === null ? null : digitsForKey(unitKey));
+    if (unitKey === null) return formatNumber(value, null);
+    return formatNumber(value, digitsForKey(unitKey), requiresPositive(resolveSchema(schema, value)));
   }
 
   const resolved = resolveSchema(schema, value);

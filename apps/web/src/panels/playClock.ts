@@ -27,3 +27,17 @@ export function advancePlayhead(clock: PlayClock, playheadS: number, nowMs: numb
   const gapS = Math.min(Math.max(0, nowMs - clock.lastMs) / 1000, MAX_FRAME_GAP_S);
   return { clock: { lastMs: nowMs }, playheadS: playheadS + gapS };
 }
+
+/**
+ * What one frame of playback does with the playhead `nextS` would move to, against the run's end
+ * `runS`: keep playing, or stop at the end. While the run is still streaming in (a Full sim run from
+ * the desktop app's sim server), its end is only the last time received, so the playhead waits there
+ * and goes on as more arrives, rather than stopping as at the end of a finished run. A null
+ * `playheadS` leaves the playhead where it is.
+ */
+export function playFrame(nextS: number, runS: number | null, streaming: boolean): { playheadS: number | null; playing: boolean } {
+  // No run yet: the playhead stays where it is (null), and waits only for a run on its way.
+  if (runS === null || runS <= 0) return { playheadS: null, playing: streaming };
+  if (nextS < runS) return { playheadS: nextS, playing: true };
+  return { playheadS: runS, playing: streaming };
+}

@@ -122,6 +122,9 @@ function steps(value: unknown): TraceStep[] {
     if (typeof id !== "string" || typeof startS !== "number" || typeof endS !== "number") {
       throw new TraceError(`steps[${String(at)}] needs id, startS and endS.`);
     }
+    if (!Number.isFinite(startS) || !Number.isFinite(endS) || endS < startS) {
+      throw new TraceError(`steps[${String(at)}] needs finite times, with endS no earlier than startS.`);
+    }
     return { id, startS, endS, interrupted: entry["interrupted"] === true };
   });
 }
@@ -204,8 +207,21 @@ export function parseTrace(json: unknown): Trace {
 /** The last recorded time, which is how far a playback scrubber can run on recorded time. */
 export function traceDurationS(trace: Trace): number {
   const lastPose = trace.poses[trace.poses.length - 1];
-  const lastStep = trace.steps[trace.steps.length - 1];
-  return Math.max(lastPose?.[0] ?? 0, lastStep?.endS ?? 0);
+  // Steps are written in the order they start, so a parallel group's last child can end before
+  // the group or a sibling does: the latest end is the one that counts.
+  return trace.steps.reduce((latest, step) => Math.max(latest, step.endS), lastPose?.[0] ?? 0);
+}
+
+/**
+ * When the routine ended in the trace: the latest end of any step it records. The recording itself
+ * can run on well past that, since a sim runs the OpMode for the whole period and a margin while the
+ * robot stands still after its last step, so this, not `traceDurationS`, is how long the routine
+ * took. A trace with no steps says nothing about where the routine ended, so it is the recording's
+ * length then.
+ */
+export function traceRoutineEndS(trace: Trace): number {
+  if (trace.steps.length === 0) return traceDurationS(trace);
+  return trace.steps.reduce((latest, step) => Math.max(latest, step.endS), 0);
 }
 
 /** How long each step actually took, by step id. */
@@ -217,7 +233,7 @@ export function traceStepDurations(trace: Trace): Map<string, number> {
 
 /** What the whole run came to: the numbers the Simulate dialog shows (`07` section 3). */
 export interface TraceSummary {
-  /** Recorded wall time from the first step's start to the last step's end. */
+  /** How long the routine ran: to the last step's end, not to the end of the recording (`traceRoutineEndS`). */
   totalS: number;
   structureContacts: number;
   launches: number;
@@ -238,7 +254,7 @@ export function traceSummary(trace: Trace): TraceSummary {
   }
   const last = trace.ledger[trace.ledger.length - 1];
   return {
-    totalS: traceDurationS(trace),
+    totalS: traceRoutineEndS(trace),
     structureContacts: trace.structureContacts.length,
     launches: trace.ledger.reduce((sum, row) => sum + (row.launches ?? 0), 0),
     tips,

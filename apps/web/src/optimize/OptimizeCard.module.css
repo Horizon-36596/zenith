@@ -1,0 +1,273 @@
+/* The Optimize card (UI_GUIDE 9.18): docked at the top of the Inspector's column, not modal, so the
+   field and the Inspector stay usable beside it. It may take 70 % of the column; only its body scrolls, and the action row stays under it (issue #413). */
+.card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  max-height: 70%;
+  min-height: 0;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-raised);
+}
+
+.card:focus-visible {
+  box-shadow: var(--ring-shadow);
+  outline: none;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  height: 40px;
+  padding-inline: var(--pad-panel) var(--pad-row-x);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+.step {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  padding-bottom: var(--space-2);
+}
+
+/* The action row: the Apply line and the buttons, never scrolled away. A hairline marks where the
+   body scrolls under it. */
+.actions {
+  flex: none;
+  padding-bottom: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* "Adds 1 warning": the problems Apply brings, in the worst one's colour. */
+.adds {
+  margin: 0;
+  padding: var(--space-2) var(--pad-row-x) 0 var(--pad-panel);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-mid);
+}
+
+.adds[data-severity="error"] {
+  color: var(--sev-error);
+}
+
+.adds[data-severity="warning"] {
+  color: var(--sev-warn);
+}
+
+/* A disabled Apply takes no pointer, so the box round it carries the tooltip with the reason. */
+.disabledWrap {
+  display: inline-flex;
+}
+
+.headline {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-weight: var(--fw-medium);
+}
+
+/* The headline's tone (0.1.2 UX review): a route that helps, nothing found, or no route can be clear.
+   The glyph carries the colour; only "nothing found" also quiets its words. */
+.toneIcon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.headline[data-tone="ok"] .toneIcon {
+  color: var(--ok);
+}
+
+.headline[data-tone="neutral"] {
+  font-weight: var(--fw-regular);
+  color: var(--text-mid);
+}
+
+.headline[data-tone="neutral"] .toneIcon {
+  color: var(--text-mid);
+}
+
+.headline[data-tone="blocked"] .toneIcon {
+  color: var(--sev-warn);
+}
+
+/* "Searching, up to 5 s" and its bar, which fills over the safety stop's time. */
+.searching {
+  padding-bottom: var(--space-1);
+}
+
+.best {
+  color: var(--text-mid);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.bar {
+  height: 3px;
+  margin: var(--space-1) var(--pad-row-x) 0 var(--pad-panel);
+  border-radius: 2px;
+  background: linear-gradient(var(--accent), var(--accent)) 0 0 / 0% 100% no-repeat, var(--border-subtle);
+  animation-name: fill;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes fill {
+  to {
+    background-size: 100% 100%, auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar {
+    animation: none;
+    background-size: 50% 100%, auto;
+  }
+}
+
+/* What changes and New problems: a summary line that opens the rest. */
+.details {
+  padding: 0;
+}
+
+.summary {
+  padding: var(--space-1) var(--pad-row-x) var(--space-1) var(--pad-panel);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+  cursor: pointer;
+}
+
+.summary:hover {
+  color: var(--text-hi);
+}
+
+.list li[data-severity="warning"]::marker {
+  color: var(--sev-warn);
+}
+
+.list li[data-severity="error"]::marker {
+  color: var(--sev-error);
+}
+
+.line {
+  margin: 0;
+  padding: var(--space-1) var(--pad-row-x) var(--space-1) var(--pad-panel);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+.quiet {
+  color: var(--text-mid);
+}
+
+.warn {
+  color: var(--sev-warn);
+}
+
+.list {
+  margin: 0;
+  padding: 0 var(--pad-row-x) 0 calc(var(--pad-panel) + var(--space-4));
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.times {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding: var(--space-1) var(--pad-row-x) var(--space-1) var(--pad-panel);
+  font-size: var(--fs-sm);
+}
+
+.times dt {
+  color: var(--text-mid);
+}
+
+.times dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-hi);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--pad-row-x) 0 var(--pad-panel);
+}
+
+.key {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  opacity: 0.8;
+}
+
+/* The alternatives switcher (issue #310): which of the result's routes the field draws and Apply writes. */
+.switcher {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--pad-row-x) var(--space-1) var(--pad-panel);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.switcherLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Optimize every path's rows (issue #366): a box that takes the step into Apply, and its line. */
+.allList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.allRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--pad-row-x) var(--space-1) var(--pad-panel);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+/* A failed row keeps its Try again button at the end of the line. */
+.allItem {
+  display: flex;
+  align-items: center;
+}
+
+.allItem > .allRow {
+  flex: 1;
+  min-width: 0;
+}

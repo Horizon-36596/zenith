@@ -1,0 +1,45 @@
+// Set up the way the MeepMeep 0.1.7 README sets up a MeepMeepTesting module: Java 8, one dependency on
+// com.acmerobotics.roadrunner:MeepMeep:0.1.7 from maven.brott.dev. Pass -PlocalRepo=<dir> to resolve it
+// from a local Maven repository first instead, such as the one source-build/ writes.
+plugins {
+    id 'java'
+    id 'application'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 8
+    options.compilerArgs += ['-Xlint:all', '-Xlint:-options', '-Werror']
+}
+
+repositories {
+    if (project.hasProperty('localRepo')) {
+        maven { url = uri(project.property('localRepo')) }
+    }
+    maven { url = 'https://maven.brott.dev/' }
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.acmerobotics.roadrunner:MeepMeep:0.1.7'
+}
+
+// The exporter is compiled from the one copy-in file one directory up, exactly as a team copies it.
+sourceSets {
+    main {
+        java {
+            srcDir 'src/main/java'
+            srcDir '..'
+            include 'org/horizon36596/**'
+            include 'ZenithTrajectoryExport.java'
+        }
+    }
+}
+
+application {
+    mainClass = 'org.horizon36596.zenith.meepmeep.check.ExportCheck'
+}

@@ -1,6 +1,6 @@
 {
   "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
-  "formatVersion": 3,
+  "formatVersion": 4,
   "name": "qa-curves",
   "title": "QA curves",
   "description": "A two-segment cubic with a corner node, a straight leg and a wait, for the QA canvas tests.",

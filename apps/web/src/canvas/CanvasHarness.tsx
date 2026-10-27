@@ -39,6 +39,7 @@ import type { Auto } from "@horizon36596/zenith-schema";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from "react";
 import FieldCanvas from "./FieldCanvas.js";
 import { readFieldImage } from "./fieldImage.js";
+import { withEnvelopePolygon } from "../lib/envelope.js";
 import type { Alliance, CanvasActions, CanvasHit, FieldView, PoseMove, Selection, Tool, TraceOverlay } from "./types.js";
 
 import allStepKindsRaw from "../../../../examples/starter/autos/all-step-kinds.auto.json?raw";
@@ -179,7 +180,7 @@ export function CanvasHarness(): ReactElement {
   const [hover, setHover] = useState<CanvasHit | null>(null);
   const [note, setNote] = useState("Loaded examples/starter.");
 
-  const resolved = useMemo(() => resolve(auto, waypoints), [auto]);
+  const resolved = useMemo(() => resolve(auto, waypoints, robot), [auto]);
   const plan = useMemo(() => buildPlan(resolved, robot, field), [resolved]);
   const estimate = useMemo<Estimate | null>(() => {
     try {
@@ -440,6 +441,9 @@ export function CanvasHarness(): ReactElement {
         }}
         onDragMarker={(stepId, markerIndex, t) => {
           edit((current) => setMarkerAt(current, stepId, markerIndex, { t }));
+        }}
+        onSetEnvelopePolygon={(stepId, polygon) => {
+          edit((current) => withEnvelopePolygon(current, stepId, polygon));
         }}
         onAddCommandAt={(pose) => {
           setNote(`addCommand at ${pose.xIn.toFixed(2)}, ${pose.yIn.toFixed(2)} in: the shell opens the picker here.`);

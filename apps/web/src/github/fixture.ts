@@ -8,12 +8,11 @@
  * step dropped, which gives a changed row, a removed row and a total that moves.
  */
 import { canonicalize, removeStep, setPose } from "@horizon36596/zenith-core";
-import { diffAnchor } from "@horizon36596/zenith-github";
 import type { Auto } from "@horizon36596/zenith-schema";
 import { LocalBackend } from "../project/backend";
 import { loadExampleProject } from "../project/example";
 import { openAuto, openProject, setReview, setStatus } from "../state/store";
-import { buildReviewModel, type ReviewState } from "./reviewModel";
+import { anchorRows, buildReviewModel, type ReviewState } from "./reviewModel";
 
 const AUTO = "first-auto.auto.json";
 
@@ -46,9 +45,7 @@ export async function openFixtureReview(): Promise<void> {
     field: project.field,
     waypoints: project.waypoints,
   });
-  for (const row of model.rows) {
-    row.anchor = await diffAnchor(path, headText, row.stepId, row.kind === "removed" ? "base" : "head");
-  }
+  await anchorRows(model.rows, path, headText, canonicalize("auto", base));
 
   const review: ReviewState = {
     owner: "example-team",

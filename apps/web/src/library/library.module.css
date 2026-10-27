@@ -1,0 +1,70 @@
+/* The review view of two library revisions (spec 13 section 5.3), on the tokens of
+   apps/web/UI_GUIDE.md. The banner, change rows and totals are the pull-request review's own
+   (src/github/github.module.css); only the choice panel on the right is new. */
+
+/* The view takes the editor's body, as the pull-request review does: banner on top, panels below. */
+.frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.choose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-section);
+  padding: var(--space-3) var(--pad-panel);
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sideHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}

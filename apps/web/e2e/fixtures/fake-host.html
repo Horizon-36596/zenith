@@ -1,0 +1,30 @@
+<!doctype html>
+<!--
+  A stand-in for a host app such as DSIM, for host-mode.spec.ts (site/docs/host-protocol.md).
+  The test serves it on the dev server's own origin, which is a local dev origin every host allows.
+  It opens Zenith in a popup, records every message Zenith posts back, and sends what the test
+  tells it to, always to the popup's origin and never to "*".
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fake host</title>
+  </head>
+  <body>
+    <p>Fake host for the Zenith host-mode test.</p>
+    <script>
+      window.received = [];
+      window.zenith = null;
+      window.addEventListener("message", (event) => {
+        if (event.source !== window.zenith) return;
+        window.received.push({ origin: event.origin, data: event.data });
+      });
+      window.openZenith = (path) => {
+        window.zenith = window.open(path, "zenith-host-test");
+      };
+      window.sendToZenith = (message) => {
+        window.zenith.postMessage(message, window.location.origin);
+      };
+    </script>
+  </body>
+</html>

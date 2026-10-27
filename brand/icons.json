@@ -1,0 +1,69 @@
+{
+  "comment": "Written by scripts/brand-icons.mjs from the master. Checked by scripts/check-brand.mjs in pnpm test. Do not edit by hand.",
+  "source": "brand/zenith-mark.svg",
+  "sourceSha256": "e732d4ad3daec01229e4cdfc01c72653512a0b920c0f3e09d290920e476be8e1",
+  "svg": [
+    "apps/web/public/favicon.svg",
+    "apps/desktop/resources/icon.svg",
+    "site/docs/assets/zenith-mark.svg"
+  ],
+  "png": {
+    "apps/web/public/favicon-16.png": 16,
+    "apps/web/public/favicon-32.png": 32,
+    "apps/web/public/apple-touch-icon.png": 180,
+    "apps/desktop/resources/icon.png": 512
+  },
+  "ico": {
+    "apps/web/public/favicon.ico": [
+      16,
+      32,
+      48
+    ],
+    "apps/desktop/resources/icon.ico": [
+      16,
+      24,
+      32,
+      48,
+      64,
+      128,
+      256
+    ]
+  },
+  "wordmark": {
+    "letters": "brand/wordmark-letters.svg",
+    "outputs": {
+      "apps/web/public/brand/zenith-wordmark-dark.svg": {
+        "letters": "#FAF6FB"
+      },
+      ".github/assets/wordmark-dark.svg": {
+        "letters": "#FAF6FB"
+      },
+      ".github/assets/wordmark-light.svg": {
+        "letters": "#17061D"
+      },
+      "brand/wordmark-mono-white.svg": {
+        "mono": "#FAF6FB"
+      },
+      "brand/wordmark-mono-night.svg": {
+        "mono": "#17061D"
+      }
+    },
+    "lettersSha256": "7190ed28f5d38c578b9b46365414a2f754c2955b73b0664008b2b5c16be7edd4"
+  },
+  "files": {
+    ".github/assets/wordmark-dark.svg": "879965ed55c7b5bd6a77c8815731bdcf04607ad6f12933ed9a0ba098e23f939f",
+    ".github/assets/wordmark-light.svg": "a4926779c2ce47971268ec3156554ec50c3f0b324c4b0aefab5e88407a07d92b",
+    "apps/desktop/resources/icon.ico": "b1800274482bad76798f9cbd0cc92cf42c01f83320b97a003a1bdcbe02f71a89",
+    "apps/desktop/resources/icon.png": "0de8c611b2e906d5c1b1bac9909e3303195cc6428a8180ebd584461111fa1b4c",
+    "apps/desktop/resources/icon.svg": "e732d4ad3daec01229e4cdfc01c72653512a0b920c0f3e09d290920e476be8e1",
+    "apps/web/public/apple-touch-icon.png": "7d361e2bddd374f6e12e00b885f4efc1e59c3763d4a8066070a333e30e8ec046",
+    "apps/web/public/brand/zenith-wordmark-dark.svg": "879965ed55c7b5bd6a77c8815731bdcf04607ad6f12933ed9a0ba098e23f939f",
+    "apps/web/public/favicon-16.png": "ab480eed72e00a49637d08747c620fc5453c4ba190de39cab91f101b29ed8ada",
+    "apps/web/public/favicon-32.png": "9cfd4bf5adb5c40b2a966fbd82520f88a6a7ffa9fb8619ccc34ef66af4adecdf",
+    "apps/web/public/favicon.ico": "b01dd70efa51e15c803c809d48fc5cb1a060452360d130b7559c9c6d7afe7b45",
+    "apps/web/public/favicon.svg": "e732d4ad3daec01229e4cdfc01c72653512a0b920c0f3e09d290920e476be8e1",
+    "brand/wordmark-mono-night.svg": "51e134ecfc9d3e6c608af41f13db90974d7ab297ab636d3f8ee5f6095f5f1b03",
+    "brand/wordmark-mono-white.svg": "0a4ea02e2c003a052abc405125ea16278ef78b37ec0a08a7f544a9d72bd47bef",
+    "site/docs/assets/zenith-mark.svg": "e732d4ad3daec01229e4cdfc01c72653512a0b920c0f3e09d290920e476be8e1"
+  }
+}

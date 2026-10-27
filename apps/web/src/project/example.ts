@@ -1,7 +1,8 @@
 /**
  * `examples/starter`, bundled into the app with Vite's `?raw` imports so "Load example" works with
- * no folder picked and no network. It is read only: Save on the example downloads the canonical
- * file rather than writing into the repository the app was built from.
+ * no folder picked and no network. It is read only: Save on the example never writes into the
+ * repository the app was built from; it asks whether to save the full project or just the auto
+ * somewhere of the person's choosing (`app/saveReadOnly.ts`).
  *
  * The autos are every `*.auto.json` in the example's `autos/` folder, found by Vite's glob import,
  * so a new example auto appears in the picker without a code change.
@@ -39,4 +40,32 @@ export function loadExampleProject(): Project {
     autoFiles: Object.keys(AUTO_TEXTS),
     autoTexts: { ...AUTO_TEXTS },
   };
+}
+
+/** The name the toolbar shows for autos opened on the example's robot and field. */
+export const ON_EXAMPLE_NAME = "Example robot and field";
+
+/**
+ * Autos opened on their own, laid on the example's robot, field and waypoints (issue #103). Like
+ * picked files it is read only, and it holds only these autos, not the example's own.
+ */
+export function exampleProjectWith(autoTexts: Readonly<Record<string, string>>): Project {
+  return {
+    ...loadExampleProject(),
+    source: { kind: "files" },
+    name: ON_EXAMPLE_NAME,
+    autoFiles: Object.keys(autoTexts).sort((a, b) => a.localeCompare(b)),
+    autoTexts: { ...autoTexts },
+  };
+}
+
+/**
+ * True when the project's `zenith.json` is the bundled example's: the example itself, or autos
+ * opened on its robot and field (`exampleProjectWith`). Only then does Save the full project leave
+ * out its sim command, robot class and command library, which name the example's made-up robot
+ * repository (issue #159). Files opened on their own carry the team's own `zenith.json`, which the
+ * full project keeps as it is.
+ */
+export function hasExampleLink(project: Pick<Project, "source" | "name">): boolean {
+  return project.source.kind === "example" || (project.source.kind === "files" && project.name === ON_EXAMPLE_NAME);
 }

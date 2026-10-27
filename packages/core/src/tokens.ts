@@ -64,7 +64,7 @@ export const TOKENS = {
   fieldZone: "#f0ab4d",
   /** `--field-element` oklch(0.720 0.110 350): game elements and containers. */
   fieldElement: "#d887ae",
-  /** `--field-target` oklch(0.800 0.115 88): the scoring reticle. */
+  /** oklch(0.800 0.115 88): gold, kept for the exported picture's palette but no longer drawn in it. The web canvas's own `--field-target` is aqua (hue 200) and draws the hive pivot marks and score claims; the two are separate tokens. */
   fieldTarget: "#ddb961",
   /** `--field-waypoint` oklch(0.700 0.030 255): a named pose's pin. */
   fieldWaypoint: "#92a0b1",

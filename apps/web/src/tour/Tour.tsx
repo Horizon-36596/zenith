@@ -8,16 +8,20 @@
  * keeps off the anchor and off every open menu, tooltip and dialog (`placement.ts`), so every
  * control in the app works exactly as it does with the tour closed.
  */
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { TOUR_REVEAL_EVENT } from "./signals";
-import { Check, Map as MapIcon, MousePointer2 } from "lucide-react";
+import { Check, MapPlus, MousePointer2 } from "lucide-react";
 import { indexSteps } from "../lib/stepOps";
 import type { Heading, Step } from "@horizon36596/zenith-schema";
-import { getState, selectStep, setDialog, setPaletteOpen } from "../state/store";
+import { isDesktop } from "../project/desktop";
+import { getState, selectStep, setDialog, setPaletteOpen, setSelection, useSelector } from "../state/store";
 import { anyMenuOpen, closeMenus, openInsertMenu } from "../state/ui";
-import { currentStop, type TourPrepare, type TourStop } from "./model";
+import { currentStop, withinStops, type TourPrepare, type TourStop } from "./model";
 import { placeCard, type Box, type Placement } from "./placement";
-import { TOUR_STOPS } from "./stops";
+import { getFeatures, useFeatures } from "../state/features";
+import { chosenPresetName } from "../settings/presets";
+import { useUserPresets } from "../settings/presetStore";
+import { currentTourStops } from "./stops";
 import { dispatchTour, isTaskDone, useTour } from "./store";
 import styles from "./Tour.module.css";
 
@@ -101,12 +105,35 @@ function prepare(kind: TourPrepare | undefined): void {
   if (kind === "selectNothing") selectStep(undefined);
   if (kind in PATH_WANTED && auto !== null) {
     const steps = indexSteps(auto);
-    const wanted = PATH_WANTED[kind as PathPick];
+    const asked = PATH_WANTED[kind as PathPick];
+    // With Advanced heading off, a piecewise path's inspector says it was made with a switch the
+    // settings turn off, which is not what a stop is about: such a path is picked only when no other
+    // path will do (0.1.2 UX sweep, W1-6).
+    const advanced = getFeatures().advancedHeading;
+    const plain = (step: Step): boolean => asked(step) && (advanced || step.kind !== "path" || step.heading?.mode !== "piecewise");
+    const wanted = steps.some((entry) => plain(entry.step)) ? plain : asked;
     const current = selection.stepId === undefined ? undefined : steps.find((entry) => entry.id === selection.stepId);
-    if (current !== undefined && wanted(current.step)) return;
-    const pick = steps.find((entry) => wanted(entry.step)) ?? steps.find((entry) => entry.step.kind === "path");
-    if (pick !== undefined) selectStep(pick.id);
+    const pick =
+      current !== undefined && wanted(current.step)
+        ? current
+        : (steps.find((entry) => wanted(entry.step)) ?? steps.find((entry) => entry.step.kind === "path"));
+    if (pick === undefined) return;
+    if (pick !== current) selectStep(pick.id);
+    if (kind === "selectPathWithPose") showControlChip(pick.id, pick.step);
   }
+}
+
+/**
+ * A curve's control point shows its provenance chip only while it is the selected point (issue
+ * #409), so a path whose only numbers are control points gets its first one selected for the
+ * provenance stop.
+ */
+function showControlChip(stepId: string, step: Step): void {
+  if (step.kind !== "path") return;
+  if (step.segments.some((segment) => isLiteralPose(segment.from) || isLiteralPose(segment.to))) return;
+  const segmentIndex = step.segments.findIndex((segment) => segment.kind === "bezier" && segment.control.length > 0);
+  if (segmentIndex < 0) return;
+  setSelection({ stepId, point: { segmentIndex, pointKind: "control", controlIndex: 0 } });
 }
 
 /** A pose written out in numbers, rather than a waypoint reference or "current". */
@@ -138,8 +165,15 @@ const PATH_WANTED: Record<PathPick, (step: Step) => boolean> = {
     ),
 };
 
+/**
+ * The stop's anchor, or, in a window too narrow for its toolbar group, the More button that holds it
+ * (`data-tour-holds`), so the stop still rings where the button is.
+ */
 const anchorElement = (anchor: string | null): HTMLElement | null =>
-  anchor === null ? null : document.querySelector<HTMLElement>(`[data-tour="${anchor}"]`);
+  anchor === null
+    ? null
+    : (document.querySelector<HTMLElement>(`[data-tour="${CSS.escape(anchor)}"]`) ??
+      document.querySelector<HTMLElement>(`[data-tour-holds~="${CSS.escape(anchor)}"]`));
 
 const sameRect = (a: Rect | null, b: Rect | null): boolean =>
   a === b ||
@@ -150,6 +184,46 @@ const sameRect = (a: Rect | null, b: Rect | null): boolean =>
     Math.abs(a.width - b.width) < 0.5 &&
     Math.abs(a.height - b.height) < 0.5);
 
+/** The nearest ancestor of `element` that scrolls it up and down, or null. */
+function scrollerOf(element: HTMLElement): HTMLElement | null {
+  for (let at = element.parentElement; at !== null; at = at.parentElement) {
+    const overflow = getComputedStyle(at).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && at.scrollHeight > at.clientHeight) return at;
+  }
+  return null;
+}
+
+/** Whether `element` shows whole inside `scroller`'s visible box. */
+function wholeIn(element: HTMLElement, scroller: HTMLElement): boolean {
+  const box = element.getBoundingClientRect();
+  const view = scroller.getBoundingClientRect();
+  return box.top >= view.top - 0.5 && box.bottom <= view.bottom + 0.5;
+}
+
+/**
+ * Brings the selected step's row whole into the steps list before the stop's anchor is revealed
+ * (0.1.2 UX sweep, W1-5): a stop that selects a step, or the anchor's own reveal, left the row half
+ * under the list's top edge. The anchor is scrolled to after this, so it wins when the list cannot
+ * show both; then a row it would cut in half is scrolled the rest of the way out instead.
+ */
+function revealSelectedStep(anchor: HTMLElement): void {
+  const id = getState().selection.stepId;
+  if (id === undefined) return;
+  const row = document.querySelector<HTMLElement>(`[data-testid="step-row-${CSS.escape(id)}"]`);
+  if (row === null) return;
+  const scroller = scrollerOf(row);
+  if (scroller === null) return;
+  row.scrollIntoView({ block: "nearest" });
+  if (!scroller.contains(anchor)) return;
+  anchor.scrollIntoView({ block: "nearest", inline: "nearest" });
+  if (wholeIn(row, scroller)) return;
+  const box = row.getBoundingClientRect();
+  const view = scroller.getBoundingClientRect();
+  // Cut at the top: the anchor is below, so scrolling down by the part still showing hides the row
+  // and keeps the anchor in view.
+  if (box.top < view.top && box.bottom > view.top) scroller.scrollTop += box.bottom - view.top;
+}
+
 /** The anchor's rectangle, grown by the cut-out pad, followed every frame while the stop shows. */
 function useAnchorRect(stop: TourStop | null): Rect | null {
   const [rect, setRect] = useState<Rect | null>(null);
@@ -159,11 +233,16 @@ function useAnchorRect(stop: TourStop | null): Rect | null {
       return;
     }
     let raf = 0;
-    let last: Rect | null = null;
+    // Undefined until the first frame, so a stop whose anchor is not found clears the last stop's ring.
+    let last: Rect | null | undefined = undefined;
     // Each stop brings its anchor into view once (QA-01): a collapsed section is opened, and a few
     // frames later, once it has rendered open, the anchor is scrolled to the nearest edge of
     // whatever scrolls it. After that the loop only follows it, so the person can scroll away.
     let revealFrames = -1;
+    // An anchor that is still growing when it is scrolled to, such as a section at the foot of the
+    // inspector that renders open a frame late, is scrolled to again while it grows, for a short time.
+    let settleFrames = 0;
+    let scrolledHeight = 0;
     const tick = () => {
       const element = anchorElement(stop.anchor);
       if (element !== null && revealFrames === -1 && stop.anchor !== null) {
@@ -172,7 +251,19 @@ function useAnchorRect(stop: TourStop | null): Rect | null {
       }
       if (element !== null && revealFrames > 0) {
         revealFrames -= 1;
-        if (revealFrames === 0) element.scrollIntoView({ block: "nearest", inline: "nearest" });
+        if (revealFrames === 0) {
+          revealSelectedStep(element);
+          element.scrollIntoView({ block: "nearest", inline: "nearest" });
+          scrolledHeight = element.getBoundingClientRect().height;
+          settleFrames = 30;
+        }
+      } else if (element !== null && settleFrames > 0) {
+        settleFrames -= 1;
+        const height = element.getBoundingClientRect().height;
+        if (height > scrolledHeight + 0.5) {
+          scrolledHeight = height;
+          element.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
       }
       const box = element?.getBoundingClientRect();
       const next =
@@ -184,7 +275,7 @@ function useAnchorRect(stop: TourStop | null): Rect | null {
               width: box.width + CUTOUT_PAD * 2,
               height: box.height + CUTOUT_PAD * 2,
             };
-      if (!sameRect(next, last)) {
+      if (last === undefined || !sameRect(next, last)) {
         last = next;
         setRect(next);
       }
@@ -193,6 +284,9 @@ function useAnchorRect(stop: TourStop | null): Rect | null {
     tick();
     return () => {
       cancelAnimationFrame(raf);
+      // The stop is over: whatever it opened goes back as the person left it. The next stop's own
+      // reveal, in the same commit, opens its section again, so a section it shares does not flicker.
+      if (revealFrames !== -1) window.dispatchEvent(new CustomEvent<string | null>(TOUR_REVEAL_EVENT, { detail: null }));
     };
   }, [stop]);
   return rect;
@@ -200,7 +294,13 @@ function useAnchorRect(stop: TourStop | null): Rect | null {
 
 export function Tour() {
   const state = useTour();
-  const stop = currentStop(state, TOUR_STOPS);
+  // Read so the card redraws when a switch or a toolbar button in Settings changes which stops the
+  // tour has, or Finding codes how one is worded.
+  useFeatures();
+  useSelector((editor) => editor.prefs.toolbar);
+  useSelector((editor) => editor.prefs.findingCodes);
+  const stops = currentTourStops();
+  const stop = currentStop(state, stops);
   const rect = useAnchorRect(stop);
   const returnFocus = useRef<HTMLElement | null>(null);
   const active = state.phase !== "off";
@@ -218,9 +318,15 @@ export function Tour() {
     if (stop !== null) prepare(stop.prepare);
   }, [stop]);
 
-  // Keys: Escape skips (on the choice card it is Jump in), and the arrows walk the stops. They are
-  // the tour's only while focus is in one of its cards; anywhere else every key does what it always
-  // does, so Escape closes a menu or clears the selection and the shortcuts all work.
+  // Settings may have hidden the stop the tour is on, or one before it: the tour moves back onto a
+  // stop it still has rather than staying on with nothing on screen (`withinStops`).
+  useEffect(() => {
+    if (withinStops(state, stops) !== state) dispatchTour({ type: "sync" });
+  });
+
+  // Keys: Escape skips (on the choice card it is Jump in), and the arrows and Enter walk the stops.
+  // They are the tour's only while focus is in one of its cards; anywhere else every key does what
+  // it always does, so Escape closes a menu or clears the selection and the shortcuts all work.
   useEffect(() => {
     if (!active) return;
     const onKey = (event: KeyboardEvent) => {
@@ -232,6 +338,19 @@ export function Tour() {
         event.preventDefault();
         event.stopImmediatePropagation();
         dispatchTour({ type: state.phase === "choice" ? "jumpIn" : "exit" });
+        return;
+      }
+      if (event.key === "Enter") {
+        // Enter on one of the card's buttons presses that button, as it always does. On the card
+        // itself, which has focus on a stop with a task, it is Next (site/docs/getting-started.md),
+        // and the editor's own Enter, which opens Insert, must not run behind it.
+        // A modified Enter, or one held down, is not Next, but the editor still does not act on it
+        // behind the card; a held Enter would otherwise walk several stops at once.
+        if (event.target instanceof HTMLButtonElement) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+        if (state.phase !== "choice" && state.phase !== "finished") dispatchTour({ type: "next" });
         return;
       }
       if (event.key === "ArrowRight") {
@@ -268,7 +387,7 @@ export function Tour() {
             key={`${state.phase}-${String(state.index)}`}
             stop={stop}
             index={state.index}
-            total={(state.phase === "core" ? TOUR_STOPS.core : TOUR_STOPS.full).length}
+            total={(state.phase === "core" ? stops.core : stops.full).length}
             phase={state.phase}
             taskDone={isTaskDone(state)}
           />
@@ -306,7 +425,9 @@ function CoachMark({
   // straight to the element, so the card never covers a popover or its anchor for even one frame.
   // Otherwise `placeCard` leaves it where it is, so it does not jump about while the person works
   // round it. When it has placed against what is on screen, the card says so in `data-settled`.
-  useEffect(() => {
+  // The first placement runs as a layout effect, in the same commit that mounts the card, so the
+  // card is shown, and can take focus, before anything else gets a turn (see the focus below).
+  useLayoutEffect(() => {
     let raf = 0;
     let previous: Placement | null = null;
     let lastTarget: Rect | null = null;
@@ -387,14 +508,19 @@ function CoachMark({
 
   // Focus moves to the card on each stop: to Next, or to the card itself when the stop has a task.
   // It waits for the first placement, because the card is hidden until then and a hidden element
-  // cannot take focus.
+  // cannot take focus. Each stop mounts a new card, and the old one takes the focused Next button
+  // with it, so focus is on the page body until this runs. Placing and focusing in layout effects
+  // keeps that inside the one commit: a key pressed straight after Next (Escape to leave, an arrow
+  // to walk on) reaches the new card instead of the page, where Escape would only clear the
+  // selection and an arrow would nudge the selected point (issue #139).
   const shown = placed !== null;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!shown) return;
     if (stop.task === undefined) next.current?.focus();
     else card.current?.focus();
   }, [stop, shown]);
 
+  // Only the full tour ends at its last stop: the core tour's last Next opens the choice card.
   const last = index === total - 1;
   return (
     <div
@@ -478,8 +604,26 @@ function CoachMark({
   );
 }
 
+/**
+ * The tour runs on the bundled example, so in the desktop app its end cards say where a team's own
+ * autos come from (sweep D11). A browser has no File menu, so there the line is left out.
+ */
+function OwnRepoLine() {
+  if (!isDesktop()) return null;
+  return (
+    <p className={styles.body} data-testid="tour-own-repo">
+      For your own autos, open your robot repository from the ≡ menu: File &gt; Open a folder…
+    </p>
+  );
+}
+
 function ChoiceCard() {
   const jump = useRef<HTMLButtonElement | null>(null);
+  const preset = useSelector((editor) => editor.prefs.preset);
+  const users = useUserPresets();
+  // The line the first-run card leads to (spec 15 section 9): only once a preset was chosen, and not
+  // for a preset whose own name is gone, which Settings calls Custom.
+  const chose = chosenPresetName(preset, users);
   const titleId = useId();
   useEffect(() => {
     jump.current?.focus();
@@ -496,7 +640,13 @@ function ChoiceCard() {
       <h2 id={titleId} className={styles.choiceTitle}>
         You have the basics
       </h2>
-      <p className={styles.body}>That is everything you need to plan a routine. Want the rest?</p>
+      <p className={styles.body}>That is everything you need to plan an auto. Want the rest?</p>
+      {chose === null ? null : (
+        <p className={styles.body} data-testid="tour-chose">
+          You chose {chose}. Change it any time in Settings, Presets.
+        </p>
+      )}
+      <OwnRepoLine />
       <div className={styles.options}>
         <button
           type="button"
@@ -506,8 +656,8 @@ function ChoiceCard() {
             dispatchTour({ type: "chooseFull" });
           }}
         >
-          <MapIcon size={32} strokeWidth={1.75} aria-hidden className={styles.optionIcon} />
-          <span className={styles.optionTitle}>Show me everything</span>
+          <MapPlus size={32} strokeWidth={1.75} aria-hidden className={styles.optionIcon} />
+          <span className={styles.optionTitle}>Take the full tour</span>
           <span className={styles.optionBody}>
             A longer tour of every tool and panel, one at a time. About five minutes.
           </span>
@@ -552,6 +702,7 @@ function FinishedCard() {
         That is the whole tour
       </h2>
       <p className={styles.body}>Replay it from Help or the command palette.</p>
+      <OwnRepoLine />
       <div className={styles.buttons}>
         <button
           type="button"

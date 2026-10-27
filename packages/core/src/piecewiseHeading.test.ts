@@ -114,6 +114,57 @@ describe("range edits", () => {
     expect(rangeProblem(split.ranges)).toBeNull();
   });
 
+  it("splits a linear range that turns the short way across pi where it passes, not on the raw difference", () => {
+    const across: Piecewise = { mode: "piecewise", ranges: [range(0, 1, { mode: "linear", fromRad: 3, toRad: -3 })] };
+    const split = splitRange(across, 0.5);
+    expect(split.ranges).toHaveLength(2);
+    for (const t of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+      expect(Math.cos(headingAtT(split, straight, t) - headingAtT(across, straight, t))).toBeCloseTo(1, 9);
+    }
+  });
+
+  it("turns a linear sweep over several segments into one range per segment when one range would turn the other way", () => {
+    const twoLines = makePath([
+      [
+        { xIn: 0, yIn: 0 },
+        { xIn: 24, yIn: 0 },
+      ],
+      [
+        { xIn: 24, yIn: 0 },
+        { xIn: 48, yIn: 0 },
+      ],
+    ]);
+    const sweep: Heading = { mode: "linear", fromRad: -2, toRad: 2 };
+    const converted = toPiecewise(sweep, twoLines);
+    expect(converted.ranges).toEqual([
+      range(0, 0.5, { mode: "linear", fromRad: -2, toRad: 0 }),
+      range(0.5, 1, { mode: "linear", fromRad: 0, toRad: 2 }),
+    ]);
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      expect(Math.cos(headingAtT(converted, twoLines, t) - headingAtT(sweep, twoLines, t))).toBeCloseTo(1, 9);
+    }
+    expect(rangeProblem(converted.ranges)).toBeNull();
+  });
+
+  it("keeps a linear heading as one range when one range already turns the same way", () => {
+    const twoLines = makePath([
+      [
+        { xIn: 0, yIn: 0 },
+        { xIn: 24, yIn: 0 },
+      ],
+      [
+        { xIn: 24, yIn: 0 },
+        { xIn: 48, yIn: 0 },
+      ],
+    ]);
+    expect(toPiecewise({ mode: "linear", fromRad: -1, toRad: 1 }, twoLines).ranges).toEqual([
+      range(0, 1, { mode: "linear", fromRad: -1, toRad: 1 }),
+    ]);
+    expect(toPiecewise({ mode: "linear", fromRad: -2, toRad: 2 }, straight).ranges).toEqual([
+      range(0, 1, { mode: "linear", fromRad: -2, toRad: 2 }),
+    ]);
+  });
+
   it("refuses a split on a boundary or too close to one", () => {
     expect(splitRange(holdThenTurn, 0.5)).toBe(holdThenTurn);
     expect(splitRange(holdThenTurn, 0.51)).toBe(holdThenTurn);

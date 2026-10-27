@@ -1,0 +1,72 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/path.json",
+  "formatVersion": 1,
+  "kind": "path",
+  "season": "biobuzz",
+  "alliance": "BLUE",
+  "title": "Explicit millimetre frame",
+  "frame": {
+    "originIn": {
+      "xIn": -72,
+      "yIn": -72
+    },
+    "xAxis": "+y",
+    "yAxis": "+x",
+    "units": "mm",
+    "headingUnit": "deg",
+    "headingZero": "+y",
+    "headingPositive": "cw"
+  },
+  "startPose": {
+    "x": 3429.0,
+    "y": 2133.6,
+    "heading": 270
+  },
+  "steps": [
+    {
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "x": 3429.0,
+            "y": 2133.6
+          },
+          "to": {
+            "x": 2743.2,
+            "y": 2133.6
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "heading": 270
+      }
+    },
+    {
+      "kind": "wait",
+      "seconds": 1
+    },
+    {
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "x": 2743.2,
+            "y": 2133.6
+          },
+          "to": {
+            "x": 2743.2,
+            "y": 2844.8
+          }
+        }
+      ],
+      "heading": {
+        "mode": "linear",
+        "from": 270,
+        "to": 360
+      }
+    }
+  ]
+}

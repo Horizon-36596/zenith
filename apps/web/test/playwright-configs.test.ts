@@ -4,6 +4,7 @@ import main from "../playwright.config";
 import pages from "../playwright.pages.config";
 import qa from "../e2e/qa/playwright.qa.config";
 import { VIEWPORT } from "../e2e/viewports";
+import { BETA_NOTICE_KEY } from "../e2e/betaNotice";
 
 /**
  * A project's `use` replaces the config's top-level `use` key by key, and a device spread such as
@@ -37,6 +38,17 @@ describe("the Playwright configs", () => {
       const viewports = (config.projects ?? []).map((project) => project.use?.viewport ?? config.use?.viewport);
       expect(viewports.length).toBeGreaterThan(0);
       for (const viewport of viewports) expect(viewport).toEqual(VIEWPORT);
+    });
+
+    it(`${file}: every project starts with this version's beta notice dismissed on its own origin`, () => {
+      for (const project of config.projects ?? []) {
+        const use = { ...config.use, ...project.use };
+        const state = use.storageState;
+        expect(typeof state, project.name).toBe("object");
+        const origins = typeof state === "object" ? (state.origins ?? []) : [];
+        expect(origins.map((origin) => origin.origin)).toEqual([use.baseURL]);
+        expect(origins[0]?.localStorage).toEqual([{ name: BETA_NOTICE_KEY, value: "dismissed" }]);
+      }
     });
   }
 });

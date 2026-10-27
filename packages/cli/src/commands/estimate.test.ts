@@ -76,6 +76,32 @@ describe("zenith estimate", () => {
     expect(out.join("")).toContain("STRUCTURE");
   });
 
+  it("--json counts only error findings in errors, not warnings or infos", () => {
+    makeProject(root);
+    writeAuto(
+      root,
+      "autos",
+      "crash",
+      simpleAuto("crash", {
+        start: { pose: { xIn: -20, yIn: 0, headingRad: 0 } },
+        steps: [
+          {
+            id: "throughWall",
+            kind: "path",
+            segments: [{ kind: "line", from: "current", to: { xIn: 20, yIn: 0 } }],
+            heading: { mode: "tangent" },
+          },
+        ],
+      }),
+    );
+    const code = runEstimate("crash", { cwd: root, json: true });
+    expect(code).toBe(1);
+    const parsed = JSON.parse(out.join("")) as { files: { findings: { severity: string }[] }[]; errors: number };
+    const findings = parsed.files[0]?.findings ?? [];
+    expect(findings.some((finding) => finding.severity !== "error")).toBe(true);
+    expect(parsed.errors).toBe(findings.filter((finding) => finding.severity === "error").length);
+  });
+
   it("resolves a bare auto name against autosDir", () => {
     makeProject(root);
     writeAuto(root, "autos", "byname", simpleAuto("byname"));

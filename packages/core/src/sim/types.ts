@@ -145,6 +145,16 @@ export interface SimOptions {
   fidelity?: SimFidelity;
   /** Stop here even if the routine has not finished. Default: the auto period plus 4 s. */
   maxTimeS?: number;
+  /**
+   * End the run when the record of this top-level step closes: at its `endS`, or, for a path whose
+   * hold settles after it, at its `settledS`. The trace is then the prefix of the full trace up to
+   * that moment, pose for pose, and `completed` is false unless the step was the routine's last.
+   * Steps still open at that moment are closed as interrupted, as at the end of the period. An id
+   * that is not a top-level step of the plan never stops the run. Off by default. It is not part
+   * of the checkpoint key, so `resimulate` reuses a run's checkpoints whether or not it is set,
+   * and it never resumes later than this step.
+   */
+  stopAfterStepId?: string;
   follower?: Partial<FollowerParams>;
   plant?: Partial<PlantParams>;
   /** The seconds a command whose `estimateS` is `"unknown"` takes. Default 0, as the estimate counts it. */
@@ -192,8 +202,11 @@ export interface SimEvent extends TraceEvent {
 
 /** The trace `simulate` returns: a `Trace` with its additions. */
 export interface SimTrace extends Trace {
-  /** Always `"instant"`, so a reader can tell it from a Gradle trace. */
-  source: "instant";
+  /**
+   * `"instant"` from `simulate`, `"live"` from a live run another program drove (`createLiveRun`),
+   * so a reader can tell either from a Gradle trace.
+   */
+  source: "instant" | "live";
   fidelity: SimFidelity;
   steps: SimStepRecord[];
   events: SimEvent[];

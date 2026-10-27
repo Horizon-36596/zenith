@@ -16,6 +16,9 @@ describe("newAutoFromTemplate", () => {
     expect(auto.robot).toBe("autos/robot.json");
     expect(auto.field).toBe("autos/field/biobuzz.field.json");
     expect(auto.steps).toHaveLength(1);
+    // New path steps are named path1, path2 in every surface; the UI calls them paths.
+    expect(auto.steps[0]?.id).toBe("path1");
+    expect(auto.steps[0]?.notes).not.toMatch(/leg/);
     canonicalRoundTrip(auto);
   });
 

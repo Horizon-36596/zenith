@@ -60,14 +60,14 @@ describe("format version 2: the field image", () => {
 
   it("accepts named variants alongside the single src, and the single form without them", () => {
     const image = {
-      src: "app:fields/biobuzz/biobuzz-dark.webp",
-      credit: "Field image by Team Juice 16236",
+      src: "img/field-dark.webp",
+      credit: "Field image by Horizon (FTC 36596)",
       pxBoundsIn: "fullBleed",
       rotationDeg: 90,
       variants: [
-        { name: "dark", src: "app:fields/biobuzz/biobuzz-dark.webp" },
-        { name: "black", src: "app:fields/biobuzz/biobuzz-black.webp" },
-        { name: "light", src: "app:fields/biobuzz/biobuzz-light.webp" },
+        { name: "dark", src: "img/field-dark.webp" },
+        { name: "black", src: "img/field-black.webp" },
+        { name: "light", src: "img/field-light.webp" },
       ],
     };
     expect(parseField(fieldWith(image)).image?.variants?.map((v) => v.name)).toEqual([

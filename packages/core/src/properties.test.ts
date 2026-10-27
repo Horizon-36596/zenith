@@ -3,6 +3,7 @@ import {
   parseWaypoints,
   SCHEMA_ID,
   type Auto,
+  type BoxObstacle,
   type PathStep,
   type Step,
   type Waypoints,
@@ -137,7 +138,7 @@ describe("property: the estimate is monotone in speedFraction", () => {
 
 describe("property: STRUCTURE fires on the obstacle and not beside it", () => {
   // The second fixture obstacle is the one at floor level; the first is a bar above the robot.
-  const obstacle = testField.obstacles?.find((box) => box.minZIn === 0);
+  const obstacle = testField.obstacles?.find((box): box is BoxObstacle => box.kind === "box" && box.minZIn === 0);
 
   it("has an obstacle to aim at", () => {
     expect(obstacle).toBeDefined();

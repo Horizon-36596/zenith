@@ -1,0 +1,40 @@
+/* The chip and its menu. The menu itself is ActionMenu's; this is only the note field above the
+   labels, laid out as a small form row (UI_GUIDE section 9.5). */
+
+.anchor {
+  display: inline-flex;
+  align-items: center;
+}
+
+.note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  margin-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.noteLabel {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+}
+
+.noteInput {
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-1);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  color: var(--text-hi);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+.noteHint {
+  max-width: 220px;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}

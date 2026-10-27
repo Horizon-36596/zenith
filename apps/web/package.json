@@ -1,6 +1,6 @@
 {
   "name": "@horizon36596/zenith-web",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -12,8 +12,10 @@
     "test:e2e:pages": "playwright test -c playwright.pages.config.ts"
   },
   "dependencies": {
+    "@horizon36596/zenith-cloud": "workspace:*",
     "@horizon36596/zenith-core": "workspace:*",
     "@horizon36596/zenith-github": "workspace:*",
+    "@horizon36596/zenith-import": "workspace:*",
     "@horizon36596/zenith-schema": "workspace:*",
     "@horizon36596/zenith-season-biobuzz": "workspace:*",
     "@horizon36596/zenith-seasons": "workspace:*",

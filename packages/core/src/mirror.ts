@@ -2,6 +2,7 @@ import {
   childLists,
   withChildLists,
   type Auto,
+  type Envelope,
   type Expect,
   type Field,
   type Pose,
@@ -205,6 +206,20 @@ function mirrorExpect(step: { expect?: Expect }, mirrorId: MirrorIds | undefined
   };
 }
 
+/**
+ * A step's envelope for the other alliance: every corner through the same mirror as the path, the
+ * window and the provenance unchanged. A reflection reverses the corners' winding, which changes
+ * nothing about the area they enclose.
+ */
+function withMirroredEnvelope<T extends { envelope?: Envelope }>(step: T, mode: MirrorMode): T {
+  const envelope = step.envelope;
+  if (envelope === undefined) return step;
+  return {
+    ...step,
+    envelope: { ...envelope, polygon: envelope.polygon.map((corner) => mirrorVec(corner, mode)) },
+  };
+}
+
 function mirrorStep(
   step: Step,
   mode: MirrorMode,
@@ -216,16 +231,46 @@ function mirrorStep(
       // Markers are placed by t or by distance along the path, so they mirror with it untouched.
       const heading = step.heading;
       const expected = mirrorExpect(step, mirrorId);
-      return {
-        ...step,
-        segments: step.segments.map((segment) => mirrorSegment(segment, mode, waypoints)),
-        ...(heading === undefined ? {} : { heading: mirrorHeading(heading, mode) }),
-        ...(expected === undefined ? {} : { expect: expected }),
-      };
+      const rejoinFrom = step.rejoinFrom;
+      return withMirroredEnvelope(
+        {
+          ...step,
+          ...(rejoinFrom === undefined
+            ? {}
+            : {
+                rejoinFrom: {
+                  ...mirrorPose(rejoinFrom, mode),
+                  headingRad: mirrorHeadingRad(rejoinFrom.headingRad, mode),
+                },
+              }),
+          segments: step.segments.map((segment) => mirrorSegment(segment, mode, waypoints)),
+          ...(heading === undefined ? {} : { heading: mirrorHeading(heading, mode) }),
+          ...(expected === undefined ? {} : { expect: expected }),
+        },
+        mode,
+      );
     }
     case "command": {
       const expected = mirrorExpect(step, mirrorId);
-      return expected === undefined ? step : { ...step, expect: expected };
+      return withMirroredEnvelope(expected === undefined ? step : { ...step, expect: expected }, mode);
+    }
+    case "wait":
+      return withMirroredEnvelope(step, mode);
+    case "transfer": {
+      // A transfer names two ledger locations; the other alliance's routine moves pieces between
+      // their counterparts (`hiveRedUpCell` is BLUE's `hiveBlueUpCell`). `partner`, `robot` and a
+      // location written with `Own` or `Opponent` name no colour and stay as they are.
+      if (mirrorId === undefined) return step;
+      const other = (id: string): string => {
+        const mapped = mirrorId(id);
+        if (mapped === null) {
+          throw new Error(
+            `This routine cannot be mirrored: ${JSON.stringify(id)} has no counterpart on the other alliance.`,
+          );
+        }
+        return mapped;
+      };
+      return { ...step, from: other(step.from), to: other(step.to) };
     }
     case "sequence":
     case "parallel":

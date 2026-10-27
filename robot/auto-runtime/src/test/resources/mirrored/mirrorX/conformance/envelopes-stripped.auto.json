@@ -1,0 +1,80 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 4,
+  "name": "envelopes-stripped",
+  "title": "The envelopes fixture with every envelope and rejoin pose taken out",
+  "alliance": "BLUE",
+  "start": {
+    "pose": {
+      "xIn": -48,
+      "yIn": 48,
+      "headingRad": 0
+    }
+  },
+  "steps": [
+    {
+      "id": "sweep",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -48,
+            "yIn": 48,
+            "headingRad": 0
+          },
+          "to": {
+            "xIn": -24,
+            "yIn": 48,
+            "headingRad": 0
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "headingRad": 0
+      }
+    },
+    {
+      "id": "collect",
+      "kind": "command",
+      "name": "take",
+      "args": {
+        "loops": 10
+      }
+    },
+    {
+      "id": "hold",
+      "kind": "wait",
+      "seconds": 0.1
+    },
+    {
+      "id": "rejoin",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -24,
+            "yIn": 24,
+            "headingRad": -1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "linear",
+        "fromRad": 0,
+        "toRad": -1.5708
+      }
+    },
+    {
+      "id": "done",
+      "kind": "command",
+      "name": "instant",
+      "args": {
+        "tag": "done"
+      }
+    }
+  ]
+}

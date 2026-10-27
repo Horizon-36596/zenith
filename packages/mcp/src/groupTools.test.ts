@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { canonicalize, FINDING_HELP, loadAuto } from "@horizon36596/zenith-core";
+import { canonicalize, FINDING_HELP, helpByCode, helpForFinding, loadAuto, type Finding } from "@horizon36596/zenith-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
@@ -74,7 +74,7 @@ describe("the format version 2 MCP tools", () => {
       // The group takes the place of the first wrapped step, the fifth step of the auto.
       expect(wrapped.auto.steps[4]?.kind).toBe("sequence");
       const written = readFileSync(join(project, "autos/collect-and-score.auto.json"), "utf8");
-      expect(written).toContain('"formatVersion": 3');
+      expect(written).toContain('"formatVersion": 4');
       expect(canonicalize("auto", loadAuto(JSON.parse(written) as unknown))).toBe(written);
 
       const unwrapped = body<{ auto: { steps: { id: string }[] } }>(
@@ -90,14 +90,14 @@ describe("the format version 2 MCP tools", () => {
     async () => {
       const project = copy();
       // Every path in collect-and-score after the first starts from "current", so no insert can
-      // open a gap. Pin toGarden's start to the scoreSouth waypoint so the path inserted before it
+      // open a gap. Pin toOtherSide's start to the scoreSouth waypoint so the path inserted before it
       // leaves the robot somewhere else.
       const autoPath = join(project, "autos/collect-and-score.auto.json");
       const auto = JSON.parse(readFileSync(autoPath, "utf8")) as {
         steps: { id: string; segments?: { from: unknown }[] }[];
       };
-      const toGarden = auto.steps.find((step) => step.id === "toGarden");
-      toGarden!.segments![0]!.from = { ref: "scoreSouth" };
+      const toOtherSide = auto.steps.find((step) => step.id === "toOtherSide");
+      toOtherSide!.segments![0]!.from = { ref: "scoreSouth" };
       writeFileSync(autoPath, JSON.stringify(auto, null, 2), "utf8");
 
       const inserted = body<{ id: string; continuityGapStepId: string | null; findings: { code: string; stepId: string }[] }>(
@@ -105,7 +105,7 @@ describe("the format version 2 MCP tools", () => {
           name: "zenith.edit.insertAfter",
           arguments: {
             auto: "collect-and-score",
-            afterId: "scorePreload",
+            afterId: "shootPreloads",
             step: {
               id: "nudge",
               kind: "path",
@@ -117,15 +117,15 @@ describe("the format version 2 MCP tools", () => {
         }),
       );
       expect(inserted.id).toBe("nudge");
-      // `toGarden` now starts from the scoreSouth waypoint rather than "current", so it starts 8 in
+      // `toOtherSide` now starts from the scoreSouth waypoint rather than "current", so it starts 8 in
       // from where the robot is.
-      expect(inserted.continuityGapStepId).toBe("toGarden");
-      expect(inserted.findings.some((finding) => finding.code === "CONTINUITY" && finding.stepId === "toGarden")).toBe(true);
+      expect(inserted.continuityGapStepId).toBe("toOtherSide");
+      expect(inserted.findings.some((finding) => finding.code === "CONTINUITY" && finding.stepId === "toOtherSide")).toBe(true);
 
       const repaired = body<{ findings: { code: string }[] }>(
         await client.callTool({
           name: "zenith.edit.repairContinuity",
-          arguments: { auto: "collect-and-score", stepId: "toGarden", project },
+          arguments: { auto: "collect-and-score", stepId: "toOtherSide", project },
         }),
       );
       expect(repaired.findings.filter((finding) => finding.code === "CONTINUITY")).toEqual([]);
@@ -137,7 +137,7 @@ describe("the format version 2 MCP tools", () => {
     "adds a sequence into a parallel group and returns plain-language help with the findings",
     async () => {
       const project = copy();
-      const added = body<{ auto: unknown; help: Record<string, unknown>; findings: { code: string }[] }>(
+      const added = body<{ auto: unknown; help: Record<string, unknown>; findings: Finding[] }>(
         await client.callTool({
           name: "zenith.edit.addStep",
           arguments: {
@@ -158,15 +158,21 @@ describe("the format version 2 MCP tools", () => {
       );
       const text = JSON.stringify(added.auto);
       expect(text).toContain('"intakePulse"');
+      // Each code's help is the words for its most severe finding: the code's own, or the ones a
+      // severity has of its own, such as TIME_BUDGET's info note.
+      const expected = helpByCode(added.findings);
       for (const finding of added.findings) {
-        expect(added.help[finding.code]).toEqual(FINDING_HELP[finding.code as keyof typeof FINDING_HELP]);
+        expect(added.help[finding.code]).toEqual(expected[finding.code]);
       }
 
       const validated = body<{ help: Record<string, { title: string; means: string; fix: string }> }>(
         await client.callTool({ name: "zenith.validate", arguments: { auto: "collect-and-score", project } }),
       );
-      // collect-and-score has no errors or warnings; its one finding is the TIME_BUDGET info.
-      expect(validated.help["TIME_BUDGET"]?.title).toBe(FINDING_HELP.TIME_BUDGET.title);
+      // collect-and-score has no errors or warnings; its one finding is the TIME_BUDGET info, whose
+      // help is the info note's own words, not the advice for running over the period.
+      const info = helpForFinding({ code: "TIME_BUDGET", severity: "info" });
+      expect(validated.help["TIME_BUDGET"]?.title).toBe(info.title);
+      expect(validated.help["TIME_BUDGET"]?.title).not.toBe(FINDING_HELP.TIME_BUDGET.title);
     },
     20000,
   );

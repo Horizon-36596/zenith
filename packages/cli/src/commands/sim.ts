@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { estimate as coreEstimate, ledger as coreLedger, render as coreRender } from "@horizon36596/zenith-core";
 import { resolveSeason } from "@horizon36596/zenith-seasons";
@@ -115,12 +115,17 @@ function formatReport(report: SimReport): string {
   return lines.join("\n");
 }
 
-/** Runs the sim command and resolves with its exit code and the interleaved output it printed. */
+/**
+ * Runs the sim command and resolves with its exit code and the interleaved output it printed.
+ * The child's stdout is echoed to `stdoutSink`: `--json` passes `process.stderr`, so Gradle's own
+ * output never lands in front of the JSON report on stdout.
+ */
 function runCommand(
   spawnImpl: typeof spawn,
   launch: SimLaunch,
   cwd: string,
   timeoutS: number | undefined,
+  stdoutSink: NodeJS.WritableStream,
 ): Promise<{ code: number; output: string; timedOut: boolean }> {
   return new Promise((resolvePromise, reject) => {
     // No shell: the argv array is spawned directly, so nothing in `command` (or in `{auto}`, which
@@ -139,7 +144,7 @@ function runCommand(
           }, timeoutS * 1000);
 
     child.stdout?.on("data", (chunk: Buffer) => {
-      process.stdout.write(chunk);
+      stdoutSink.write(chunk);
       chunks.push(chunk.toString());
     });
     child.stderr?.on("data", (chunk: Buffer) => {
@@ -155,6 +160,15 @@ function runCommand(
       resolvePromise({ code: code ?? 1, output: chunks.join(""), timedOut });
     });
   });
+}
+
+/** The trace file's modification time, or null when there is none yet. */
+function traceMtimeMs(tracePath: string): number | null {
+  try {
+    return statSync(tracePath).mtimeMs;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -185,7 +199,16 @@ export async function runSim(autoArg: string, options: SimCommandOptions): Promi
   const tracePath = confinePath(project.root, simConfig.trace.replaceAll("{auto}", auto.name));
 
   const launch = resolveLauncher(argv, project.root, options.host ?? hostPlatform());
-  const { code, output, timedOut } = await runCommand(options.spawnFn ?? spawn, launch, project.root, options.timeout);
+  // A trace left by an earlier run must not pass for this run's result: the command can exit 0
+  // without writing one (a test task skipped as up to date, a command that does not run the sim).
+  const earlierTraceMtimeMs = traceMtimeMs(tracePath);
+  const { code, output, timedOut } = await runCommand(
+    options.spawnFn ?? spawn,
+    launch,
+    project.root,
+    options.timeout,
+    options.json === true ? process.stderr : process.stdout,
+  );
   if (code !== 0) {
     const tail = output.split("\n").slice(-40).join("\n");
     const reason = timedOut ? `timed out after ${String(options.timeout)} s` : `exit code ${String(code)}`;
@@ -197,12 +220,23 @@ export async function runSim(autoArg: string, options: SimCommandOptions): Promi
     process.stderr.write(`the sim command exited 0 but did not write a trace at ${tracePath}\n`);
     return 2;
   }
+  if (earlierTraceMtimeMs !== null && traceMtimeMs(tracePath) === earlierTraceMtimeMs) {
+    process.stderr.write(
+      `the sim command exited 0 but did not rewrite the trace at ${tracePath}; that file is from an earlier run. ` +
+        "If a Gradle test task was skipped as up to date, add --rerun to sim.command.\n",
+    );
+    return 2;
+  }
   let trace;
   try {
     trace = parseTrace(JSON.parse(readFileSync(tracePath, "utf8")) as unknown);
   } catch (error) {
     const message = error instanceof TraceParseError || error instanceof Error ? error.message : String(error);
     process.stderr.write(`could not read the trace at ${tracePath}: ${message}\n`);
+    return 2;
+  }
+  if (trace.auto !== auto.name) {
+    process.stderr.write(`the trace at ${tracePath} is for auto "${trace.auto}", not "${auto.name}"\n`);
     return 2;
   }
 

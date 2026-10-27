@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { betaNoticeSeen } from "../betaNotice";
 import { VIEWPORT } from "../viewports";
 
 /**
@@ -33,6 +34,8 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         headless: true,
         baseURL: `http://localhost:${String(port)}`,
+        // The beta notice, dismissed for this version, as in playwright.config.ts (e2e/betaNotice.ts).
+        storageState: betaNoticeSeen(`http://localhost:${String(port)}`),
         viewport: VIEWPORT,
         trace: "retain-on-failure",
       },

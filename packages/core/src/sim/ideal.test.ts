@@ -1,5 +1,6 @@
 import { parseAuto, SCHEMA_ID, type Auto, type Heading } from "@horizon36596/zenith-schema";
 import { describe, expect, it } from "vitest";
+import { checkTimeouts } from "../checks/schedule.js";
 import { estimate } from "../estimate.js";
 import { angleDelta } from "../geometry/angle.js";
 import type { PathGeometry } from "../geometry/path.js";
@@ -10,7 +11,9 @@ import { plan } from "../plan.js";
 import { resolve } from "../resolve.js";
 import { testField, testRobot, testWaypoints } from "../testing/fixtures.js";
 import type { Plan, PlanStep } from "../types.js";
+import { makeSimCurve } from "./curves.js";
 import { idealPoseAt, idealTimeAt, idealTrajectory, type IdealTrajectory } from "./ideal.js";
+import { parameterAtFraction } from "./pedroPath.js";
 
 /**
  * The ideal playback level (site/docs/simulation.md): the robot is on the planned geometry exactly,
@@ -119,17 +122,22 @@ describe("the ideal trajectory on a path", () => {
     }
   });
 
-  it("times the run with the estimate, plus only the transitions", () => {
-    const { trajectory, totalEstimateS } = build(
-      autoOf([curve("sweep", { mode: "tangent" }), { id: "pause", kind: "wait", seconds: 0.5 }], {
-        xIn: -50,
-        yIn: 0,
-        headingRad: 0,
-      }),
-    );
-    // The tangent at the start of the curve is not heading 0, so a turn opens the run.
-    const turn = trajectory.transitions[0]?.endS ?? 0;
-    expect(trajectory.totalS).toBeCloseTo(totalEstimateS + turn, 9);
+  it("times the run with the estimate, the turn before the first path included", () => {
+    const auto = autoOf([curve("sweep", { mode: "tangent" }), { id: "pause", kind: "wait", seconds: 0.5 }], {
+      xIn: -50,
+      yIn: 0,
+      headingRad: 0,
+    });
+    const { trajectory, totalEstimateS } = build(auto);
+    // The tangent at the start of the curve is not heading 0, so a turn opens the run. The estimate
+    // counts it as the path's joint turn, so the ideal run plays it inside the step's own time.
+    const turn = trajectory.transitions[0];
+    if (turn === undefined) throw new Error("no turn");
+    expect(turn.translateIn).toBe(0);
+    const turnS = estimate(planOf(auto), testRobot).byStepId["sweep"]?.turnS ?? 0;
+    expect(turn.endS - turn.startS).toBeCloseTo(turnS, 12);
+    expect(trajectory.totalS).toBeCloseTo(totalEstimateS, 9);
+    expect(trajectory.spans.find((span) => span.stepId === "sweep")?.transitionS).toBe(0);
   });
 
   const modes: Array<[string, Heading]> = [
@@ -183,7 +191,14 @@ describe("the ideal trajectory on a path", () => {
       expect(Math.abs(angleDelta(pose.headingRad, headingAtT(heading, geometry, t)))).toBeLessThan(1e-6);
     }
     expect(idealPoseAt(trajectory, idealTimeAt(trajectory, "sweep", 0.25) as number).headingRad).toBeCloseTo(0.4, 6);
-    expect(idealPoseAt(trajectory, idealTimeAt(trajectory, "sweep", 0.75) as number).headingRad).toBeCloseTo(1.15, 6);
+    // On this cubic the linear range turns linearly in the curve's own t, as the runtime turns it
+    // (OPT-01), so three quarters of the way along is not the arc-length midpoint of the turn, 1.15.
+    const { u } = geometry.segmentAt(0.75 * geometry.lengthIn);
+    const runtimeCurve = makeSimCurve((geometry.curves[0]?.points ?? []).map((point) => ({ x: point.xIn, y: point.yIn })));
+    const rangeStartU = parameterAtFraction(runtimeCurve, 0.5);
+    const runtimeRad = 0.4 + 1.5 * ((u - rangeStartU) / (1 - rangeStartU));
+    expect(runtimeRad).not.toBeCloseTo(1.15, 2);
+    expect(idealPoseAt(trajectory, idealTimeAt(trajectory, "sweep", 0.75) as number).headingRad).toBeCloseTo(runtimeRad, 6);
   });
 
   it("gives the time at a point on a path, which puts the robot back at that point", () => {
@@ -249,7 +264,7 @@ describe("transitions where the poses do not match", () => {
   });
 
   it("turns in place when only the heading differs, at the angular velocity limit", () => {
-    const { trajectory } = build(
+    const { trajectory, totalEstimateS } = build(
       autoOf([
         legTo("east", "current", { xIn: -20, yIn: 0 }, { mode: "constant", headingRad: 0 }),
         legTo("north", "current", { xIn: -20, yIn: 30 }, { mode: "tangent" }),
@@ -265,6 +280,43 @@ describe("transitions where the poses do not match", () => {
     expect(mid.xIn).toBeCloseTo(-20, 9);
     expect(mid.yIn).toBeCloseTo(0, 9);
     expect(mid.headingRad).toBeCloseTo(Math.PI / 4, 9);
+    // The turn is the estimate's own joint turn (issue #153): it is played out of the step's time,
+    // not added on top, so the ideal run takes exactly as long as the estimate.
+    expect(trajectory.totalS).toBeCloseTo(totalEstimateS, 9);
+    const north = trajectory.spans.find((span) => span.stepId === "north");
+    expect(north?.transitionS).toBe(0);
+    expect(north?.startS).toBeCloseTo(turn.startS, 12);
+    // The path's motion starts when the turn ends, and its settle hold ends the step.
+    const motion = trajectory.segments.find((segment) => segment.kind === "path" && segment.stepId === "north");
+    expect(motion?.startS).toBeCloseTo(turn.endS, 12);
+    expect(north?.endS).toBeCloseTo(trajectory.totalS, 9);
+  });
+
+  it("adds only the drive beyond the estimate when a path starts somewhere else and facing another way", () => {
+    const { trajectory, totalEstimateS } = build(
+      autoOf([
+        legTo("east", "current", { xIn: -20, yIn: 0 }, { mode: "constant", headingRad: 0 }),
+        legTo("away", { xIn: -10, yIn: 10 }, { xIn: -10, yIn: 40 }, { mode: "tangent" }),
+      ]),
+    );
+    const transition = trajectory.transitions[0];
+    if (transition === undefined) throw new Error("no transition");
+    expect(transition.translateIn).toBeGreaterThan(0);
+    const gapS = transition.endS - transition.startS;
+    expect(trajectory.spans.find((span) => span.stepId === "away")?.transitionS).toBeCloseTo(gapS, 9);
+    expect(trajectory.totalS).toBeCloseTo(totalEstimateS + gapS, 9);
+  });
+
+  it("adds not even a rounding error of transition at the joints of a zigzag", () => {
+    // Every leg starts facing another way from how the last one ended, so each opens with a turn in
+    // place that the estimate counts; none of them may leave a sliver of transition on the timeline.
+    const legs = Array.from({ length: 21 }, (_, i) =>
+      legTo(`leg${String(i + 1)}`, "current", { xIn: -48 + 3 * (i + 1), yIn: i % 2 === 0 ? 10 : -12 }, { mode: "tangent" }),
+    );
+    const { trajectory, totalEstimateS } = build(autoOf(legs));
+    expect(trajectory.transitions.length).toBeGreaterThan(10);
+    expect(trajectory.spans.filter((span) => span.transitionS !== 0).map((span) => span.stepId)).toEqual([]);
+    expect(trajectory.totalS).toBeCloseTo(totalEstimateS, 9);
   });
 
   it("adds nothing when the next path starts where the last one ended", () => {
@@ -333,6 +385,116 @@ describe("steps that do not drive", () => {
     const mid = idealPoseAt(trajectory, (drive?.endS ?? 0) / 3);
     expect(nearestS(geometry, mid).distanceIn).toBeLessThan(1e-6);
     expect(mid.xIn).toBeGreaterThan(-50);
+  });
+});
+
+describe("a timeout that cuts a path short", () => {
+  // A straight drive east from the start, facing the way it drives, so it opens with no turn.
+  const east = (timeoutS?: number): unknown => ({
+    id: "east",
+    kind: "path",
+    segments: [{ kind: "line", from: "current", to: { xIn: 20, yIn: 0 } }],
+    heading: { mode: "constant", headingRad: 0 },
+    ...(timeoutS === undefined ? {} : { timeoutS }),
+  });
+  const uncappedS = (): number => estimate(planOf(autoOf([east()])), testRobot).byStepId["east"]?.nominalS ?? 0;
+
+  it("stops the robot where the timeout runs out, so the ideal total is the estimate's", () => {
+    const timeoutS = uncappedS() / 2;
+    const auto = autoOf([east(timeoutS), { id: "pause", kind: "wait", seconds: 0.5 }]);
+    const planned = planOf(auto);
+    const estimated = estimate(planned, testRobot);
+    expect(estimated.byStepId["east"]?.uncappedS).toBeCloseTo(timeoutS * 2, 9);
+    const trajectory = idealTrajectory(planned, estimated);
+
+    expect(trajectory.totalS).toBeCloseTo(estimated.nominalS ?? Number.NaN, 9);
+    const span = trajectory.spans.find((row) => row.stepId === "east");
+    expect((span?.endS ?? 0) - (span?.startS ?? 0)).toBeCloseTo(timeoutS, 9);
+    expect(span?.transitionS).toBe(0);
+
+    // It is on the path, part of the way along, and it stays there through the wait that follows.
+    const stop = idealPoseAt(trajectory, timeoutS);
+    const geometry = stepOf(planned, "east").geometry as PathGeometry;
+    expect(nearestS(geometry, stop).distanceIn).toBeLessThan(1e-6);
+    expect(stop.xIn).toBeGreaterThan(-50);
+    expect(stop.xIn).toBeLessThan(20);
+    for (const atS of [timeoutS + 0.01, timeoutS + 0.25, trajectory.totalS + 1]) {
+      expect(idealPoseAt(trajectory, atS)).toEqual(stop);
+    }
+
+    // The end of the path is never reached, and the place TIMEOUT_TIGHT names is where it stops.
+    expect(idealTimeAt(trajectory, "east", 1)).toBeNull();
+    const finding = checkTimeouts(planned.steps, estimated).find((row) => row.stepId === "east");
+    expect(finding?.severity).toBe("warning");
+    expect(idealTimeAt(trajectory, "east", finding?.t ?? Number.NaN)).toBeCloseTo(timeoutS, 6);
+  });
+
+  it("closes the gap it leaves with a transition into the next path, which the timeline shows", () => {
+    const timeoutS = uncappedS() / 2;
+    const { planned, trajectory, totalEstimateS } = build(
+      autoOf([
+        east(timeoutS),
+        {
+          id: "north",
+          kind: "path",
+          segments: [{ kind: "line", from: "current", to: { xIn: 20, yIn: 30 } }],
+          heading: { mode: "constant", headingRad: 0 },
+        },
+      ]),
+    );
+    expect(trajectory.transitions.map((transition) => transition.stepId)).toEqual(["north"]);
+    const transition = trajectory.transitions[0];
+    if (transition === undefined) throw new Error("no transition");
+    expect(transition.startS).toBeCloseTo(timeoutS, 9);
+    expect(transition.fromPose.xIn).toBeLessThan(20);
+    expect(transition.toPose).toEqual(stepOf(planned, "north").startPose);
+    const gapS = transition.endS - transition.startS;
+    expect(gapS).toBeGreaterThan(0);
+    expect(trajectory.spans.find((span) => span.stepId === "north")?.transitionS).toBeCloseTo(gapS, 9);
+    expect(trajectory.totalS).toBeCloseTo(totalEstimateS + gapS, 9);
+  });
+
+  it("stops a joint turn part of the way round when the timeout is shorter than the turn", () => {
+    const north = (timeoutS?: number): unknown => ({
+      id: "north",
+      kind: "path",
+      segments: [{ kind: "line", from: "current", to: { xIn: -50, yIn: 30 } }],
+      heading: { mode: "tangent" },
+      ...(timeoutS === undefined ? {} : { timeoutS }),
+    });
+    const turnS = estimate(planOf(autoOf([north()])), testRobot).byStepId["north"]?.turnS ?? 0;
+    expect(turnS).toBeGreaterThan(0);
+    const { trajectory, totalEstimateS } = build(autoOf([north(turnS / 2)]));
+    expect(trajectory.totalS).toBeCloseTo(totalEstimateS, 9);
+    expect(trajectory.totalS).toBeCloseTo(turnS / 2, 9);
+    expect(trajectory.segments.some((segment) => segment.kind === "path")).toBe(false);
+    const stop = idealPoseAt(trajectory, trajectory.totalS + 1);
+    expect(stop.xIn).toBeCloseTo(-50, 9);
+    expect(stop.yIn).toBeCloseTo(0, 9);
+    expect(stop.headingRad).toBeCloseTo(Math.PI / 4, 9);
+  });
+
+  it("turns on the spot from the heading a cut-short turn left, not the planned one", () => {
+    const turn = (id: string, headingRad: number, timeoutS?: number): unknown => ({
+      id,
+      kind: "path",
+      segments: [{ kind: "line", from: "current", to: { xIn: -50, yIn: 0 } }],
+      heading: { mode: "constant", headingRad },
+      ...(timeoutS === undefined ? {} : { timeoutS }),
+    });
+    // A half turn goes the negative way round (`holdTurnRad`); the timeout stops it at -0.9 rad.
+    const halfS = estimate(planOf(autoOf([turn("half", Math.PI)])), testRobot).byStepId["half"]?.nominalS ?? 0;
+    expect(halfS).toBeGreaterThan(0);
+    const { trajectory } = build(autoOf([turn("half", Math.PI, (halfS * 0.9) / Math.PI), turn("back", 0)]));
+    const cutS = (halfS * 0.9) / Math.PI;
+    expect(idealPoseAt(trajectory, cutS).headingRad).toBeCloseTo(-0.9, 6);
+    // The second turn goes straight from -0.9 to 0, never back round through the planned pi first.
+    for (let atS = cutS; atS <= trajectory.totalS + 0.2; atS += 0.01) {
+      const headingRad = idealPoseAt(trajectory, atS).headingRad;
+      expect(headingRad).toBeGreaterThanOrEqual(-0.9 - 1e-6);
+      expect(headingRad).toBeLessThanOrEqual(1e-6);
+    }
+    expect(idealPoseAt(trajectory, trajectory.totalS + 1).headingRad).toBeCloseTo(0, 9);
   });
 });
 

@@ -4,17 +4,18 @@
  * which is the cache key, so a drag recomputes exactly once per document
  * (site/docs/editor.md).
  */
-import type { Estimate, Finding, LedgerRow, Plan, ResolvedAuto } from "@horizon36596/zenith-core";
+import type { Estimate, Finding, LedgerRow, LedgerRun, Plan, ResolvedAuto, SeasonRules } from "@horizon36596/zenith-core";
+import { noSeasonRules } from "@horizon36596/zenith-core";
 import { resolveSeason } from "@horizon36596/zenith-seasons";
 import type { Auto, Field, Robot, Waypoints } from "@horizon36596/zenith-schema";
 import {
   safeCheck,
   safeEstimate,
-  safeLedger,
   safePlan,
   safeRender,
   safeResolve,
 } from "../lib/coreSafe";
+import { ledgerFor } from "./ledgerRun";
 
 export interface Derived {
   resolved: ResolvedAuto | null;
@@ -26,6 +27,10 @@ export interface Derived {
   findingsReason: string | null;
   ledger: LedgerRow[];
   ledgerReason: string | null;
+  /** The whole ledger run, for the field's count badges and the inspector; null when it failed. */
+  ledgerRun: LedgerRun | null;
+  /** The season plugin the ledger and the checks ran with. */
+  season: SeasonRules;
   staticSvg: string | null;
   /** How long the whole routine takes, or null while the estimator is unavailable. */
   totalS: number | null;
@@ -45,6 +50,8 @@ const EMPTY: Derived = {
   findingsReason: null,
   ledger: [],
   ledgerReason: null,
+  ledgerRun: null,
+  season: noSeasonRules,
   staticSvg: null,
   totalS: null,
   seasonWarnings: [],
@@ -74,11 +81,12 @@ export function derive(
 
   const season = resolveSeason(field);
 
-  const resolvedAttempt = safeResolve(auto, waypoints);
+  const resolvedAttempt = safeResolve(auto, waypoints, robot);
   if (!resolvedAttempt.ok) {
     const derived: Derived = {
       ...EMPTY,
       findingsReason: resolvedAttempt.reason,
+      season: season.rules,
       seasonWarnings: season.warnings,
     };
     cache.set(auto, { robot, field, waypoints, derived });
@@ -92,6 +100,7 @@ export function derive(
       ...EMPTY,
       resolved,
       findingsReason: planAttempt.reason,
+      season: season.rules,
       seasonWarnings: season.warnings,
     };
     cache.set(auto, { robot, field, waypoints, derived });
@@ -104,16 +113,16 @@ export function derive(
   const estimateReason = estimateAttempt.ok ? null : estimateAttempt.reason;
 
   const checkAttempt = safeCheck(planned, estimate, robot, field, season.rules);
-  const ledgerAttempt = safeLedger(planned, field, season.rules);
+  const ledgerView = ledgerFor(planned, field);
+  const ledger: LedgerRow[] = ledgerView.run?.rows ?? [];
   const renderAttempt = safeRender(
     planned,
     estimate,
     checkAttempt.ok ? checkAttempt.value : [],
-    ledgerAttempt.ok ? ledgerAttempt.value : [],
+    ledger,
   );
 
   const findings: Finding[] = checkAttempt.ok ? checkAttempt.value : planned.findings;
-  const ledger: LedgerRow[] = ledgerAttempt.ok ? ledgerAttempt.value : [];
 
   const derived: Derived = {
     resolved,
@@ -123,7 +132,9 @@ export function derive(
     findings,
     findingsReason: checkAttempt.ok ? null : checkAttempt.reason,
     ledger,
-    ledgerReason: ledgerAttempt.ok ? null : ledgerAttempt.reason,
+    ledgerReason: ledgerView.reason,
+    ledgerRun: ledgerView.run,
+    season: ledgerView.season,
     staticSvg: renderAttempt.ok ? renderAttempt.value : null,
     totalS: estimate?.nominalS ?? null,
     seasonWarnings: season.warnings,

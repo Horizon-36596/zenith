@@ -76,10 +76,9 @@ describe("diff", () => {
 
   it("notices a step that only moved, and one that moved between lists", () => {
     const reordered = diff(base, auto([base.steps[1] as Step, leg("out", 0, -60)]));
-    expect(reordered.changes.map((change) => change.kind)).toEqual(["moved", "moved"]);
-    expect(reordered.changes.find((change) => change.stepId === "out")?.summary).toBe(
-      "The path step moved from position 1 to position 2.",
-    );
+    // Two steps swapped: one of them kept its order against the other, so one move says it all.
+    expect(reordered.changes.map((change) => change.kind)).toEqual(["moved"]);
+    expect(reordered.changes[0]?.summary).toMatch(/^The (path|command) step moved from position [12] to position [12]\.$/);
 
     const nested = diff(
       base,
@@ -92,6 +91,21 @@ describe("diff", () => {
       "The path step moved out of steps and into group.steps.",
     );
     expect(nested.changes.some((change) => change.stepId === "group" && change.kind === "added")).toBe(true);
+  });
+
+  it("reports only the new step when a wait is inserted, not every later step as moved", () => {
+    const three = auto([leg("out", 0, -60), leg("mid", 10, -40), leg("park", 20, -20)]);
+    const withWait = auto([leg("out", 0, -60), { id: "pause", kind: "wait", seconds: 0.5 }, leg("mid", 10, -40), leg("park", 20, -20)]);
+    const outcome = diff(three, withWait);
+    expect(outcome.changes.map((change) => [change.stepId, change.kind])).toEqual([["pause", "added"]]);
+    const removed = diff(withWait, three);
+    expect(removed.changes.map((change) => [change.stepId, change.kind])).toEqual([["pause", "removed"]]);
+  });
+
+  it("reports one move when one step jumps to the front of a longer list", () => {
+    const four = auto([leg("a", 0, -60), leg("b", 10, -50), leg("c", 20, -40), leg("d", 30, -30)]);
+    const jumped = auto([leg("d", 30, -30), leg("a", 0, -60), leg("b", 10, -50), leg("c", 20, -40)]);
+    expect(diff(four, jumped).changes.map((change) => [change.stepId, change.kind])).toEqual([["d", "moved"]]);
   });
 
   it("names the document fields that changed", () => {

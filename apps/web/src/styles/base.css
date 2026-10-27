@@ -122,3 +122,10 @@ button:disabled {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-strong);
 }
+
+/* What's this, from the Help menu (components/whatsThisMode.ts): until the next click explains what
+   it lands on, every control shows the question-mark cursor, so the mode is visible. */
+:root[data-whats-this],
+:root[data-whats-this] * {
+  cursor: help !important;
+}

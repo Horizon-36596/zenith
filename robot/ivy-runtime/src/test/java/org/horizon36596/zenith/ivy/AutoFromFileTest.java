@@ -38,10 +38,16 @@ import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.horizon36596.zenith.AutoSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -300,5 +306,191 @@ class AutoFromFileTest {
         }
         assertEquals(Arrays.asList("init", "registerCommands", "periodic", "execute", "periodic", "execute",
                 "periodic", "execute"), auto.testRobot.calls);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Path speeds (issue #192): a speed below 1 reaches the robot only through atSpeed
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * A robot that leaves {@code atSpeed}, {@code followPath} and {@code defaultSpeedFraction} alone,
+     * which {@link TestRobot} does not: it replaces {@code followPath} to record paths.
+     */
+    static class PlainRobot implements ZenithRobot {
+        final FakeAuto parts = new FakeAuto();
+
+        @Override
+        public void init(AutoFromFile opMode) {
+        }
+
+        @Override
+        public void registerCommands(AutoFromFile opMode) {
+            parts.registerCommands();
+        }
+
+        @Override
+        public Follower follower() {
+            return parts.follower();
+        }
+
+        @Override
+        public String runningAlliance() {
+            return "RED";
+        }
+
+        @Override
+        public Pose mirror(Pose pose) {
+            return new Pose(-pose.x(), -pose.y(), pose.heading() + Math.PI);
+        }
+
+        /** The fake follower has no localizer for the default {@code follower().setPose()} to reach. */
+        @Override
+        public void setStartPose(Pose pose) {
+        }
+    }
+
+    /** The fixtures folder, with {@code robot.json} served from {@code robotJson}, or absent when null. */
+    static AutoSource withRobotJson(final String robotJson) {
+        final AutoSource fixtures = FakeAuto.fixtures();
+        return new AutoSource() {
+            @Override
+            public InputStream open(String fileName) throws IOException {
+                if (!"robot.json".equals(fileName)) {
+                    return fixtures.open(fileName);
+                }
+                if (robotJson == null) {
+                    throw new FileNotFoundException(fileName);
+                }
+                return new ByteArrayInputStream(robotJson.getBytes(StandardCharsets.UTF_8));
+            }
+
+            @Override
+            public String describe() {
+                return fixtures.describe();
+            }
+        };
+    }
+
+    static String robotJson(String fraction) {
+        return "{\"formatVersion\": 3, \"kinematics\": {\"defaultPathSpeedFraction\": {\"value\": " + fraction
+                + ", \"provenance\": \"SET BY HAND: test fixture\"}}}";
+    }
+
+    /**
+     * The slow fixture ({@code creep} at 0.3, {@code cruise} with no speed of its own) with {@code teamRobot}.
+     * Not named {@code robot}: inside the anonymous OpMode that name is the inherited, still-null
+     * {@code AutoFromFile.robot} field, so {@code createRobot()} would return null.
+     */
+    static AutoFromFile slowAuto(final ZenithRobot teamRobot) {
+        return new AutoFromFile() {
+            @Override
+            protected String autoName() {
+                return "slow";
+            }
+
+            @Override
+            protected ZenithRobot createRobot() {
+                return teamRobot;
+            }
+        };
+    }
+
+    /** The warnings that are about path speed, whatever else init says. */
+    static List<String> speedWarnings(AutoFromFile auto) {
+        List<String> out = new ArrayList<String>();
+        for (String warning : auto.spec().warnings) {
+            if (warning.contains("path speed is not applied")) {
+                out.add(warning);
+            }
+        }
+        return out;
+    }
+
+    @Test
+    void aPathBelowFullSpeedOnARobotWithNoAtSpeedWarnsAtInitAndNamesTheStep() {
+        AutoFromFile auto = slowAuto(new PlainRobot());
+        List<String> telemetry = recordTelemetry(auto);
+        auto.setAutoSource(withRobotJson(robotJson("1.0")));
+        auto.initialize();
+
+        List<String> warnings = speedWarnings(auto);
+        assertEquals(1, warnings.size(), auto.spec().warnings.toString());
+        assertTrue(warnings.get(0).contains("\"creep\" (0.3)"), warnings.get(0));
+        assertFalse(warnings.get(0).contains("cruise"), "full speed needs no cap: " + warnings.get(0));
+        assertTrue(warnings.get(0).contains("atSpeed()"), warnings.get(0));
+
+        auto.initialize_loop();
+        assertTrue(telemetry.contains("Zenith warning: " + warnings.get(0)), telemetry.toString());
+    }
+
+    @Test
+    void aRobotThatImplementsAtSpeedGetsNoSpeedWarning() {
+        AutoFromFile auto = slowAuto(new PlainRobot() {
+            @Override
+            public Path atSpeed(Path path, double speedFraction) {
+                return path;
+            }
+        });
+        auto.setAutoSource(withRobotJson(robotJson("0.8")));
+        auto.initialize();
+        assertEquals(Arrays.<String>asList(), speedWarnings(auto));
+    }
+
+    @Test
+    void aRobotWithItsOwnFollowPathHandlesSpeedItself() {
+        AutoFromFile auto = slowAuto(new TestRobot());
+        auto.setAutoSource(withRobotJson(robotJson("0.8")));
+        auto.initialize();
+        assertEquals(Arrays.<String>asList(), speedWarnings(auto));
+    }
+
+    @Test
+    void theDefaultSpeedComesFromTheDeployedRobotJsonAndNamesEveryStepItReaches() {
+        AutoFromFile auto = slowAuto(new PlainRobot());
+        auto.setAutoSource(withRobotJson(robotJson("0.8")));
+        auto.initialize();
+        assertEquals(0.8, auto.defaultSpeedFraction());
+        List<String> warnings = speedWarnings(auto);
+        assertEquals(1, warnings.size(), auto.spec().warnings.toString());
+        assertTrue(warnings.get(0).contains("\"creep\" (0.3)"), warnings.get(0));
+        assertTrue(warnings.get(0).contains("\"cruise\" (0.8)"), warnings.get(0));
+    }
+
+    @Test
+    void aMissingRobotJsonFallsBackToFullSpeedWithAWarning() {
+        AutoFromFile auto = slowAuto(new PlainRobot());
+        auto.setAutoSource(withRobotJson(null));
+        auto.initialize();
+        assertEquals(1.0, auto.defaultSpeedFraction());
+        assertTrue(auto.spec().warnings.get(0).contains("robot.json is not in"), auto.spec().warnings.toString());
+        assertTrue(auto.spec().warnings.get(0).contains("drives at 1.0"), auto.spec().warnings.get(0));
+    }
+
+    @Test
+    void aRobotJsonWithoutTheNumberOrWithABadOneFallsBackWithAWarning() {
+        for (String text : new String[] {"{}", "{\"kinematics\": {}}", robotJson("0"), robotJson("1.5"), "not json"}) {
+            AutoFromFile auto = slowAuto(new PlainRobot());
+            auto.setAutoSource(withRobotJson(text));
+            auto.initialize();
+            assertEquals(1.0, auto.defaultSpeedFraction(), text);
+            assertTrue(auto.spec().warnings.get(0).contains("robot.json"), text + ": " + auto.spec().warnings);
+            Scheduler.reset();
+        }
+    }
+
+    @Test
+    void aRobotThatSetsItsOwnDefaultSpeedIsNotOverruledByRobotJson() {
+        AutoFromFile auto = slowAuto(new PlainRobot() {
+            @Override
+            public double defaultSpeedFraction() {
+                return 0.5;
+            }
+        });
+        auto.setAutoSource(withRobotJson(null));
+        auto.initialize();
+        assertEquals(0.5, auto.defaultSpeedFraction());
+        for (String warning : auto.spec().warnings) {
+            assertFalse(warning.contains("robot.json"), warning);
+        }
     }
 }

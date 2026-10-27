@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeProject, simpleAuto, writeAuto } from "../testSupport.js";
-import { runCodegen } from "./codegen.js";
+import { EXPORT_WARNING, runCodegen } from "./codegen.js";
 
 let root = "";
 let out: string[] = [];
@@ -75,12 +75,52 @@ describe("zenith codegen", () => {
     const code = runCodegen("crash", { cwd: root });
     expect(code).toBe(1);
     expect(existsSync(join(root, "java"))).toBe(false);
+    // The editor's Code tab shows this same line (core's codegenBlockedMessage).
+    expect(out.join("")).toMatch(/zenith codegen writes no Java while the auto has \d+ errors?\./);
   });
 
   it("throws a clear error when zenith.json has no codegen section", () => {
     makeProject(root, { codegen: undefined });
     writeAuto(root, "autos", "demo", simpleAuto("demo"));
     expect(() => runCodegen("demo", { cwd: root })).toThrow(/codegen/);
+  });
+
+  it("--export writes the standalone OpMode beside it and says it is not recommended (issue #535)", () => {
+    makeProject(root, {
+      deploy: {
+        kind: "directory",
+        dir: "deploy",
+        commandLibrary: "solverslib",
+        robotClass: "org.example.teamcode.zenith.ExampleRobot",
+        preselectTeleOp: "Drive",
+      },
+    });
+    writeAuto(root, "autos", "demo", simpleAuto("demo"));
+    expect(runCodegen("demo", { cwd: root, export: true })).toBe(0);
+    const text = readFileSync(join(root, "java/org/example/teamcode/opmode/Auto/DemoExported.java"), "utf8");
+    expect(text).toContain('@Autonomous(name = "demo (exported)", group = "Exported", preselectTeleOp = "Drive")');
+    expect(text).toContain("public class DemoExported extends AutoFromFile {");
+    expect(text).toContain("return new org.example.teamcode.zenith.ExampleRobot();");
+    expect(text).toContain('return AutoSpec.inCode("demo", "demo", "RED",');
+    expect(existsSync(join(root, "java/org/example/teamcode/opmode/Auto/DemoGenerated.java"))).toBe(false);
+    expect(out.join("")).toContain(`warning: ${EXPORT_WARNING}`);
+  });
+
+  it("--export refuses without deploy.robotClass, since the OpMode constructs the robot", () => {
+    makeProject(root, { deploy: { kind: "directory", dir: "deploy", commandLibrary: "ivy" } });
+    writeAuto(root, "autos", "demo", simpleAuto("demo"));
+    expect(() => runCodegen("demo", { cwd: root, export: true })).toThrow(/deploy\.robotClass/);
+    expect(existsSync(join(root, "java"))).toBe(false);
+  });
+
+  it("--export --json says the class is exported, with the warning", () => {
+    makeProject(root);
+    writeAuto(root, "autos", "demo", simpleAuto("demo"));
+    expect(runCodegen("demo", { cwd: root, json: true, export: true })).toBe(0);
+    const parsed = JSON.parse(out.join("")) as { written: string; exported: boolean; warning: string };
+    expect(parsed.written).toContain("DemoExported.java");
+    expect(parsed.exported).toBe(true);
+    expect(parsed.warning).toBe(EXPORT_WARNING);
   });
 
   it("prints JSON with the written path and the source sha", () => {

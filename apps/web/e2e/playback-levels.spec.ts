@@ -56,11 +56,13 @@ test.describe("playback levels", () => {
     await expect(page.getByTestId("playback-level-full")).toHaveAttribute("aria-pressed", "false");
     expect(await editor<string>(page, "s.prefs.playbackLevel")).toBe("ideal");
 
-    // The robot on the field, the level total, the playhead and the timeline all name the level.
+    // The robot on the field names the level; the total and the playhead follow it, and the switch
+    // is the one place on the timeline that names it (issue #411).
     await expect(page.getByTestId("field-canvas")).toHaveAttribute("data-playback-level", "ideal");
     await expect(page.getByTestId("timeline-level-total")).toHaveAttribute("data-level", "ideal");
-    await expect(page.getByTestId("timeline-level-total")).toContainText("ideal");
-    await expect(page.getByTestId("playhead-readout")).toContainText("s ideal");
+    await expect(page.getByTestId("timeline-level-total")).not.toContainText("ideal");
+    await expect(page.getByTestId("playhead-readout")).toHaveAttribute("data-level", "ideal");
+    await expect(page.getByTestId("playhead-readout")).not.toContainText("ideal");
     await expect(page.getByTestId("timeline-track")).toHaveAttribute("data-level", "ideal");
     await expect(page.getByTestId("timeline-preview-track")).toHaveCount(0);
     expect((await nextFrame(page)).texts).toContain("Ideal");
@@ -146,8 +148,8 @@ test.describe("playback levels", () => {
     await expect(page.getByTestId("playback-level")).toHaveAttribute("data-level", "instant");
     await expect(instant).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("field-canvas")).toHaveAttribute("data-playback-level", "instant");
-    await expect(page.getByTestId("timeline-level-total")).toContainText("instant sim");
-    await expect(page.getByTestId("playhead-readout")).toContainText("s instant");
+    await expect(page.getByTestId("timeline-level-total")).toHaveAttribute("data-level", "instant");
+    await expect(page.getByTestId("playhead-readout")).toHaveAttribute("data-level", "instant");
     await expect(page.getByTestId("timeline-preview-track")).toBeVisible();
     await scrubTo(page, atS);
     expect((await nextFrame(page)).texts).toContain("Instant sim");
@@ -155,7 +157,7 @@ test.describe("playback levels", () => {
     // At the same time the instant robot is where core's instant sim puts it, not the ideal pose.
     const want = await withCore<PoseRow>(
       page,
-      `(() => { const d = m.currentDerived(); const t = c.simulate(d.plan, s.autoRobot, s.autoField); return c.simPoseAt(t, ${String(atS)}); })()`,
+      `(() => { const d = m.currentDerived(); const t = c.simulate(d.plan, s.autoRobot, s.autoField, { ledger: d.ledgerRun ?? undefined, season: d.season }); return c.simPoseAt(t, ${String(atS)}); })()`,
     );
     const drawn = await robotPose(page);
     expect(Math.hypot(drawn.xIn - want.xIn, drawn.yIn - want.yIn)).toBeLessThan(1e-6);
@@ -222,6 +224,23 @@ test.describe("playback levels", () => {
     const dir = process.env["ZENITH_PLAYBACK_SHOTS"] ?? join(SHOTS_DIR, "playback");
     mkdirSync(dir, { recursive: true });
     await page.screenshot({ path: join(dir, "playback-ideal-transition.png") });
+  });
+
+  test("switching level moves nothing under the pointer", async ({ page }) => {
+    // Instant sim's total is longer than Ideal's; it once wrapped the timeline head onto a new
+    // line and pushed the scrubber and this control down under the pointer (sweep item A16).
+    const instant = page.getByTestId("playback-level-instant");
+    await expect(instant).not.toHaveAttribute("aria-disabled", "true");
+    const before = await page.getByTestId("playback-level").boundingBox();
+    const scrubber = await page.getByTestId("playback").boundingBox();
+    await instant.click();
+    await expect(page.getByTestId("timeline-level-total")).toHaveAttribute("data-level", "instant");
+    expect(await page.getByTestId("playback-level").boundingBox()).toEqual(before);
+    // The slider gives up width to the longer "instant" readout by design (9.16); it must not move down.
+    expect((await page.getByTestId("playback").boundingBox())?.y).toBe(scrubber?.y);
+    await page.getByTestId("playback-level-ideal").click();
+    await expect(page.getByTestId("timeline-level-total")).toHaveAttribute("data-level", "ideal");
+    expect(await page.getByTestId("playback-level").boundingBox()).toEqual(before);
   });
 
   test("screenshots of the control, and of the robot at the Ideal and Instant sim levels", async ({ page }) => {

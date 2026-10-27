@@ -1,53 +1,66 @@
-/* The desktop actions' floating panel and the title bar's menu button (desktopPanel.tsx). Reads the
-   app's own tokens, with fallbacks. */
+/* The desktop actions' floating panel and the title bar's menu button (desktopPanel.tsx). Tokens
+   only (UI_GUIDE 9.14): the panel is side work with the sheet's chrome. */
 
-/* In the title bar, just left of the window controls Electron draws over it (titleBarOverlay). */
+/* In the title bar, just left of the window controls Electron draws over it (titleBarOverlay). The
+   title bar is night chrome in both themes (QA-19), but this button is mounted outside it, so it
+   reads the chrome ink directly; the theme's own ink is dark in the light theme and would all but
+   vanish on the bar. */
 .menuButton {
   position: fixed;
   top: 0;
-  right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 4px);
-  z-index: calc(var(--z-titlebar, 35) + 1);
+  right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + var(--desktop-menu-inset));
+  z-index: calc(var(--z-titlebar) + 1);
   display: grid;
   place-items: center;
-  width: 36px;
-  height: var(--titlebar-h, 36px);
+  /* The size the title bar keeps free for it (apps/desktop/src/main/chrome.ts MENU_BUTTON). */
+  width: var(--desktop-menu-w);
+  height: var(--titlebar-h);
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-mid, #cbb9cf);
+  color: var(--chrome-text-mid);
   cursor: pointer;
   -webkit-app-region: no-drag;
 }
 
 .menuButton:hover {
-  background: var(--bg-hover, rgb(255 255 255 / 8%));
-  color: var(--text-hi, #faf6fb);
+  background: var(--chrome-hover);
+  color: var(--chrome-text-hi);
 }
 
 .menuButton:focus-visible {
-  outline: var(--ring-width, 2px) solid var(--ring, #ffcb5c);
-  outline-offset: -2px;
+  outline: var(--ring-width) solid var(--chrome-ring);
+  outline-offset: calc(0px - var(--ring-width));
 }
 
 .panel {
   position: fixed;
-  right: var(--space-4, 16px);
-  bottom: calc(var(--space-8, 32px) + 8px);
-  z-index: 50;
-  width: min(460px, calc(100vw - 32px));
+  right: var(--space-4);
+  bottom: calc(var(--space-8) + var(--space-2));
+  z-index: var(--z-popover);
+  width: min(460px, calc(100vw - 2 * var(--space-4)));
   max-height: min(70vh, 640px);
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2, 8px);
-  padding: var(--space-4, 16px);
-  background: var(--bg-raised, #2a1330);
-  color: var(--text-hi, #f5eef6);
-  border: 1px solid var(--border-default, #4a2f52);
-  border-radius: var(--radius-md, 6px);
-  box-shadow: var(--shadow-modal, 0 12px 40px rgb(0 0 0 / 45%));
-  font-size: var(--fs-sm, 13px);
-  line-height: var(--lh-sm, 1.45);
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--bg-raised);
+  color: var(--text-hi);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+.panel:focus {
+  outline: none;
+}
+
+.panel:focus-visible {
+  outline: var(--ring-width) solid var(--ring);
+  outline-offset: 1px;
 }
 
 /* The Horizon gradient as a thin top edge: brand chrome, not content (09 section 1). */
@@ -56,72 +69,75 @@
   position: absolute;
   inset: 0 0 auto 0;
   height: 2px;
-  border-radius: var(--radius-md, 6px) var(--radius-md, 6px) 0 0;
-  background: var(--brand-gradient, linear-gradient(90deg, #ffcb5c, #f86a43, #b13848));
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--brand-gradient);
 }
 
 .header {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
 }
 
 .title {
   flex: 1;
   margin: 0;
-  font-size: var(--fs-md, 14px);
-  font-weight: var(--fw-semibold, 600);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.close {
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-mid, #cbb9cf);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
+/* The status lines: the panel's only live region. */
+.live {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-.close:hover {
-  background: var(--bg-hover, rgb(255 255 255 / 8%));
-  color: var(--text-hi, #fff);
+.live:empty {
+  display: none;
+}
+
+.questionText {
+  margin: 0;
 }
 
 .prose {
   margin: 0;
-  color: var(--text-mid, #cbb9cf);
+  color: var(--text-mid);
 }
 
 .ok {
   margin: 0;
-  color: var(--ok, #6fcf97);
+  color: var(--ok);
 }
 
 .ok a {
   color: inherit;
 }
 
+.warn {
+  margin: 0;
+  color: var(--sev-warn);
+}
+
 .error {
   margin: 0;
-  color: var(--sev-error, #ff7a7a);
+  color: var(--sev-error);
   white-space: pre-wrap;
 }
 
 .note {
-  color: var(--text-lo, #9d8aa3);
+  color: var(--text-lo);
 }
 
 .command,
 .code {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--fs-xs, 12px);
-  color: var(--text-lo, #9d8aa3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
   overflow-wrap: anywhere;
 }
 
@@ -131,9 +147,9 @@
 
 .lastLine {
   margin: 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--fs-xs, 12px);
-  color: var(--text-mid, #cbb9cf);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -143,8 +159,8 @@
   position: relative;
   height: 3px;
   overflow: hidden;
-  border-radius: 2px;
-  background: var(--bar-track, rgb(255 255 255 / 10%));
+  border-radius: var(--radius-xs);
+  background: var(--bar-track);
 }
 
 .progress::after {
@@ -152,7 +168,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 35%;
-  background: var(--brand-gradient, linear-gradient(90deg, #ffcb5c, #f86a43, #b13848));
+  background: var(--brand-gradient);
   animation: slide 1.4s ease-in-out infinite;
 }
 
@@ -177,15 +193,15 @@
   margin: 0;
   max-height: 220px;
   overflow: auto;
-  padding: var(--space-2, 8px);
-  background: var(--bg-inset, #12040f);
-  border-radius: 4px;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
+  padding: var(--space-2);
+  background: var(--bg-inset);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
   line-height: 1.4;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: var(--text-mid, #cbb9cf);
+  color: var(--text-mid);
 }
 
 .linkButton {
@@ -193,7 +209,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-mid, #cbb9cf);
+  color: var(--text-mid);
   text-decoration: underline;
   cursor: pointer;
   font: inherit;
@@ -205,14 +221,14 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   max-height: 220px;
   overflow: auto;
 }
 
 .list li {
   display: flex;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   align-items: baseline;
   min-width: 0;
 }
@@ -220,39 +236,39 @@
 .chip {
   flex: none;
   min-width: 56px;
-  font-size: var(--fs-micro, 11px);
+  font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-label, 0.04em);
-  color: var(--text-lo, #9d8aa3);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-lo);
 }
 
 .path {
   min-width: 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--fs-xs, 12px);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .reason {
-  color: var(--sev-warn, #f2c14e);
-  font-size: var(--fs-xs, 12px);
+  color: var(--sev-warn);
+  font-size: var(--fs-xs);
 }
 
 .skipRow .path {
-  color: var(--sev-warn, #f2c14e);
+  color: var(--sev-warn);
 }
 
 .facts {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 4px var(--space-3, 12px);
+  gap: var(--space-1) var(--space-3);
   margin: 0;
 }
 
 .facts dt {
-  color: var(--text-lo, #9d8aa3);
+  color: var(--text-lo);
 }
 
 .facts dd {
@@ -268,22 +284,22 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  color: var(--text-mid, #cbb9cf);
+  gap: var(--space-1);
+  color: var(--text-mid);
 }
 
 .input {
   height: 28px;
-  padding: 0 var(--space-2, 8px);
-  border: 1px solid var(--border-default, #4a2f52);
-  border-radius: 4px;
-  background: var(--bg-inset, #12040f);
-  color: var(--text-hi, #fff);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  color: var(--text-hi);
   font: inherit;
 }
 
 .input:focus-visible {
-  outline: var(--ring-width, 2px) solid var(--ring, #f86a43);
+  outline: var(--ring-width) solid var(--ring);
   outline-offset: 1px;
 }
 
@@ -291,6 +307,6 @@
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: var(--space-2, 8px);
-  margin-top: var(--space-1, 4px);
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }

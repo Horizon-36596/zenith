@@ -1,0 +1,71 @@
+{
+  "name": "@horizon36596/zenith-import",
+  "version": "0.1.2",
+  "description": "Bring paths from other planners into Zenith: Pedro Pathing Visualizer .pp projects become autos, interchange path.json files become editable autos, and interchange trajectory.json files (MeepMeep and RoadRunner included) become partner trajectories.",
+  "keywords": [
+    "ftc",
+    "first-tech-challenge",
+    "robotics",
+    "autonomous",
+    "zenith",
+    "import",
+    "pedro-pathing",
+    "roadrunner",
+    "meepmeep"
+  ],
+  "homepage": "https://libraries.horizon36596.org/zenith/",
+  "bugs": {
+    "url": "https://github.com/Horizon-36596/zenith/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Horizon-36596/zenith.git",
+    "directory": "packages/import"
+  },
+  "license": "MIT",
+  "author": "Horizon (FTC 36596)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./json/*.json": "./json/*.json"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.qa.test.*",
+    "!dist/**/testSupport.*",
+    "!dist/**/*.tsbuildinfo",
+    "!dist/testing",
+    "!dist/**/testing.*",
+    "json",
+    "fixtures",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "gen:json": "tsx scripts/gen-json-schema.mts",
+    "prepack": "node ../../scripts/prepack.mjs"
+  },
+  "dependencies": {
+    "@horizon36596/zenith-core": "workspace:*",
+    "@horizon36596/zenith-schema": "workspace:*",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@horizon36596/zenith-seasons": "workspace:*",
+    "zod-to-json-schema": "^3.25.2"
+  }
+}

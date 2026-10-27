@@ -20,7 +20,8 @@ const DERIVED = [
   // number was copied from, as derived rather than dropping it to the unverified default.
   "SET FROM",
 ];
-const UNVERIFIED = ["NEEDS MEASUREMENT", "PLACEHOLDER", "APPROX"];
+// A negated MEASURED is unverified, not a measurement: "UNMEASURED", "NOT MEASURED".
+const UNVERIFIED = ["NEEDS MEASUREMENT", "PLACEHOLDER", "APPROX", "UNMEASURED", "NOT MEASURED", "NOT YET MEASURED"];
 
 /** What a number with no provenance at all is treated as: unmeasured (UI_GUIDE section 8.3). */
 export const NO_PROVENANCE = "NEEDS MEASUREMENT";
@@ -29,14 +30,24 @@ export const NO_PROVENANCE = "NEEDS MEASUREMENT";
 export const EDITOR_PROVENANCE = "SET FROM EDITOR";
 
 /**
+ * Whether `text` names `label` as whole words, so SPECIFICATION is not SPEC and UNMEASURED is not
+ * MEASURED. The labels are letters and spaces only, so they need no escaping in a pattern.
+ */
+const namesLabel = (text: string, label: string): boolean =>
+  new RegExp(`(?<![A-Z0-9])${label}(?![A-Z0-9])`).test(text);
+
+/**
  * The tier a string belongs to. Unverified wins over derived and derived over measured, so a
  * label like "SET FROM SIM; PLACEHOLDER until measured" reads as the weaker of the two claims.
+ *
+ * A stronger tier needs its label as whole words; an unverified label counts anywhere in the
+ * text, because reading a number as weaker than it is never overstates it.
  */
 export function provenanceTier(provenance: string | undefined): ProvenanceTier {
   const text = (provenance ?? NO_PROVENANCE).toUpperCase();
   if (UNVERIFIED.some((label) => text.includes(label))) return "unverified";
-  if (DERIVED.some((label) => text.includes(label))) return "derived";
-  if (MEASURED.some((label) => text.includes(label))) return "measured";
+  if (DERIVED.some((label) => namesLabel(text, label))) return "derived";
+  if (MEASURED.some((label) => namesLabel(text, label))) return "measured";
   return "unverified";
 }
 
@@ -54,3 +65,26 @@ export const PROVENANCE_LABELS = [
   "CALIBRATED FROM SIM",
   "CALIBRATED FROM ROBOT",
 ] as const;
+
+/**
+ * The vocabulary label a provenance string carries, for a message that has room for the label but
+ * not the reason: the label it starts with, else a label it names later, else NEEDS MEASUREMENT
+ * for a number with no provenance and the text before its first colon for one with no label.
+ */
+export function provenanceLabel(provenance: string | undefined): string {
+  if (provenance === undefined || provenance.trim() === "") return NO_PROVENANCE;
+  const text = provenance.trim().toUpperCase();
+  const longestFirst = [...PROVENANCE_LABELS].sort((a, b) => b.length - a.length);
+  // A label counts only as whole words, so SPECIFICATION is not SPEC and APPROXIMATELY is not APPROX.
+  // The labels are letters and spaces only, so they need no escaping in a pattern.
+  const asWords = (label: string, leadingOnly: boolean): RegExp =>
+    new RegExp(`${leadingOnly ? "^" : "(?<![A-Z0-9])"}${label}(?![A-Z0-9])`);
+  const leading = longestFirst.find((label) => asWords(label, true).test(text));
+  if (leading !== undefined) return leading;
+  const named = longestFirst.find((label) => asWords(label, false).test(text));
+  if (named !== undefined) return named;
+  // The text before the first colon; when that is empty (a provenance that starts with a colon),
+  // the whole text, so the message never shows empty parentheses.
+  const beforeColon = (provenance.split(":")[0] ?? "").trim();
+  return beforeColon === "" ? provenance.trim() : beforeColon;
+}

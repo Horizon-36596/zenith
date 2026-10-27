@@ -9,3 +9,6 @@ export const seasonId = "biobuzz";
 
 export * from "./state.js";
 export * from "./rules.js";
+export * from "./locations.js";
+export * from "./drawing.js";
+export * from "./hiveMotion.js";

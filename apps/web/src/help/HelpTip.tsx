@@ -3,11 +3,15 @@
  * section 9.3). Hover opens it after `--help-delay`, focus opens it at once, and a click pins it
  * open until a second click, Escape or a click elsewhere. The text is the
  * `PANEL_HELP` entry, and when the full tour has a stop for this panel a "Show me" link starts it
- * there.
+ * there. A pinned tip whose entry has a `docs` value also shows "Read more", a link to that page and
+ * heading of the docs site (UI_GUIDE section 9.3).
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { PANEL_HELP, type PanelHelpId } from "./content";
+import { ExternalLink } from "lucide-react";
+import { panelHelp, type HelpEntry, type PanelHelpId } from "./content";
+import { docsLink } from "../account/config";
+import { useFeature } from "../state/features";
 import { startFullTour, stopFor } from "../tour/store";
 import { getState } from "../state/store";
 import { claim, focusFromKeyboard, release } from "../components/tooltipGate";
@@ -17,8 +21,42 @@ import styles from "./help.module.css";
 const HELP_DELAY_MS = 150;
 const OFFSET_PX = 8;
 
+const TABBABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** The elements Tab visits inside `root`, in document order (positive tabindex is not used here). */
+function tabbables(root: ParentNode): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(TABBABLE)).filter(
+    (element) => element.tabIndex >= 0 && element.getClientRects().length > 0,
+  );
+}
+
+/**
+ * Where Tab goes while a tip is pinned. The bubble is portaled to the end of the body, so the
+ * browser's own order would skip its links: Tab from the ? enters the bubble, Shift Tab from its
+ * first link returns to the ?, and Tab from its last link goes on to whatever follows the ?.
+ * Null leaves the key to the browser.
+ */
+function pinnedTabTarget(
+  back: boolean,
+  focused: Element | null,
+  button: HTMLElement,
+  bubble: HTMLElement,
+): HTMLElement | null {
+  const inside = tabbables(bubble);
+  const first = inside[0];
+  const last = inside[inside.length - 1];
+  if (first === undefined || last === undefined) return null;
+  if (focused === button) return back ? null : first;
+  if (back && focused === first) return button;
+  if (!back && focused === last) {
+    const page = tabbables(document.body).filter((element) => !bubble.contains(element));
+    return page[page.indexOf(button) + 1] ?? null;
+  }
+  return null;
+}
+
 export function HelpTip({ id, side = "bottom" }: { id: PanelHelpId; side?: "bottom" | "left" }) {
-  const entry = PANEL_HELP[id];
+  const entry: HelpEntry = panelHelp(id, useFeature("fullSim"));
   const popId = useId();
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -26,7 +64,12 @@ export function HelpTip({ id, side = "bottom" }: { id: PanelHelpId; side?: "bott
   const button = useRef<HTMLButtonElement | null>(null);
   const bubble = useRef<HTMLDivElement | null>(null);
   const timer = useRef<number | null>(null);
+  /** True while Escape hands focus back to the ?, so that focus does not reopen the tip. */
+  const refocusing = useRef(false);
   const stop = stopFor(id);
+  // The hover bubble is a tooltip and cannot hold a link, so only a pinned one offers the docs.
+  const showMe = stop !== undefined && getState().auto !== null;
+  const docs = pinned ? entry.docs : undefined;
 
   const cancel = useCallback(() => {
     if (timer.current !== null) window.clearTimeout(timer.current);
@@ -79,7 +122,22 @@ export function HelpTip({ id, side = "bottom" }: { id: PanelHelpId; side?: "bott
       close();
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+      const inBubble = bubble.current?.contains(document.activeElement) === true;
+      if (event.key === "Escape") {
+        close();
+        // Focus inside the bubble would be lost with it, so it goes back to the ?.
+        if (inBubble) {
+          refocusing.current = true;
+          button.current?.focus();
+          refocusing.current = false;
+        }
+        return;
+      }
+      if (event.key !== "Tab" || button.current === null || bubble.current === null) return;
+      const target = pinnedTabTarget(event.shiftKey, document.activeElement, button.current, bubble.current);
+      if (target === null) return;
+      event.preventDefault();
+      target.focus();
     };
     window.addEventListener("pointerdown", onDown);
     window.addEventListener("keydown", onKey, true);
@@ -113,7 +171,7 @@ export function HelpTip({ id, side = "bottom" }: { id: PanelHelpId; side?: "bott
         }}
         onFocus={(event) => {
           // Keyboard focus only: a click opens it through onClick, and a focus moved in code none.
-          if (focusFromKeyboard(event.currentTarget)) show();
+          if (!refocusing.current && focusFromKeyboard(event.currentTarget)) show();
         }}
         onBlur={(event) => {
           if (!pinned && !(bubble.current?.contains(event.relatedTarget as Node) ?? false)) {
@@ -147,18 +205,34 @@ export function HelpTip({ id, side = "bottom" }: { id: PanelHelpId; side?: "bott
             >
               <span className={styles.title}>{entry.title}</span>
               <span className={styles.body}>{entry.body}</span>
-              {stop === undefined || getState().auto === null ? null : (
-                <button
-                  type="button"
-                  className={styles.showMe}
-                  onClick={() => {
-                    close();
-                    startFullTour(stop);
-                  }}
-                >
-                  Show me
-                </button>
-              )}
+              {showMe || docs !== undefined ? (
+                <span className={styles.links}>
+                  {showMe && stop !== undefined ? (
+                    <button
+                      type="button"
+                      className={styles.showMe}
+                      onClick={() => {
+                        close();
+                        startFullTour(stop);
+                      }}
+                    >
+                      Show me
+                    </button>
+                  ) : null}
+                  {docs !== undefined ? (
+                    <a
+                      className={styles.showMe}
+                      href={docsLink(docs)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="help-read-more"
+                    >
+                      Read more
+                      <ExternalLink size={12} strokeWidth={1.75} aria-hidden />
+                    </a>
+                  ) : null}
+                </span>
+              ) : null}
             </div>,
             document.body,
           )

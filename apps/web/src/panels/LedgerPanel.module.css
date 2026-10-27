@@ -1,70 +1,337 @@
-/* UI_GUIDE 8.6. Flat, bordered rows, no vertical rules, no stripes, no shadow. */
-.table {
-  width: 100%;
-  border-collapse: collapse;
+/*
+ * UI_GUIDE 9.8. Pieces are drawn as the field draws them; text on the left edge, counts on the right
+ * edge in mono. The strip stays on top of the panel's scrolling body.
+ */
+.ledger {
+  /* The ring round a piece: the well colour on the dark theme, ink on the light one, so the gold
+     pollen keeps a 3:1 edge on both panels. */
+  --piece-edge: var(--bg-canvas);
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
+  container-type: inline-size;
 }
 
-.textHead,
-.numHead {
+:global([data-theme="light"]) .ledger {
+  --piece-edge: var(--text-mid);
+}
+
+.strip {
   position: sticky;
   top: 0;
-  height: var(--row-h-compact);
-  padding-inline: var(--pad-row-x);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--pad-row-x);
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.stripCell {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  min-height: 20px;
+}
+
+/* On a narrow panel the meter drops below its label and stays on the right edge. */
+.stripCell > .meter {
+  margin-left: auto;
+}
+
+.caption {
+  margin: 0;
   font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
   font-weight: var(--fw-medium);
   letter-spacing: var(--tracking-wide);
   color: var(--text-lo);
 }
 
-.textHead {
-  text-align: left;
+.meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 16px;
 }
 
-.numHead {
-  text-align: right;
+.slots {
+  display: inline-flex;
+  gap: 3px;
 }
 
-.table tbody tr {
-  height: var(--row-h);
+
+.lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A step: its id on top, then one flow per movement. */
+.line {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-1) var(--pad-row-x);
+  border: 0;
   border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-hi);
+  font: inherit;
+  text-align: left;
   cursor: default;
 }
 
-.table tbody tr:hover {
+.line:hover {
   background: var(--bg-hover);
 }
 
-.selected {
+.line[data-selected="true"] {
   background: var(--bg-selected);
 }
 
-.id,
-.num {
-  font-family: var(--font-mono);
-  font-variant-numeric: var(--numeric);
-  padding-inline: var(--pad-row-x);
+/* The running step: the 2 px accent bar of a marked row (UI_GUIDE 8.6). */
+.line[data-phase="now"] {
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.id {
+.line[data-phase="next"] {
+  color: var(--text-lo);
+}
+
+.line[data-over="true"] {
+  background: var(--sev-error-bg);
+}
+
+.lineHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stepId {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
   color: var(--text-mid);
+}
+
+.line[data-phase="next"] .stepId {
+  color: var(--text-lo);
+}
+
+/*
+ * Every movement the same pattern: from at the left edge, the pieces right up against an arrow in a
+ * middle column of one width, to at the right edge, so the arrows line up down the list. A long
+ * place name wraps onto a second line rather than lose its end.
+ */
+.flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 18px;
+}
+
+.end {
+  display: inline-flex;
+  align-items: center;
+  line-height: var(--lh-xs);
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text-hi);
+}
+
+.end:last-child {
+  justify-content: flex-end;
+}
+
+.endIcon {
+  flex: none;
+  color: var(--text-lo);
+}
+
+.endLabel {
+  min-width: 0;
+}
+
+.end:last-child .endLabel {
+  text-align: right;
+}
+
+.end[data-tone="warn"],
+.end[data-tone="warn"] .endIcon {
+  color: var(--sev-warn);
+}
+
+.line[data-phase="next"] .end {
+  color: var(--text-lo);
+}
+
+/* On a narrow panel the place names keep the room: the icons go and the middle column tightens. */
+@container (max-width: 260px) {
+  .flow {
+    grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  .endIcon {
+    display: none;
+  }
+}
+
+.move {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
   white-space: nowrap;
 }
 
+.arrow {
+  flex: none;
+  color: var(--text-lo);
+}
+
+.counts {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
 .num {
-  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
   color: var(--text-hi);
 }
 
-.num[data-over="true"] {
-  background: var(--sev-error-bg);
+.line[data-phase="next"] .num {
+  color: var(--text-lo);
+}
+
+.num[data-alliance="RED"] {
+  color: var(--alliance-red-text);
+}
+
+.num[data-alliance="BLUE"] {
+  color: var(--alliance-blue-text);
+}
+
+.lo {
+  color: var(--text-lo);
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.warn {
+  color: var(--sev-warn);
+}
+
+.error {
   color: var(--sev-error);
 }
 
-.label {
-  padding-inline: var(--pad-row-x);
-  color: var(--text-hi);
+.end {
+  padding: var(--space-2) 0 var(--space-1);
+}
+
+.end > .caption {
+  padding: 0 var(--pad-row-x) var(--space-1);
+}
+
+.place {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-h-compact);
+  padding: 0 var(--pad-row-x);
+}
+
+.placeLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-mid);
+}
+
+.flower {
+  display: inline-flex;
+  justify-content: flex-end;
+  min-width: 26px;
+}
+
+.glyph {
+  flex: none;
+  overflow: visible;
+}
+
+.glyph .body {
+  fill: var(--field-pollen);
+  stroke: var(--piece-edge);
+  stroke-width: 1;
+}
+
+.glyph[data-piece="nectarRed"] .body,
+.glyph[data-piece="nectarBlue"] .body {
+  fill: none;
+  stroke-width: 1.6;
+}
+
+.glyph[data-piece="nectarRed"] .body {
+  stroke: var(--alliance-red);
+}
+
+.glyph[data-piece="nectarBlue"] .body {
+  stroke: var(--alliance-blue);
+}
+
+.glyph[data-piece="nectarRed"] .dot {
+  fill: var(--alliance-red);
+}
+
+.glyph[data-piece="nectarBlue"] .dot {
+  fill: var(--alliance-blue);
+}
+
+.glyph[data-piece="other"] .body {
+  fill: var(--text-mid);
+}
+
+/* A free slot or a step not reached yet: a neutral outline, since either piece may fill a slot. */
+.glyph[data-empty="true"] .body {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.glyph[data-empty="true"] .dot {
+  fill: var(--border-strong);
+}
+
+.glyph[data-over="true"] .body {
+  stroke: var(--sev-error);
+}
+
+.num[data-over="true"] {
+  color: var(--sev-error);
 }

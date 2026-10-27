@@ -19,6 +19,12 @@ export interface PathGeometry {
   distanceAt(t: number): number;
   /** t at an arc length from the start. */
   tAtDistance(sIn: number): number;
+  /**
+   * The segment an arc length falls in and that segment's own Bezier parameter u there, clamped to
+   * the path. A distance exactly on a joint belongs to the segment it ends. The runtime evaluates a
+   * heading in u, segment by segment (`heading.ts`).
+   */
+  segmentAt(sIn: number): { index: number; u: number };
 }
 
 export const SAMPLE_SPACING_IN = 2;
@@ -30,12 +36,12 @@ export function makePath(segments: readonly (readonly Vec2[])[]): PathGeometry {
   for (const curve of curves) breaks.push((breaks[breaks.length - 1] as number) + curve.lengthIn);
   const lengthIn = breaks[breaks.length - 1] as number;
 
-  const locate = (sIn: number): { curve: Curve; u: number } => {
+  const locate = (sIn: number): { curve: Curve; index: number; u: number } => {
     const clamped = sIn <= 0 ? 0 : sIn >= lengthIn ? lengthIn : sIn;
     let index = 0;
     while (index + 1 < curves.length && (breaks[index + 1] as number) < clamped) index += 1;
     const curve = curves[index] as Curve;
-    return { curve, u: curve.uAtLength(clamped - (breaks[index] as number)) };
+    return { curve, index, u: curve.uAtLength(clamped - (breaks[index] as number)) };
   };
 
   const pointAtDistance = (sIn: number): Vec2 => {
@@ -60,6 +66,10 @@ export function makePath(segments: readonly (readonly Vec2[])[]): PathGeometry {
     tangentAt: (t) => tangentAtDistance(distanceAt(t)),
     distanceAt,
     tAtDistance,
+    segmentAt: (sIn) => {
+      const { index, u } = locate(sIn);
+      return { index, u };
+    },
   };
 }
 

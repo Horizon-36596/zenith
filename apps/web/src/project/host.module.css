@@ -1,0 +1,272 @@
+/* Host mode's pieces of the shell (hostPanel.tsx, site/docs/host-protocol.md). Tokens only. */
+
+/* ---- The toolbar's host group (UI_GUIDE 9.2: a group, 16 px from its neighbours, no divider) ---- */
+
+/* The group gives up room before the buttons do: the line shrinks, the buttons never (sweep W4-3). */
+.group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Who this is for, on two short lines: the robot, then which alliance to draw for. The edge takes
+   the alliance's colour, so nobody draws on the wrong side. */
+.info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 320px;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border-strong);
+  margin-right: var(--space-2);
+}
+
+.info[data-alliance="RED"] {
+  border-left-color: var(--alliance-red);
+}
+
+.info[data-alliance="BLUE"] {
+  border-left-color: var(--alliance-blue);
+}
+
+.subject,
+.alliance {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subject {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+.alliance {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+}
+
+/* Closed is said in words and an icon, in the mid ink: it is a state of the session, not a finding. */
+.closed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+  margin-right: var(--space-2);
+}
+
+/* Below 1400 px "Simulate in", "Save a copy" and the update badge are their icons alone, with the
+   words in their tooltips; "Save to" keeps its words at every width. The rules name the group as
+   well, so they win over each control's own `display`, which comes later in this file. */
+.narrow {
+  justify-content: center;
+}
+
+@media (max-width: 1399.98px) {
+  .group .wideText {
+    display: none;
+  }
+
+  .secondary.narrow {
+    padding-inline: var(--space-2);
+  }
+}
+
+/* Words kept for the tooltip and screen readers, when the bar is crowded at every width. */
+.group .hiddenText {
+  display: none;
+}
+
+/* Under 1100 px the toolbar has no room for the line beside the buttons; the tooltips and the
+   title bar still say who Zenith is editing for. */
+@media (max-width: 1099.98px) {
+  .info,
+  .group .wideOnly {
+    display: none;
+  }
+}
+
+/* The host's page is older than this Zenith expects: short in the bar, the full sentence in its tooltip. */
+.outdated {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+  min-height: var(--ctl-h-tool);
+  white-space: nowrap;
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--sev-warn-bg);
+  color: var(--sev-warn);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+/* ---- Buttons (UI_GUIDE 9.9) ---------------------------------------------------------------- */
+
+/* The buttons are UI_GUIDE 9.9's one recipe, composed from the shared primitives. */
+.primary {
+  composes: primary from "../components/primitives.module.css";
+}
+
+.secondary {
+  composes: secondary from "../components/primitives.module.css";
+}
+
+.key {
+  margin-left: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  opacity: 0.7;
+}
+
+/* ---- The full-page wait, and the message when nothing came -------------------------------- */
+
+/* The horizon line across the top, the signature the title bar carries on every other screen. */
+.gate::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--horizon-w);
+  background: var(--brand-gradient-horizon);
+  pointer-events: none;
+}
+
+.gate {
+  position: relative;
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: var(--space-6);
+  background: var(--bg-canvas);
+  /* The well stays dark in the light theme, so it takes the chrome ink (as the welcome does). */
+  --text-hi: var(--chrome-text-hi);
+  --text-mid: var(--chrome-text-mid);
+  --text-lo: var(--chrome-text-lo);
+  --border-strong: var(--chrome-border-strong);
+}
+
+.gateCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 520px;
+}
+
+.gateMark {
+  height: 20px;
+  width: auto;
+  margin-bottom: var(--space-4);
+}
+
+.gateTitle,
+.emptyTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-xl);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-display);
+  color: var(--text-hi);
+}
+
+.gateLine,
+.emptyLine {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.gateButtons {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+/* ---- The auto picker (UI_GUIDE 9.14, rows as in the open dialog) ------------------------------ */
+
+.prose {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.autos {
+  display: flex;
+  flex-direction: column;
+}
+
+.autoRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--row-h-comfortable);
+  padding-inline: var(--pad-row-x);
+  border-radius: var(--radius-xs);
+  text-align: left;
+  color: var(--text-mid);
+}
+
+.autoRow:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+.autoRow[aria-current="true"] {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.autoName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.autoHint {
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+/* ---- The empty field (UI_GUIDE 9.12) ------------------------------------------------------- */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  max-width: 520px;
+  --text-hi: var(--chrome-text-hi);
+  --text-mid: var(--chrome-text-mid);
+  --text-lo: var(--chrome-text-lo);
+}
+
+.emptyIcon {
+  color: var(--text-lo);
+  margin-bottom: var(--space-2);
+}

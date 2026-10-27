@@ -7,14 +7,29 @@
  * Errors block a proposal and warnings do not; the warnings travel in the body instead, which is
  * what makes them a reviewer's business rather than a silent pass.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MergeConflictError } from "@horizon36596/zenith-github";
 import { Button } from "../components/primitives";
+import { Tooltip } from "../components/Tooltip";
+import { useCopy } from "../app/copyText";
 import { Modal } from "../dialogs/Modal";
-import { currentDerived, setDialog, setStatus, useEditor } from "../state/store";
+import { hiddenProblems } from "../state/features";
+import { currentAllFindings, setDialog, setStatus, useEditor } from "../state/store";
 import { openReview, proposeBlockedReason, proposeCurrent } from "./actions";
 import { autoNameOf } from "./backend";
 import styles from "./github.module.css";
+
+/**
+ * The dialog's line about the warnings the body lists. It says how many are in features the
+ * settings hide, since Problems does not show those and the reviewer still reads them.
+ */
+export function proposeWarningsLine(warnings: number, hidden: number): string {
+  const one = warnings === 1;
+  const line = `The ${String(warnings)} warning${one ? "" : "s"} on this auto ${one ? "does" : "do"} not block the proposal; ${one ? "it is" : "they are"} listed for the reviewer.`;
+  if (hidden === 0) return line;
+  const where = hidden === warnings ? (one ? "It is" : "All of them are") : `${String(hidden)} of them ${hidden === 1 ? "is" : "are"}`;
+  return `${line} ${where} in features your settings hide, so Problems does not show ${hidden === 1 ? "it" : "them"}.`;
+}
 
 interface Opened {
   url: string;
@@ -30,11 +45,14 @@ export function ProposeDialog() {
   const [opened, setOpened] = useState<Opened | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<string[] | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { copy, label } = useCopy();
+  const urlBox = useRef<HTMLSpanElement | null>(null);
 
   const blocked = proposeBlockedReason(state);
-  const derived = currentDerived();
-  const warnings = derived.findings.filter((finding) => finding.severity === "warning").length;
+  // Every warning, a hidden one too: the body lists them all for the reviewer (`proposeCurrent`).
+  const allWarnings = currentAllFindings().filter((finding) => finding.severity === "warning");
+  const warnings = allWarnings.length;
+  const hiddenWarnings = hiddenProblems(allWarnings, state.auto, state.prefs.features).count;
   const autoName = state.fileName === null ? "auto" : autoNameOf(state.fileName);
 
   const run = async (): Promise<void> => {
@@ -76,7 +94,7 @@ export function ProposeDialog() {
             </Button>
             <Button
               kind="primary"
-              disabled={busy || blocked !== null}
+              whyDisabled={busy ? "Opening the pull request now." : blocked}
               testId="github-propose-submit"
               onClick={() => {
                 void run();
@@ -120,15 +138,11 @@ export function ProposeDialog() {
 
       {opened === null ? (
         <>
-          <p className={styles.prose}>
-            Zenith commits <code className="mono">{autoName}</code>, its rendered field SVG and any
-            waypoint change to the work branch, brings that branch up to date with{" "}
-            <code className="mono">{state.repo?.base ?? "the base branch"}</code>, and opens (or
-            updates) the pull request against it.
-            {warnings > 0
-              ? ` The ${String(warnings)} warning${warnings === 1 ? "" : "s"} on this auto do not block the proposal; they are listed in the body for the reviewer.`
-              : ""}
-          </p>
+          {warnings > 0 ? (
+            <p className={styles.prose}>
+              {proposeWarningsLine(warnings, hiddenWarnings)}
+            </p>
+          ) : null}
           <div className={styles.stack}>
             <label className={styles.label} htmlFor="propose-summary">
               Commit summary
@@ -148,19 +162,21 @@ export function ProposeDialog() {
             <label className={styles.label} htmlFor="propose-branch">
               Work branch
             </label>
-            <input
-              id="propose-branch"
-              className={styles.search}
-              placeholder={state.repo?.branch ?? `auto/${autoName}/<you>`}
-              data-testid="propose-branch"
-              value={branch}
-              onChange={(event) => {
-                setBranch(event.target.value);
-              }}
-            />
-            <p className={styles.hint}>
-              Leave it empty to use {state.repo?.branch ?? "the branch this auto was opened on"}.
-            </p>
+            <Tooltip
+              label="Work branch"
+              hint={`Empty uses ${state.repo?.branch ?? "the branch this auto was opened on"}.`}
+            >
+              <input
+                id="propose-branch"
+                className={styles.search}
+                placeholder={state.repo?.branch ?? `auto/${autoName}/<you>`}
+                data-testid="propose-branch"
+                value={branch}
+                onChange={(event) => {
+                  setBranch(event.target.value);
+                }}
+              />
+            </Tooltip>
           </div>
         </>
       ) : (
@@ -169,21 +185,16 @@ export function ProposeDialog() {
             Pull request #{opened.number} is open from {opened.branch}.
           </p>
           <div className={styles.row}>
-            <span className={styles.prUrl}>{opened.url}</span>
+            <span ref={urlBox} className={styles.prUrl}>
+              {opened.url}
+            </span>
             <Button
               testId="github-propose-copy"
               onClick={() => {
-                void navigator.clipboard.writeText(opened.url).then(
-                  () => {
-                    setCopied(true);
-                  },
-                  () => {
-                    setStatus("error", "The browser refused access to the clipboard.");
-                  },
-                );
+                void copy("the pull request link", opened.url, { select: urlBox.current });
               }}
             >
-              {copied ? "Copied" : "Copy link"}
+              {label("Copy link")}
             </Button>
             <a className={styles.link} href={opened.url} target="_blank" rel="noreferrer">
               Open on GitHub

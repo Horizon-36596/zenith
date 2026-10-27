@@ -2,8 +2,10 @@
 // Builds the GitHub Pages artifact for libraries.horizon36596.org/zenith/: one folder holding
 //
 //   /zenith/                        the documentation site, `mkdocs build --strict` of site/
-//   /zenith/app/                    the web editor, built with base /zenith/app/
-//   /zenith/schema/v1/<kind>.json   the JSON Schemas from packages/schema/json/
+//   /zenith/app/                    the web editor, built with base /zenith/app/ and the release
+//                                   cloud (cloud/web-config.json, scripts/release-cloud.mjs)
+//   /zenith/schema/v1/<kind>.json   the JSON Schemas from packages/schema/json/, and the interchange
+//                                   schemas (trajectory.json, path.json) from packages/import/json/
 //   /zenith/404.html                the page GitHub Pages serves for any missing path
 //
 // and then checks it: every `$id` (and every absolute `$ref`) in a served schema must resolve to a
@@ -17,6 +19,7 @@ import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readReleaseConfig, releaseEnv } from "./release-cloud.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const out = resolve(process.argv[2] ?? join(repo, "build", "pages"));
@@ -70,23 +73,43 @@ run("docs site (mkdocs build --strict)", python(), [
   out,
 ]);
 
-// 2. The web editor under app/. Its own out dir, so apps/web/dist stays the desktop's `/` build.
+// 2. The web editor under app/. Its own out dir, so apps/web/dist stays the desktop's `/` build. The
+// published editor has accounts, teams and sharing on: it is built with the release cloud, whatever
+// this shell's environment says, and `node scripts/release-cloud.mjs check --pages <outDir>` proves it.
+const cloud = readReleaseConfig(repo);
+if (cloud.config === null || cloud.problems.length > 0) fail(`the release cloud config is not usable: ${cloud.problems.join("; ")}`);
+if (cloud.appCheckProblem !== null) console.warn(`build-pages: warning: App Check stays off in this build. ${cloud.appCheckProblem}`);
 const web = join(repo, "apps", "web");
 const vite = join(web, "node_modules", "vite", "bin", "vite.js");
 if (!existsSync(vite)) fail("apps/web has no vite. Run `pnpm install` first.");
 const appOut = join(out, "app");
-run(`web app (vite build, base ${APP_BASE})`, process.execPath, [vite, "build", "--outDir", appOut, "--emptyOutDir", "--logLevel", "warn"], {
+run(`web app (vite build, base ${APP_BASE}, cloud ${cloud.config.firebase.projectId})`, process.execPath, [vite, "build", "--outDir", appOut, "--emptyOutDir", "--logLevel", "warn"], {
   cwd: web,
-  env: { ...process.env, ZENITH_BASE: APP_BASE },
+  env: { ...process.env, ...releaseEnv(cloud.config), ZENITH_BASE: APP_BASE },
 });
 
-// 3. The JSON Schemas at schema/v1/<kind>.json.
-const schemaSrc = join(repo, "packages", "schema", "json");
+// 3. The JSON Schemas at schema/v1/<kind>.json. The file formats come from packages/schema and the
+// interchange formats a planner writes (trajectory.json, path.json) from packages/import. Both share
+// one namespace, named by each file's `kind`, so a name that two packages publish is refused.
 const schemaOut = join(out, "schema", "v1");
 mkdirSync(schemaOut, { recursive: true });
-const kinds = readdirSync(schemaSrc).filter((name) => name.endsWith(".json"));
-if (kinds.length === 0) fail("packages/schema/json has no schemas. Run `pnpm build` first.");
-for (const name of kinds) cpSync(join(schemaSrc, name), join(schemaOut, name));
+const schemaSources = [
+  { dir: join(repo, "packages", "schema", "json"), label: "packages/schema/json" },
+  { dir: join(repo, "packages", "import", "json"), label: "packages/import/json" },
+];
+const kinds = [];
+const publishedBy = new Map();
+for (const source of schemaSources) {
+  const names = existsSync(source.dir) ? readdirSync(source.dir).filter((name) => name.endsWith(".json")) : [];
+  if (names.length === 0) fail(`${source.label} has no schemas. Run \`pnpm build\` first.`);
+  for (const name of names) {
+    const other = publishedBy.get(name);
+    if (other !== undefined) fail(`schema/v1/${name} is published by both ${other} and ${source.label}.`);
+    publishedBy.set(name, source.label);
+    cpSync(join(source.dir, name), join(schemaOut, name));
+    kinds.push(name);
+  }
+}
 console.log(`build-pages: schemas (${kinds.join(", ")})`);
 
 // 4. A 404 page. Material writes one; this is the fallback if a theme change ever stops it.

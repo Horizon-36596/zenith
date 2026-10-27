@@ -65,3 +65,14 @@
   margin: var(--space-1) var(--space-1);
   background: var(--border-subtle);
 }
+
+/* The mark on an item that opens a page outside the app. */
+.external {
+  flex: none;
+  color: var(--text-mid);
+}
+
+/* An entry that deletes (UI_GUIDE 9.10): the error tone, so it never reads as one more neutral row. */
+.item[data-danger="true"]:not([aria-disabled="true"]) {
+  color: var(--sev-error);
+}

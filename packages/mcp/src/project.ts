@@ -100,14 +100,15 @@ export function relativeToRoot(project: Project, absolute: string): string {
 
 /**
  * Resolves the `auto` argument every tool takes to an absolute path. It accepts three forms: an
- * absolute path, a path (containing a slash or ending `.auto.json`) relative to the project root,
+ * absolute path, a path (containing a slash or ending `.json`, such as `.auto.json` or an
+ * interchange `partner.path.json`) relative to the project root,
  * or a bare name — the common case, matching `zenith new <name>` — resolved against the project's
  * `autosDir`. Every form is confined to the project root (finding 2): a tool call is untrusted
  * input, so `"../../../../outside/.gitconfig"` or an absolute path outside the project is
  * refused here rather than followed, for a read as much as a write.
  */
 export function resolveAutoPath(project: Project, auto: string): string {
-  if (isAbsolute(auto) || auto.includes("/") || auto.includes("\\") || auto.endsWith(".auto.json")) {
+  if (isAbsolute(auto) || auto.includes("/") || auto.includes("\\") || auto.endsWith(".json")) {
     return confinePath(project.root, auto);
   }
   return confinePath(project.root, join(project.link.autosDir, `${auto}.auto.json`));

@@ -63,9 +63,16 @@ test("opening the Insert menu from the keyboard shows the focused item's tooltip
   await expect(tooltips(page)).toHaveCount(1);
   await expect(tooltips(page)).toContainText("Path");
 
+  // ArrowDown moves to the next item, whichever kind the menu lists second, and that item's own
+  // tooltip replaces Path's.
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByTestId("insert-kind-command")).toBeFocused();
-  await expect(tooltips(page)).toContainText("Command");
+  const next = page.getByTestId("insert-menu").getByRole("menuitem").nth(1);
+  await expect(next).toBeFocused();
+  await expect(page.getByTestId("insert-kind-path")).not.toBeFocused();
+  const title = (await next.innerText()).split("\n")[0]?.trim() ?? "";
+  expect(title).not.toBe("");
+  await expect(tooltips(page)).toHaveCount(1);
+  await expect(tooltips(page)).toContainText(title);
   expect(await mostAtOnce(page, 500)).toBe(1);
 });
 
@@ -78,4 +85,33 @@ test("a tooltip opened by keyboard focus closes the one open under the mouse", a
   await page.keyboard.press("Tab");
   await expect(tooltips(page)).toHaveCount(1);
   await expect(tooltips(page)).not.toContainText("Marker");
+});
+
+/**
+ * The 0.1.2 UX sweep (W1-17): at 900 by 700 the Settings window opens with its Close button right
+ * under the pointer that clicked the Settings button, and Close's tooltip popped up over the preset
+ * buttons though the pointer never moved. A tooltip opens on hover only once the pointer moves on
+ * its trigger.
+ */
+test("a control that appears under a still pointer shows no tooltip until the pointer moves", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 700 });
+  const settings = page.getByTestId("toolbar-settings");
+  const at = await settings.boundingBox();
+  if (at === null) throw new Error("Settings has no box");
+  const x = at.x + at.width / 2;
+  const y = at.y + at.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.up();
+  const close = page.getByTestId("settings-close");
+  await expect(close).toBeVisible();
+  // The case the sweep saw: Close sits where the pointer already is.
+  const box = await close.boundingBox();
+  if (box === null) throw new Error("Close has no box");
+  expect(x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height).toBe(true);
+  expect(await mostAtOnce(page, 900)).toBe(0);
+
+  // A real move on Close opens its tooltip as before.
+  await page.mouse.move(x + 2, y + 1);
+  await expect(tooltips(page)).toContainText("Close");
 });

@@ -93,22 +93,233 @@ public final class PedroPaths {
      */
     public static final int SAMPLES_PER_SEGMENT = 64;
 
+    /**
+     * The longest path step, in inches, that is run as a turn on the spot instead of being handed to
+     * Pedro (decision D10). Measured on the path as built, so a turn written from {@code "current"} is
+     * still a turn when the robot arrives a little short of where the step before it ended.
+     * {@code TURN_IN_PLACE_MAX_IN} in {@code packages/core/src/turnInPlace.ts}.
+     */
+    public static final double TURN_IN_PLACE_MAX_IN = 2;
+
+    /**
+     * The heading error a turn on the spot ends within at once, in radians: two degrees, set from the
+     * instant sim, about twice the largest error its hold comes to rest at with Pedro's default heading
+     * P (0.019 rad over every whole degree of target). One degree sat right at that error and some
+     * turns never ended. Pedro's own hold end constraint, 0.007 rad, is tighter still.
+     * {@code TURN_SETTLED_RAD} in core.
+     */
+    public static final double TURN_SETTLED_RAD = 2 * Math.PI / 180;
+
+    /**
+     * How near the held point the robot must be before a turn on the spot ends at once, in inches: half
+     * an inch, set by hand, the editor's "same spot" ({@code CONTINUITY_TOLERANCE_IN} in core). Every
+     * step of {@link #TURN_IN_PLACE_MAX_IN} or less is held, so a short drive with no heading change is
+     * settled on heading at once and must still arrive. Pedro's own 0.1 in is tighter than a hold's
+     * translational P can always reach against friction. {@code TURN_ARRIVED_IN} in core.
+     */
+    public static final double TURN_ARRIVED_IN = 0.5;
+
+    /**
+     * How long the robot must stay still near the held pose before a turn on the spot ends anyway, in
+     * seconds, set by hand. A hold whose P cannot push the robot inside {@link #TURN_SETTLED_RAD} and
+     * {@link #TURN_ARRIVED_IN} against friction leaves it at rest a little off, and waiting longer
+     * would only stop the routine. {@code TURN_STILL_S} in core.
+     */
+    public static final double TURN_STILL_S = 0.25;
+
+    /**
+     * "Still" for {@link #TURN_STILL_S}, heading, in radians: a quarter of a degree, set by hand.
+     * {@code TURN_STILL_RAD} in core.
+     */
+    public static final double TURN_STILL_RAD = 0.25 * Math.PI / 180;
+
+    /**
+     * "Still" for {@link #TURN_STILL_S}, position, in inches, set by hand. {@code TURN_STILL_IN} in
+     * core.
+     */
+    public static final double TURN_STILL_IN = 0.05;
+
+    /**
+     * "Near" for {@link #TURN_STILL_S}: a robot at rest ends the turn only within this heading error, in
+     * radians, ten degrees, set by hand, and within {@link #TURN_IN_PLACE_MAX_IN} of the held point, so
+     * a robot that has not started moving is not taken for one that has finished. {@code TURN_NEAR_RAD}
+     * in core.
+     */
+    public static final double TURN_NEAR_RAD = 10 * Math.PI / 180;
+
     private PedroPaths() {}
 
     /** A built path and the measurements marker placement needs. */
     public static final class Built {
-        /** The whole step as one followable Pedro path. */
+        /**
+         * The whole step as one followable Pedro path, or {@code null} for a turn on the spot, which is
+         * never handed to Pedro: see {@link #turn}.
+         */
         public final Path path;
         /** Arc length of each segment, inches, in order. */
         public final double[] segmentLengthsIn;
         /** Arc length of the whole step, inches. */
         public final double totalLengthIn;
+        /**
+         * For a step no longer than {@link #TURN_IN_PLACE_MAX_IN}, the pose to hold: the step's end point
+         * with its end heading ({@link #turnHeading}). The runtime holds it with {@code follower.hold}
+         * until {@link TurnSettle#done}. {@code null} for a path Pedro follows.
+         */
+        public final Pose turn;
 
         Built(Path path, double[] segmentLengthsIn) {
+            this(path, segmentLengthsIn, null);
+        }
+
+        Built(Path path, double[] segmentLengthsIn, Pose turn) {
             this.path = path;
             this.segmentLengthsIn = segmentLengthsIn;
             this.totalLengthIn = sum(segmentLengthsIn);
+            this.turn = turn;
         }
+
+        /** @return true when this step is a turn on the spot, held rather than followed */
+        public boolean isTurn() {
+            return turn != null;
+        }
+    }
+
+    /**
+     * Whether a turn on the spot has settled within the tolerances: the robot's heading is within
+     * {@link #TURN_SETTLED_RAD} of the turn's, the short way round, and its position within
+     * {@link #TURN_ARRIVED_IN} of the turn's point. Both, because a held step that drives a little and
+     * does not turn has the right heading from its first loop. The first test of {@link TurnSettle}.
+     * {@code turnSettled} in {@code packages/core/src/turnInPlace.ts}.
+     *
+     * @param turn  the pose the turn holds
+     * @param robot the robot's pose now
+     * @return true once the turn is done
+     */
+    public static boolean turnSettled(Pose turn, Pose robot) {
+        return Math.abs(normalizeSigned(turn.heading() - robot.heading())) < TURN_SETTLED_RAD
+                && Math.hypot(turn.x() - robot.x(), turn.y() - robot.y()) < TURN_ARRIVED_IN;
+    }
+
+    /**
+     * When a held turn on the spot is done, which both runtimes' {@code TurnInPlace} ask every loop.
+     * Done at once when {@link #turnSettled}; otherwise done once the robot has stayed within
+     * {@link #TURN_STILL_RAD} and {@link #TURN_STILL_IN} of one pose for {@link #TURN_STILL_S} while
+     * within {@link #TURN_NEAR_RAD} and {@link #TURN_IN_PLACE_MAX_IN} of the held pose. The clock is
+     * passed in, so asking twice in one loop changes nothing. {@code TurnSettle} in
+     * {@code packages/core/src/turnInPlace.ts}, which the instant sim runs.
+     */
+    public static final class TurnSettle {
+        private final Pose turn;
+        private Pose anchor;
+        private double anchorS;
+
+        /** @param turn the pose the turn holds */
+        public TurnSettle(Pose turn) {
+            this.turn = turn;
+        }
+
+        /**
+         * @param robot the robot's pose now
+         * @param nowS  the robot's clock now, in seconds
+         * @return true once the turn is done
+         */
+        public boolean done(Pose robot, double nowS) {
+            if (turnSettled(turn, robot)) {
+                return true;
+            }
+            if (anchor == null
+                    || Math.abs(normalizeSigned(robot.heading() - anchor.heading())) > TURN_STILL_RAD
+                    || Math.hypot(anchor.x() - robot.x(), anchor.y() - robot.y()) > TURN_STILL_IN) {
+                // A copy, so a pose the follower updates in place cannot move the anchor with it.
+                anchor = new Pose(robot.x(), robot.y(), robot.heading());
+                anchorS = nowS;
+                return false;
+            }
+            return nowS - anchorS >= TURN_STILL_S
+                    && Math.abs(normalizeSigned(turn.heading() - robot.heading())) < TURN_NEAR_RAD
+                    && Math.hypot(turn.x() - robot.x(), turn.y() - robot.y()) < TURN_IN_PLACE_MAX_IN;
+        }
+    }
+
+    /**
+     * The heading a turn on the spot holds: the step's heading mode at the end of its last segment,
+     * worked out without Pedro, because the step is never built into a Pedro path. Tangent reads the
+     * last segment's end direction ({@code P[n] - P[n-1]}, else its chord, else 0, which is what
+     * Pedro's {@code Vector2D.theta} gives a zero vector); Linear its {@code toRad}; Constant its
+     * angle; Facing point the bearing from the end to the point; Piecewise its last range's mode, a
+     * linear range turning the short way from its {@code fromRad}. {@code turnHeading} in
+     * {@code packages/core/src/sim/pedroPath.ts} is the same.
+     *
+     * @param polygons each segment's control polygon, in the running alliance's frame
+     * @param heading  the step's heading, in the same frame
+     * @return the heading to hold, in [0, 2 pi)
+     */
+    public static double turnHeading(List<Pose[]> polygons, AutoFile.Heading heading) {
+        Pose[] last = polygons.get(polygons.size() - 1);
+        Pose end = last[last.length - 1];
+        double tangent = endTangentRad(polygons);
+        AutoFile.Heading mode = heading;
+        if ("piecewise".equals(heading.mode)) {
+            AutoFile.Heading inner = heading.ranges.get(heading.ranges.size() - 1).heading;
+            if ("linear".equals(inner.mode)) {
+                return normalize(inner.fromRad + normalizeSigned(inner.toRad - inner.fromRad));
+            }
+            mode = inner;
+        }
+        if ("tangent".equals(mode.mode)) {
+            return normalize(tangent);
+        }
+        if ("tangentReversed".equals(mode.mode)) {
+            return normalize(tangent + Math.PI);
+        }
+        if ("constant".equals(mode.mode)) {
+            return normalize(mode.headingRad);
+        }
+        if ("linear".equals(mode.mode)) {
+            return normalize(mode.toRad);
+        }
+        if ("facePoint".equals(mode.mode)) {
+            return normalize(Math.atan2(mode.pointYIn - end.y(), mode.pointXIn - end.x()));
+        }
+        throw new IllegalStateException("unknown heading mode \"" + mode.mode + "\"; AutoFile should have"
+                + " refused it. Turn at " + end);
+    }
+
+    /**
+     * The direction the last segment ends in, as {@link #turnHeading} reads a tangent: {@code P[n] -
+     * P[n-1]}, else its chord, else 0. Public so a generated class can turn on the spot from a live
+     * path exactly as {@code AutoBuilder} does.
+     *
+     * @param polygons each segment's control polygon, in the running alliance's frame
+     * @return the direction in radians, not normalized
+     */
+    public static double endTangentRad(List<Pose[]> polygons) {
+        Pose[] last = polygons.get(polygons.size() - 1);
+        Pose end = last[last.length - 1];
+        Pose before = last[last.length - 2];
+        double dx = end.x() - before.x();
+        double dy = end.y() - before.y();
+        if (Math.hypot(dx, dy) <= 1e-9) {
+            dx = end.x() - last[0].x();
+            dy = end.y() - last[0].y();
+        }
+        return Math.hypot(dx, dy) <= 1e-9 ? 0 : Math.atan2(dy, dx);
+    }
+
+    /**
+     * Arc length of a whole step, inches: each segment's chord-summed length, as {@link #build}
+     * measures it before it decides whether the step is a turn on the spot. Public so a generated
+     * class makes that decision on the live path exactly as {@code AutoBuilder} does.
+     *
+     * @param polygons each segment's control polygon
+     * @return the step's length in inches
+     */
+    public static double lengthIn(List<Pose[]> polygons) {
+        double total = 0;
+        for (Pose[] points : polygons) {
+            total += arcLengthIn(points);
+        }
+        return total;
     }
 
     /**
@@ -200,6 +411,15 @@ public final class PedroPaths {
             lengths[i] = arcLengthIn(polygons.get(i));
         }
         double total = sum(lengths);
+
+        // A turn on the spot is never handed to Pedro: it is held at its end pose until the robot has
+        // settled there, on heading and on position (decision D10). A path this short would end at t 0.975 before the robot had turned,
+        // and a line with no length at all gives Pedro a zero tangent.
+        if (total <= TURN_IN_PLACE_MAX_IN) {
+            Pose[] last = polygons.get(polygons.size() - 1);
+            Pose end = last[last.length - 1];
+            return new Built(null, lengths, new Pose(end.x(), end.y(), turnHeading(polygons, heading)));
+        }
 
         List<Path> parts = new ArrayList<Path>(polygons.size());
         double travelled = 0;

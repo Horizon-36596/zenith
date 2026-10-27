@@ -29,6 +29,7 @@ import com.seattlesolvers.solverslib.command.Subsystem;
 import org.horizon36596.zenith.MarkerProgress;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.DoubleSupplier;
 
@@ -55,6 +56,13 @@ import java.util.function.DoubleSupplier;
  * tile. Scheduling them separately would instead have discovered it by interrupting the path mid-leg.
  * It also keeps the runtime free of scheduler re-entrancy, so a headless run stays a pure function of
  * its inputs.
+ *
+ * <p>Two markers that need the same subsystem take turns, as they would on the scheduler: when a marker
+ * starts, any marker still running that needs one of its subsystems is ended, interrupted.
+ *
+ * <p>An {@code endCondition} races this whole group, never the path inside it (see
+ * {@link AutoBuilder}), so a path cut short ends the runner on the loop the condition fires, before the
+ * runner could read the held follower as a path driven to its end.
  *
  * <p>The follower is read from {@link AutoContext#follower()} on every loop, not captured when the
  * group is built, so a routine can be built before the follower exists.
@@ -166,11 +174,27 @@ public final class PathMarkers {
         private void fireDue() {
             Command command;
             while ((command = progress.nextDue()) != null) {
+                interruptRunningThatNeed(command);
                 command.initialize();
                 if (command.isFinished()) {
                     command.end(false);
                 } else {
                     running.add(command);
+                }
+            }
+        }
+
+        /**
+         * End, interrupted, every running marker that needs a subsystem {@code starting} needs, as the
+         * scheduler would. The runner holds all its markers' requirements at once, so nothing else stops
+         * two of them driving one subsystem in the same loop, and the older one, run last, would win.
+         */
+        private void interruptRunningThatNeed(Command starting) {
+            for (int i = running.size() - 1; i >= 0; i--) {
+                Command other = running.get(i);
+                if (!Collections.disjoint(other.getRequirements(), starting.getRequirements())) {
+                    other.end(true);
+                    running.remove(i);
                 }
             }
         }

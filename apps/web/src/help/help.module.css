@@ -68,8 +68,19 @@
   color: var(--text-mid);
 }
 
-.showMe {
+/* "Show me" and "Read more" share a row under the body. */
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-4);
   margin-top: var(--space-1);
+}
+
+.showMe {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--accent);
   font-size: var(--fs-sm);
 }
@@ -79,12 +90,53 @@
 }
 
 /*
- * The shortcut overlay (QA-22): the tables flow down newspaper columns, four at 1280 px, so the
- * whole sheet fits a 1280x720 window. A table may run on into the next column, a whole row at a
- * time, and never leaves its title at the foot of one.
+ * The shortcut overlay (QA-22, issue #414): the tables flow down newspaper columns, three at 1280 px,
+ * so the whole sheet fits a 1280x720 window. A table is never split between columns, so every column
+ * starts with a heading. The sheet itself takes the focus when it opens, so it shows no ring.
  */
+.sheet:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.sheetTabs {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.sheetTab {
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.sheetTab:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+.sheetTab[aria-selected="true"] {
+  background: var(--bg-selected);
+  color: var(--text-hi);
+  font-weight: var(--fw-medium);
+}
+
+/* The Mouse tab's sentences are longer, so it has two columns, wide enough for a gesture's sentence to stay on one line. */
+.keysGrid[data-wide] {
+  columns: 2 420px;
+}
+
+/* Where a key does a second thing: said after what it does, quieter. */
+.keyNote {
+  display: block;
+  color: var(--text-lo);
+}
+
 .keysGrid {
-  columns: 4 240px;
+  columns: 3 260px;
   column-gap: var(--space-6);
 }
 
@@ -94,6 +146,7 @@
   gap: var(--space-1);
   min-width: 0;
   margin-bottom: var(--space-3);
+  break-inside: avoid;
 }
 
 .keysSection[data-long] {
@@ -174,9 +227,86 @@
   white-space: normal;
 }
 
+/* A key the person set in Settings, Keyboard: a dot on the chip's top right corner, so it adds no
+   width or height to the row. */
+.keyCap kbd {
+  position: relative;
+}
+
+.customDot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* The title row's links: Change keys, which opens Settings, Keyboard, and Full guide. */
+.sheetLinks {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.sheetLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.sheetLink:hover {
+  color: var(--accent-hover);
+}
+
 .keyDoes {
   margin: 0;
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
   color: var(--text-mid);
+}
+
+/* The shortcut sheet's link to the full keyboard reference in the docs. */
+.guideLink {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  break-inside: avoid;
+  font-size: var(--fs-sm);
+  color: var(--accent);
+}
+
+.guideLink:hover {
+  color: var(--accent-hover);
+}
+
+/* The sheet once the person's keys add rows to it: every action that can have a key may be bound,
+   the curated extras included. The rows close up, so the sheet still fits 1280 by 720 with no
+   scrolling; with today's keys it keeps its usual spacing. */
+.keysGrid[data-dense] .keysSection {
+  gap: var(--space-0_5);
+  margin-bottom: var(--space-1);
+}
+
+.keysGrid[data-dense] .keysTitle {
+  margin-bottom: 0;
+}
+
+.keysGrid[data-dense] .keys {
+  gap: var(--space-0_5);
+}
+
+.keysGrid[data-dense] [data-long] .keyRow {
+  row-gap: 0;
+  margin-bottom: 0;
+}
+
+.keysGrid[data-dense] [data-long] .keyDoes {
+  line-height: calc(var(--lh-sm) - 1px);
 }

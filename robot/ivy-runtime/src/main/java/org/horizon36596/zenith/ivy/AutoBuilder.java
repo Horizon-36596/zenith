@@ -31,6 +31,7 @@ import org.horizon36596.zenith.PedroPaths;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
@@ -155,8 +156,13 @@ public final class AutoBuilder {
     // ---------------------------------------------------------------------------------------------
 
     private static Command path(final AutoFile.PathStep step, final AutoContext ctx) {
+        // Resolved here, at init, even for a path that is built later from "current": an end condition
+        // nobody registered then throws on the tile, not when the step starts mid-match.
+        final BooleanSupplier endCondition = step.endCondition != null
+                ? NamedCommands.condition(step.endCondition)
+                : null;
         if (!step.startsFromCurrentPose()) {
-            return follow(step, ctx, null);
+            return follow(step, ctx, null, endCondition);
         }
         Command[] markers = new Command[step.markers.size()];
         for (int i = 0; i < markers.length; i++) {
@@ -166,32 +172,50 @@ public final class AutoBuilder {
         return DeferredPath.of(step.id, ctx, new Function<Pose, Command>() {
             @Override
             public Command apply(Pose currentPose) {
-                return follow(step, ctx, currentPose);
+                return follow(step, ctx, currentPose, endCondition);
             }
         }, markers);
     }
 
     /** The path-following command for one path step, with its markers and its end condition. */
-    private static Command follow(AutoFile.PathStep step, final AutoContext ctx, Pose currentPose) {
+    private static Command follow(AutoFile.PathStep step, final AutoContext ctx, Pose currentPose,
+            BooleanSupplier endCondition) {
         PedroPaths.Built built = PedroPaths.build(step, frame(ctx), currentPose);
 
         double speed = step.speedFraction != null
                 ? step.speedFraction.doubleValue()
                 : ctx.defaultSpeedFraction();
-        Command drive = ctx.followPath(built.path, speed);
-        if (step.endCondition != null) {
-            // Ivy's own until() is a race that ends every member once, but its race walks a HashMap;
-            // this one runs the path first on every loop, as the SolversLib runtime does.
-            drive = Parallel.race(drive, Commands.waitUntil(NamedCommands.condition(step.endCondition)));
-        }
-
+        // A step this short is a turn on the spot (decision D10): it is held at its end pose until the
+        // heading settles, never handed to followPath, and every marker on it fires as it starts.
+        Command drive = built.isTurn()
+                ? new TurnInPlace(ctx, built.turn)
+                : ctx.followPath(built.path, speed);
+        // The markers go on the path itself and the end condition races the two together, never the
+        // other way round. A condition that cuts the path short then ends the marker runner with it, on
+        // the loop it fires. Inside the race, the runner would run once more after the path was held,
+        // see a follower that has stopped following, count the whole path as driven and start every
+        // marker still waiting, wherever the robot was cut off.
+        //
+        // A turn has nothing to measure progress along, so its markers all sit at 0 and start with it.
+        // They still go through the runner, so two that need one subsystem take turns there as they do
+        // on a path, rather than both running (or the group refusing them) inside a plain deadline.
         List<PathMarkers.Marker> markers = new ArrayList<PathMarkers.Marker>(step.markers.size());
         for (AutoFile.Marker marker : step.markers) {
             markers.add(new PathMarkers.Marker(
-                    marker.distanceAlongIn(built.totalLengthIn),
+                    built.isTurn() ? 0.0 : marker.distanceAlongIn(built.totalLengthIn),
                     NamedCommands.build(marker.commandName, marker.args, ctx)));
         }
-        return PathMarkers.wrap(drive, built.segmentLengthsIn, markers, ctx);
+        return cutShortBy(endCondition, PathMarkers.wrap(drive, built.segmentLengthsIn, markers, ctx));
+    }
+
+    /** {@code drive} raced against the step's end condition, or {@code drive} when it has none. */
+    private static Command cutShortBy(BooleanSupplier endCondition, Command drive) {
+        if (endCondition == null) {
+            return drive;
+        }
+        // Ivy's own until() is a race that ends every member once, but its race walks a HashMap;
+        // this one runs the path first on every loop, as the SolversLib runtime does.
+        return Parallel.race(drive, Commands.waitUntil(endCondition));
     }
 
     // ---------------------------------------------------------------------------------------------

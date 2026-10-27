@@ -42,10 +42,12 @@ describe("zenith validate against examples/starter/autos/collect-and-score.auto.
 
     const bySeverity = (severity: Finding["severity"]): number =>
       expected.filter((finding) => finding.severity === severity).length;
-    // Pinned so a change to this count is a deliberate one. The one info is TIME_BUDGET on `total`,
-    // the lower-bound note that fires because `sweepGarden` ends when the hopper reads full, so its
-    // contribution to the total is unknown (finding 18). It fires only once the real estimate is in
-    // play, which is what this test is here to prove.
+    // Pinned so a change to this count is a deliberate one. The one info is TIME_BUDGET on `total`:
+    // waitForFull has no estimate but a 1 s timeout, and collectFlower and sweepGarden end when the
+    // hopper reads full, so the total is a bound (finding 18, issue #154). It fires only once the
+    // real estimate is in play, which is what this test is here to prove. There are no warnings:
+    // the two CLEARANCE warnings toGarden had under the hive (owner ruling D8, issue #289) went with
+    // the route, which now goes round the west of the hive frame to stay on RED's side (issue #365).
     expect({ errors: bySeverity("error"), warnings: bySeverity("warning"), infos: bySeverity("info") }).toEqual({
       errors: 0,
       warnings: 0,
@@ -69,17 +71,34 @@ describe("zenith validate against examples/starter/autos/collect-and-score.auto.
     const actual = parsed.files[0]?.findings ?? [];
     expect(codeMultiset(actual)).toEqual(codeMultiset(expected));
   });
+
+  it("names waitForFull in the TIME_BUDGET note, which the routine fits even at its full timeout", () => {
+    // waitForFull waits until the hopper is full for at most 1 s. The note used to call the total a
+    // lower bound that "may not fit", naming no step (issue #154).
+    const budget = editorFindings(loadAuto(read("autos/collect-and-score.auto.json"))).filter(
+      (finding) => finding.code === "TIME_BUDGET",
+    );
+    expect(budget).toHaveLength(1);
+    expect(budget[0]?.stepId).toBe("total");
+    expect(budget[0]?.stepIds?.[0]).toBe("waitForFull");
+    expect(budget[0]?.message).toContain("waitForFull");
+    expect(budget[0]?.message).not.toContain("may not fit");
+  });
 });
 
 /**
- * Every starter auto validates with no errors and no warnings, with the BIOBUZZ season rules and
- * the real estimate in force, the way `zenith validate` and the editor compute it.
+ * Every starter auto validates with no errors and no warnings, with the BIOBUZZ season rules and the
+ * real estimate in force, the way `zenith validate` and the editor compute it. collect-and-score's
+ * toGarden used to run between the hive frame's west legs, inside the robot's clearance of both
+ * (owner ruling D8, issue #289), and over the centre line; since issue #365 it goes round the west
+ * of the frame, and OPPONENT_SIDE, an error, holds every starter route to RED's side.
  */
 describe("every auto in examples/starter", () => {
   const autos = readdirSync(`${examplesDir}autos`).filter((name) => name.endsWith(".auto.json")).sort();
 
-  // What is left, pinned so a change is deliberate. The TIME_BUDGET infos fire because a step ends
-  // on a condition (hopperFull), so the total is a lower bound.
+  // What is left, pinned so a change is deliberate. The TIME_BUDGET infos fire because a step waits
+  // for a condition (hopperFull) up to its timeout, or a path ends on one, so the total is a bound.
+  // Every wait until a condition has a timeout, so none raises WAIT_NO_TIMEOUT.
   const remaining: Record<string, string[]> = {
     "all-step-kinds.auto.json": ["info TIME_BUDGET total"],
     "collect-and-score.auto.json": ["info TIME_BUDGET total"],

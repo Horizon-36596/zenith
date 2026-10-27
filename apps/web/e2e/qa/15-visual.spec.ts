@@ -8,7 +8,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { LAYOUT_SIZES as SIZES } from "../viewports";
-import { SHOTS_DIR, fixture, loadExample, openProjectWith, shot, skipTour, waitForFonts } from "./helpers";
+import { SHOTS_DIR, choosePreset, fixture, loadExample, openProjectWith, shot, skipTour, waitForFonts } from "./helpers";
 
 export interface Audit {
   truncated: string[];
@@ -37,14 +37,17 @@ const AUDIT = `(() => {
     return colour;
   };
   const name = (el) => (el.getAttribute("data-testid") ?? el.closest("[data-testid]")?.getAttribute("data-testid") ?? el.tagName.toLowerCase()) + ' "' + (el.textContent ?? "").trim().slice(0, 40) + '"';
-  const visible = (el) => { const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; const s = getComputedStyle(el); if (s.visibility === "hidden" || Number(s.opacity) === 0) return false; if (el.closest('[aria-hidden="true"]')) return false; return r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth; };
+  // Words kept for a screen reader only (the shared .visually-hidden, such as a header icon's words,
+  // issue #431) are never drawn, so they can be neither cut off nor overlap.
+  const visible = (el) => { const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; const s = getComputedStyle(el); if (s.visibility === "hidden" || Number(s.opacity) === 0) return false; if (el.closest('[aria-hidden="true"], .visually-hidden')) return false; return r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth; };
   const leaves = [...document.querySelectorAll("body *")].filter((el) => !(el instanceof SVGElement) && el.tagName !== "CANVAS" && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== "") && visible(el));
   const truncated = [], overlaps = [], lowContrast = [], teal = [];
   for (const el of leaves) {
     const s = getComputedStyle(el);
     const clips = s.textOverflow === "ellipsis" || s.overflow === "hidden" || s.overflowX === "hidden";
-    // A cut-off line is allowed where hovering it shows the whole text (the insert menu's help).
-    const tipped = el.closest("[data-testid^=insert-kind-]") !== null;
+    // A cut-off line is allowed where hovering it shows the whole text: the insert menu's help, a
+    // Problems row's message (issue #413) and a waypoint's middle-cut name (issue #410).
+    const tipped = el.closest("[data-testid^=insert-kind-], [data-testid=finding-message], [data-testid^=inspector-waypoint-row-]") !== null;
     if (clips && !tipped && el.scrollWidth > el.clientWidth + 1) truncated.push(name(el) + " " + el.scrollWidth + ">" + el.clientWidth);
     // A gradient or picture behind the text cannot be read as one colour; those are checked by eye.
     const fg = rgba(s.color); const bg = bgOf(el); if (bg === null) continue; const mixed = over(fg, bg);
@@ -56,10 +59,11 @@ const AUDIT = `(() => {
   }
   // Pairwise overlap of text boxes that are not nested, using the text's own line boxes clipped
   // by every scrolling or clipping ancestor, and only within one layer: a menu, popover or dialog
-  // drawn over the page is layering, not an overlap.
+  // drawn over the page is layering, not an overlap. An element that clips its own text (a
+  // two-line clamp, a middle-cut name) clips it too: what it hides is not drawn.
   const clipOf = (el, r) => {
     let box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
-    for (let at = el.parentElement; at; at = at.parentElement) {
+    for (let at = el; at; at = at.parentElement) {
       const st = getComputedStyle(at);
       if (st.overflow === "visible" && st.overflowX === "visible" && st.overflowY === "visible") continue;
       const c = at.getBoundingClientRect();
@@ -122,7 +126,7 @@ const SCREENS: Screen[] = [
   }],
   ["command-selected", async (page) => {
     await loadExample(page);
-    await page.getByTestId("step-row-scorePreload").getByRole("button").first().click();
+    await page.getByTestId("step-row-shootPreloads").getByRole("button").first().click();
   }],
   ["group-selected", async (page) => {
     await loadExample(page);
@@ -176,8 +180,47 @@ for (const size of SIZES) {
       });
     }
 
+    // The ledger's top line is canvas text, which the audit above cannot see: check the pixels the
+    // field's ? button sits on instead. With nothing drawn there they are all one colour, the well.
+    test("the field's ? button sits clear of the ledger line on the canvas", async ({ page }) => {
+      await skipTour(page);
+      await loadExample(page);
+      await waitForFonts(page);
+      const canvas = page.getByTestId("field-canvas");
+      await expect(canvas).toHaveAttribute("data-ledger", /=/);
+      await page.waitForTimeout(250);
+      const help = await page.locator('[data-tour="field"] [class*="fieldHelp"]').boundingBox();
+      expect(help, "the field's ? button").not.toBeNull();
+      const inked = await canvas.evaluate((element, box) => {
+        const el = element as HTMLCanvasElement;
+        const at = el.getBoundingClientRect();
+        const scale = el.width / at.width;
+        const ctx = el.getContext("2d");
+        if (ctx === null) return -1;
+        const x = Math.floor((box.x - at.left) * scale);
+        const y = Math.floor((box.y - at.top) * scale);
+        const data = ctx.getImageData(x, y, Math.ceil(box.width * scale), Math.ceil(box.height * scale)).data;
+        let most = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          for (let c = 0; c < 3; c += 1) most = Math.max(most, Math.abs((data[i + c] ?? 0) - (data[c] ?? 0)));
+        }
+        return most;
+      }, help!);
+      await shot(page, `15-field-help-${String(size.width)}`);
+      expect(inked, "colour spread on the canvas under the ? button").toBeLessThan(24);
+    });
+
+    test("the first-run preset card: contrast and no teal", async ({ page }) => {
+      await page.goto("/");
+      await expect(page.getByTestId("preset-card")).toBeVisible();
+      const found = await audit(page, `preset-card-${String(size.width)}`);
+      expect(found.teal).toEqual([]);
+      expect(found.lowContrast).toEqual([]);
+    });
+
     test("the core tour's first stop: contrast and no teal on the coach mark", async ({ page }) => {
       await page.goto("/");
+      await choosePreset(page);
       await expect(page.getByTestId("tour-card")).toBeVisible();
       const found = await audit(page, `tour-${String(size.width)}`);
       expect(found.teal).toEqual([]);
@@ -186,23 +229,40 @@ for (const size of SIZES) {
   });
 }
 
+/** The keys the sheet lists more than once, outside the On the field table. */
+async function keysListedTwice(page: Page): Promise<string[]> {
+  // The On the field table reuses C, S and Esc for a selected curve point, which is a different
+  // context; the keyboard tables above it should not repeat a key.
+  const keys = await page.getByTestId("shortcuts-overlay").locator("section:not([data-testid=shortcuts-canvas]) dt kbd").allTextContents();
+  const counts = new Map<string, number>();
+  for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
+  return [...counts.entries()].filter(([, n]) => n > 1).map(([key]) => key);
+}
+
+/** Whether the sheet shows everything with no scrolling anywhere inside it. */
+const sheetFits = (page: Page): Promise<boolean> =>
+  page.getByTestId("shortcuts-overlay").evaluate((dialog) => {
+    const scrollers = [dialog, ...dialog.querySelectorAll<HTMLElement>("*")].filter((el) => el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY !== "visible");
+    return scrollers.length === 0;
+  });
+
+/** Opens the sheet with its key, or, while the person has moved that key, from the help menu's action. */
+async function openSheet(page: Page, byKey = true): Promise<void> {
+  if (byKey) await page.keyboard.press("F1");
+  else await page.evaluate(`import("/src/state/store.ts").then((m) => m.setDialog("shortcuts"))`);
+  await expect(page.getByTestId("shortcuts-overlay")).toBeVisible();
+  await waitForFonts(page);
+}
+
 test.describe("the shortcut sheet", () => {
   test.beforeEach(async ({ page }) => {
     await skipTour(page);
     await loadExample(page);
-    await page.keyboard.press("F1");
-    await expect(page.getByTestId("shortcuts-overlay")).toBeVisible();
-    await waitForFonts(page);
+    await openSheet(page);
   });
 
   test("lists each key once, with one meaning", async ({ page }) => {
-    // The On the field table reuses C, S and Esc for a selected curve point, which is a different
-    // context; the keyboard tables above it should not repeat a key.
-    const keys = await page.getByTestId("shortcuts-overlay").locator("section:not([data-testid=shortcuts-canvas]) dt kbd").allTextContents();
-    const counts = new Map<string, number>();
-    for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
-    const twice = [...counts.entries()].filter(([, n]) => n > 1).map(([key]) => key);
-    expect(twice).toEqual([]);
+    expect(await keysListedTwice(page)).toEqual([]);
   });
 
   for (const size of SIZES) {
@@ -210,11 +270,46 @@ test.describe("the shortcut sheet", () => {
       test.use({ viewport: size });
 
       test("fits the window without scrolling", async ({ page }) => {
-        const fits = await page.getByTestId("shortcuts-overlay").evaluate((dialog) => {
-          const scrollers = [dialog, ...dialog.querySelectorAll<HTMLElement>("*")].filter((el) => el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY !== "visible");
-          return scrollers.length === 0;
-        });
-        expect(fits).toBe(true);
+        expect(await sheetFits(page)).toBe(true);
+      });
+    });
+  }
+});
+
+/**
+ * The worst case a person can make: every action that can have a key bound, each to one of the longest
+ * legal labels (`worstCaseKeys`), with every feature on, so the sheet lists every row it can.
+ */
+test.describe("the shortcut sheet with every key bound to the longest labels", () => {
+  test.beforeEach(async ({ page }) => {
+    await skipTour(page);
+    await page.goto("/");
+    const keys = await page.evaluate(`import("/src/app/keymap.ts").then((k) => k.worstCaseKeys(k.BINDINGS))`);
+    await page.evaluate((given) => {
+      const prefs = JSON.parse(window.localStorage.getItem("zenith.ui") ?? "{}") as Record<string, unknown>;
+      window.localStorage.setItem("zenith.ui", JSON.stringify({ ...prefs, keys: given }));
+    }, keys);
+    await loadExample(page);
+    await openSheet(page, false);
+    // Every action row on the sheet that can be rebound is the person's own key now.
+    const rebindableRows = await page.evaluate(
+      `Promise.all([import("/src/app/keymap.ts"), import("/src/app/actions.ts"), import("/src/state/features.ts")]).then(([k, a, f]) => k.BINDINGS.filter((b) => b.fixed === undefined && a.actionById(b.id)?.sheetRow !== false && f.actionShown(b.id, f.getFeatures())).length)`,
+    );
+    expect(rebindableRows).toBeGreaterThan(25);
+    await expect(page.getByTestId("shortcut-custom")).toHaveCount(rebindableRows as number);
+  });
+
+  for (const size of SIZES) {
+    test.describe(`at ${String(size.width)}x${String(size.height)}`, () => {
+      test.use({ viewport: size });
+
+      test("lists each key once, with one meaning", async ({ page }) => {
+        expect(await keysListedTwice(page)).toEqual([]);
+      });
+
+      test("fits the window without scrolling", async ({ page }) => {
+        await shot(page, `15-shortcuts-worst-keys-${String(size.width)}`);
+        expect(await sheetFits(page)).toBe(true);
       });
     });
   }

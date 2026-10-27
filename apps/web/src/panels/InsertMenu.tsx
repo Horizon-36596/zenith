@@ -12,24 +12,33 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactElement,
+  type Ref,
 } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import type { ParallelStep } from "@horizon36596/zenith-schema";
+import { ChevronLeft, ChevronRight, Plus, RotateCcw, type LucideIcon } from "lucide-react";
 import {
   addBranchStep,
   addCommandStep,
   addParallelStep,
   addPathStep,
   addSequenceStep,
+  addTurnStep,
+  addTransferStep,
   addWaitStep,
   addWaitUntil,
   type DeadlineChoice,
 } from "../app/edits";
-import { SHORTCUTS } from "../app/shortcuts";
+import { useKeyLabel } from "../app/shortcuts";
+import { focusForInput } from "../components/inputModality";
 import { Tooltip } from "../components/Tooltip";
-import { INSERT_HELP, type InsertKind } from "../help/content";
+import { INSERT_KINDS, type InsertKind } from "../help/content";
+import type { DescriptionId } from "../help/descriptions";
+import { firstSentence } from "../help/descriptions/firstSentence";
+import { useDescribed, useDescriptions } from "../help/descriptions/useDescriptions";
+import { PARALLEL_MODES, type ParallelMode } from "../lib/parallelModes";
 import { KIND_ICON } from "../lib/stepKinds";
-import { isReadOnly, useEditor } from "../state/store";
+import { insertKindShown } from "../state/features";
+import { getState, isReadOnly, useEditor } from "../state/store";
 import {
   closeInsertMenu,
   openInsertMenu,
@@ -39,7 +48,29 @@ import {
 } from "../state/ui";
 import styles from "./InsertMenu.module.css";
 
-const KINDS: InsertKind[] = ["path", "command", "wait", "sequence", "parallel", "branch"];
+const KINDS: InsertKind[] = ["path", "turn", "command", "wait", "transfer", "sequence", "parallel", "branch"];
+
+/** Each kind's icon: the step kind's own, and for a turn on the spot, which is a path step, a turn. */
+const ICON: Record<InsertKind, LucideIcon> = { ...KIND_ICON, turn: RotateCcw };
+
+/** Each kind's entry in the description table (`help/descriptions/insert.ts`). */
+const DESCRIBE_KIND: Record<InsertKind, DescriptionId> = {
+  path: "insert.path",
+  turn: "insert.turn",
+  command: "insert.command",
+  wait: "insert.wait",
+  transfer: "insert.transfer",
+  sequence: "insert.sequence",
+  parallel: "insert.parallel",
+  branch: "insert.branch",
+};
+
+/** Each parallel mode's entry in the description table. */
+const DESCRIBE_MODE: Record<ParallelMode, DescriptionId> = {
+  all: "insert.parallelAll",
+  race: "insert.parallelRace",
+  deadline: "insert.parallelDeadline",
+};
 
 /** The kinds that open a pane of options instead of inserting straight away. */
 const PANE_OF: Partial<Record<InsertKind, InsertPane>> = {
@@ -52,49 +83,142 @@ const PANE_OF: Partial<Record<InsertKind, InsertPane>> = {
 /** The tallest the menu grows, and the least room below it before it opens upwards instead. */
 const MENU_MAX_PX = 440;
 const MENU_MIN_BELOW_PX = 280;
+/** The gap the menu keeps from its button and from the window's edges. */
+const MENU_GAP_PX = 8;
 
-/** The nearest ancestor that clips its content, which is what the menu has to fit inside. */
-function clippingAncestor(element: HTMLElement): HTMLElement | null {
-  for (let at = element.parentElement; at !== null; at = at.parentElement) {
-    const overflow = getComputedStyle(at).overflowY;
-    if (overflow === "auto" || overflow === "scroll" || overflow === "hidden") return at;
-  }
-  return null;
-}
-
+/**
+ * Where the menu sits, in window pixels: it is fixed to the window rather than to the step list, so
+ * no panel clips it, and its height never takes its bottom past the window (issue #411).
+ */
 interface Placement {
   up: boolean;
   maxPx: number;
+  leftPx: number;
+  widthPx: number;
+  /** The menu's top when it opens down, or its bottom's distance from the window's bottom when up. */
+  edgePx: number;
+}
+
+/** The selector of a control elsewhere that opens and closes the menu, such as the Steps header's +. */
+export const INSERT_TOGGLE_ATTR = "data-insert-toggle";
+
+/** The menu's place beside `button`, below it when there is room and above it when there is more. */
+function placeMenu(button: DOMRect, padPx: number): Placement {
+  const below = window.innerHeight - button.bottom - MENU_GAP_PX;
+  const above = button.top - MENU_GAP_PX;
+  const up = below < MENU_MIN_BELOW_PX && above > below;
+  return {
+    up,
+    maxPx: Math.max(0, Math.min(MENU_MAX_PX, up ? above : below)),
+    leftPx: button.left + padPx,
+    widthPx: Math.max(0, button.width - 2 * padPx),
+    edgePx: up ? window.innerHeight - button.top + 4 : button.bottom + 4,
+  };
+}
+
+/**
+ * Where focus goes when the menu closes (W2-9 of the 0.1.2 sweep): to the new step's row after an
+ * insert, and back to whatever opened the menu after Escape. The item that had focus leaves the page
+ * with the menu, so without this focus falls to the page and the next key runs an editor shortcut.
+ */
+let focusAfterClose: "step" | "opener" | null = null;
+
+/** Focuses the row of the selected step in the step list, when it shows. */
+function focusSelectedRow(): boolean {
+  const id = getState().selection.stepId;
+  if (id === undefined) return false;
+  const row = document.querySelector<HTMLElement>(`[data-testid="step-main-${CSS.escape(id)}"]`);
+  focusForInput(row);
+  return row !== null;
 }
 
 export function InsertMenu() {
   const state = useEditor();
-  const { insertOpen, insertPane } = useUi();
+  const insertKey = useKeyLabel("insertAfter");
+  const { insertOpen, insertPane, insertAnchor } = useUi();
   const root = useRef<HTMLDivElement | null>(null);
   const anchor = state.selection.stepId;
   const readOnly = isReadOnly(state);
-  const [placement, setPlacement] = useState<Placement>({ up: false, maxPx: MENU_MAX_PX });
+  const [placement, setPlacement] = useState<Placement | null>(null);
+  const menu = useRef<HTMLDivElement | null>(null);
+  /** Whether the menu holds more below what shows, so its foot fades as a cue to scroll. */
+  const [more, setMore] = useState(false);
+  const measureMore = (): void => {
+    const element = menu.current;
+    setMore(element !== null && element.scrollTop + element.clientHeight < element.scrollHeight - 2);
+  };
 
-  // The button sits at the bottom of the step list, so in a short window the menu opens upwards
-  // rather than disappearing under the panel below.
-  useLayoutEffect(() => {
-    const element = root.current;
-    if (!insertOpen || element === null) return;
-    const own = element.getBoundingClientRect();
-    const clip = clippingAncestor(element)?.getBoundingClientRect();
-    const top = clip?.top ?? 0;
-    const bottom = clip?.bottom ?? window.innerHeight;
-    const below = bottom - own.bottom - 8;
-    const above = own.top - top - 8;
-    const up = below < MENU_MIN_BELOW_PX && above > below;
-    setPlacement({ up, maxPx: Math.max(160, Math.min(MENU_MAX_PX, up ? above : below)) });
+  // The element that had focus when the menu opened, read while the open menu renders for the
+  // first time: by the time its effects run, a pane's first field has already taken focus.
+  const opener = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  if (insertOpen && !wasOpen.current) {
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    focusAfterClose = null;
+  }
+  wasOpen.current = insertOpen;
+
+  // On closing, focus goes where `focusAfterClose` says, unless it already went somewhere else (a
+  // press on the field, say).
+  useEffect(() => {
+    if (insertOpen) return;
+    const after = focusAfterClose;
+    focusAfterClose = null;
+    if (after === null) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
+    if (after === "step" && focusSelectedRow()) return;
+    if (opener.current?.isConnected === true) focusForInput(opener.current);
+    else focusSelectedRow();
   }, [insertOpen]);
 
-  // Any press outside the menu closes it, the way every popover in the app behaves.
+  // The button sits at the bottom of the step list, so in a short window the menu opens upwards
+  // rather than disappearing under the panel below. It is placed again whenever it switches pane,
+  // the auto changes while it is open, or the list scrolls or the window resizes under it: the
+  // palette can open a pane, or insert a step and push the button down, without the menu closing.
+  useLayoutEffect(() => {
+    const element = root.current;
+    if (!insertOpen || element === null) {
+      setPlacement(null);
+      return;
+    }
+    // Opened from the Steps header's +, the menu opens under that + while it shows, as wide as the
+    // list, and the list stays where it was scrolled.
+    const toggle = (): DOMRect | null => {
+      if (insertAnchor !== "header") return null;
+      const box = element.ownerDocument.querySelector(`[${INSERT_TOGGLE_ATTR}]`)?.getBoundingClientRect();
+      return box === undefined || box.width === 0 || box.height === 0 ? null : box;
+    };
+    // Opened from the palette, with Enter, or from a + that has gone, the foot button may be
+    // scrolled out of a long step list; bring it into view first, or the menu opens beside a button
+    // nobody can see.
+    if (toggle() === null) element.scrollIntoView?.({ block: "nearest" });
+    const place = (): void => {
+      const pad = Number.parseFloat(getComputedStyle(element).paddingLeft) || 0;
+      const foot = element.getBoundingClientRect();
+      const header = toggle();
+      setPlacement(placeMenu(header === null ? foot : new DOMRect(foot.left, header.top, foot.width, header.height), pad));
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [insertOpen, insertPane, insertAnchor, state.auto]);
+
+  useLayoutEffect(measureMore, [placement, insertPane]);
+
+  // Any press outside the menu closes it, the way every popover in the app behaves. The Steps
+  // header's + toggles it itself, so a press there is left to its click.
   useEffect(() => {
     if (!insertOpen) return;
     const onDown = (event: PointerEvent) => {
-      if (root.current !== null && !root.current.contains(event.target as Node)) closeInsertMenu();
+      const target = event.target as Element | null;
+      if (target?.closest?.(`[${INSERT_TOGGLE_ATTR}]`) != null) return;
+      if (root.current !== null && !root.current.contains(target)) closeInsertMenu();
     };
     window.addEventListener("pointerdown", onDown);
     return () => {
@@ -109,7 +233,7 @@ export function InsertMenu() {
     <div className={styles.insert} ref={root}>
       <Tooltip
         label={anchor === undefined ? "Add a step" : `Insert after ${anchor}`}
-        shortcut={SHORTCUTS.insertAfter}
+        shortcut={insertKey}
         hint={
           readOnly
             ? "Unavailable: review mode is read only."
@@ -135,15 +259,28 @@ export function InsertMenu() {
         >
           <Plus size={16} strokeWidth={1.75} aria-hidden />
           <span className={styles.buttonLabel}>Insert step</span>
-          <kbd className={styles.shortcut}>{SHORTCUTS.insertAfter}</kbd>
+          <kbd className={styles.shortcut}>{insertKey}</kbd>
         </button>
       </Tooltip>
 
       {insertOpen ? (
         <div
+          ref={menu}
           className={styles.menu}
-          data-up={placement.up ? "true" : undefined}
-          style={{ maxHeight: `${String(placement.maxPx)}px` }}
+          data-up={placement?.up === true ? "true" : undefined}
+          data-more={more ? "true" : undefined}
+          style={
+            // Placed before the first paint; never hidden, or the first kind could not take focus.
+            placement === null
+              ? undefined
+              : {
+                  maxHeight: `${String(placement.maxPx)}px`,
+                  left: `${String(placement.leftPx)}px`,
+                  width: `${String(placement.widthPx)}px`,
+                  ...(placement.up ? { bottom: `${String(placement.edgePx)}px` } : { top: `${String(placement.edgePx)}px` }),
+                }
+          }
+          onScroll={measureMore}
           role="menu"
           aria-label="Insert a step"
           data-testid="insert-menu"
@@ -164,11 +301,15 @@ export function InsertMenu() {
 function onMenuKeys(event: ReactKeyboardEvent<HTMLDivElement>): void {
   if (event.key === "Escape") {
     event.preventDefault();
+    focusAfterClose = "opener";
     closeInsertMenu();
     event.stopPropagation();
     return;
   }
-  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+  // A radio button and a select keep their own arrows, which pick an option.
+  const target = event.target as HTMLElement;
+  const ownArrows = target instanceof HTMLSelectElement || (target instanceof HTMLInputElement && target.type === "radio");
+  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && !ownArrows) {
     const items = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
     const at = items.indexOf(document.activeElement as HTMLElement);
     const next = items[(at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length];
@@ -178,7 +319,26 @@ function onMenuKeys(event: ReactKeyboardEvent<HTMLDivElement>): void {
   event.stopPropagation();
 }
 
+/**
+ * A ref for a pane's first field, which takes the focus when the pane opens, so a pane opened with
+ * Enter can be filled in from the keyboard (W2-9). `then` runs after, to select a default, say.
+ */
+function useFirstField<T extends HTMLElement>(then?: (element: T) => void): Ref<T> {
+  const field = useRef<T | null>(null);
+  const after = useRef(then);
+  // Only when the pane opens.
+  useEffect(() => {
+    const element = field.current;
+    if (element === null) return;
+    element.focus();
+    after.current?.(element);
+  }, []);
+  return field;
+}
+
+/** Closes the menu after an insert; the new step's row takes the focus. */
 function done(): void {
+  focusAfterClose = "step";
   closeInsertMenu();
 }
 
@@ -189,7 +349,7 @@ function KindsPane() {
   const conditions = robot?.conditions?.length ?? 0;
   const first = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
-    first.current?.focus();
+    focusForInput(first.current);
   }, []);
 
   const blocked = (kind: InsertKind): string | null => {
@@ -203,50 +363,91 @@ function KindsPane() {
       <p className={styles.heading}>
         {state.selection.stepId === undefined ? "Add at the end" : `After ${state.selection.stepId}`}
       </p>
-      {KINDS.map((kind, index) => {
-        const Icon = KIND_ICON[kind];
-        const help = INSERT_HELP[kind];
+      {KINDS.filter((kind) => insertKindShown(kind, state.prefs.features)).map((kind, index) => {
         const reason = blocked(kind);
-        const pane = PANE_OF[kind];
         return (
-          <Tooltip
+          <KindItem
             key={kind}
-            label={help.title}
-            hint={reason === null ? help.body : `Unavailable: ${reason}`}
-            side="right"
-          >
-            <button
-              ref={index === 0 ? first : undefined}
-              type="button"
-              role="menuitem"
-              className={styles.item}
-              data-testid={`insert-kind-${kind}`}
-              aria-disabled={reason !== null}
-              aria-haspopup={pane === undefined ? undefined : "menu"}
-              onClick={() => {
-                if (reason !== null) return;
-                if (pane !== undefined) {
-                  setInsertPane(pane);
-                  return;
-                }
-                if (kind === "path") addPathStep();
-                if (kind === "sequence") addSequenceStep();
-                done();
-              }}
-            >
-              <Icon size={16} strokeWidth={1.75} aria-hidden className={styles.icon} />
-              <span className={styles.itemText}>
-                <span className={styles.itemLabel}>{help.title}</span>
-                <span className={styles.itemHint}>{help.body}</span>
-              </span>
-              {pane === undefined ? null : (
-                <ChevronRight size={14} strokeWidth={1.5} aria-hidden className={styles.more} />
-              )}
-            </button>
-          </Tooltip>
+            kind={kind}
+            label={INSERT_KINDS[kind].title}
+            describe={DESCRIBE_KIND[kind]}
+            reason={reason}
+            focusRef={index === 0 ? first : undefined}
+          />
         );
       })}
     </>
+  );
+}
+
+/**
+ * One step kind in the menu. Its brief is the second line only in With descriptions, and its brief
+ * and more are the hint a long hover or Shift F1 opens. Transfer keeps a "Planner only" chip in both
+ * modes: it is the one kind that changes the plan and not the robot.
+ */
+function KindItem({
+  kind,
+  label,
+  describe,
+  reason,
+  focusRef,
+}: {
+  kind: InsertKind;
+  label: string;
+  describe: DescriptionId;
+  reason: string | null;
+  focusRef: Ref<HTMLButtonElement> | undefined;
+}) {
+  const Icon = ICON[kind];
+  const pane = PANE_OF[kind];
+  const described = useDescribed(describe);
+  return (
+    <Tooltip
+      label={label}
+      hint={reason === null ? described.hint : `Unavailable: ${reason}`}
+      delay={reason === null ? "long" : "normal"}
+      side="right"
+    >
+      <button
+        ref={focusRef}
+        type="button"
+        role="menuitem"
+        className={styles.item}
+        data-testid={`insert-kind-${kind}`}
+        aria-disabled={reason !== null}
+        aria-haspopup={pane === undefined ? undefined : "menu"}
+        onClick={() => {
+          if (reason !== null) return;
+          if (pane !== undefined) {
+            setInsertPane(pane);
+            return;
+          }
+          if (kind === "path") addPathStep();
+          if (kind === "turn") addTurnStep();
+          if (kind === "transfer") addTransferStep();
+          if (kind === "sequence") addSequenceStep();
+          done();
+        }}
+      >
+        <Icon size={16} strokeWidth={1.75} aria-hidden className={styles.icon} />
+        <span className={styles.itemText}>
+          <span className={styles.itemLabel}>{label}</span>
+          {described.brief === undefined ? null : (
+            <span className={styles.itemHint} data-testid={`insert-kind-hint-${kind}`}>
+              {described.brief}
+            </span>
+          )}
+        </span>
+        {kind === "transfer" ? (
+          <span className={styles.chip} data-testid="insert-kind-chip-transfer">
+            Planner only
+          </span>
+        ) : null}
+        {pane === undefined ? null : (
+          <ChevronRight size={16} strokeWidth={1.75} aria-hidden className={styles.more} />
+        )}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -262,10 +463,24 @@ function PaneHead({ title }: { title: string }) {
           setInsertPane("kinds");
         }}
       >
-        <ChevronLeft size={14} strokeWidth={1.5} aria-hidden />
+        <ChevronLeft size={16} strokeWidth={1.75} aria-hidden />
       </button>
       <span className={styles.paneTitle}>{title}</span>
     </div>
+  );
+}
+
+/**
+ * A command or condition row's long hover (issue #246): its whole robot.json summary, which the row
+ * itself cuts to the first sentence in With descriptions and leaves out in Labels only. A row with no
+ * summary has nothing to say, so it gets no tooltip.
+ */
+function SummaryHint({ name, summary, children }: { name: string; summary: string | undefined; children: ReactElement }) {
+  if (summary === undefined) return children;
+  return (
+    <Tooltip label={name} hint={summary} delay="long" side="right">
+      {children}
+    </Tooltip>
   );
 }
 
@@ -273,6 +488,7 @@ function CommandPane() {
   const state = useEditor();
   const [query, setQuery] = useState("");
   const commands = useMemo(() => state.autoRobot?.commands ?? state.project?.robot.commands ?? [], [state]);
+  const full = useDescriptions() === "full";
   const needle = query.trim().toLowerCase();
   const shown = commands.filter(
     (spec) =>
@@ -305,20 +521,28 @@ function CommandPane() {
           <p className={styles.none}>No command matches that.</p>
         ) : (
           shown.map((spec) => (
-            <button
-              key={spec.name}
-              type="button"
-              role="menuitem"
-              className={styles.item}
-              data-testid={`insert-command-${spec.name}`}
-              onClick={() => {
-                addCommandStep(spec);
-                done();
-              }}
-            >
-              <span className={`${styles.itemLabel} mono`}>{spec.name}</span>
-              {spec.summary === undefined ? null : <span className={styles.itemHint}>{spec.summary}</span>}
-            </button>
+            <SummaryHint key={spec.name} name={spec.name} summary={spec.summary}>
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.item}
+                data-testid={`insert-command-${spec.name}`}
+                onClick={() => {
+                  addCommandStep(spec);
+                  done();
+                }}
+              >
+                <span className={styles.itemText}>
+                  <span className={`${styles.itemLabel} mono`}>{spec.name}</span>
+                  {spec.summary === undefined || !full ? null : (
+                    // The first sentence, wrapped, in With descriptions; the whole summary is the hint.
+                    <span className={styles.itemSummary} data-testid={`insert-command-summary-${spec.name}`}>
+                      {firstSentence(spec.summary)}
+                    </span>
+                  )}
+                </span>
+              </button>
+            </SummaryHint>
           ))
         )}
       </div>
@@ -332,12 +556,17 @@ function WaitPane() {
   const [seconds, setSeconds] = useState("0.5");
   const value = Number(seconds);
   const valid = seconds.trim() !== "" && Number.isFinite(value) && value >= 0;
+  // The seconds take the focus, selected, so typing a time replaces the default and Enter adds it.
+  const first = useFirstField<HTMLInputElement>((input) => {
+    input.select();
+  });
   return (
     <>
       <PaneHead title="Wait" />
       <p className={styles.group}>For a time</p>
       <div className={styles.formRow}>
         <input
+          ref={first}
           className={styles.number}
           inputMode="decimal"
           aria-label="Seconds to wait"
@@ -345,6 +574,12 @@ function WaitPane() {
           data-testid="insert-wait-seconds"
           onChange={(event) => {
             setSeconds(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || !valid) return;
+            event.preventDefault();
+            addWaitStep(value);
+            done();
           }}
         />
         <span className="unit">s</span>
@@ -368,60 +603,85 @@ function WaitPane() {
         <p className={styles.none}>robot.json declares no conditions to wait for.</p>
       ) : (
         conditions.map((condition) => (
-          <button
-            key={condition.name}
-            type="button"
-            role="menuitem"
-            className={styles.item}
-            data-testid={`insert-wait-until-${condition.name}`}
-            onClick={() => {
-              addWaitUntil(condition.name);
-              done();
-            }}
-          >
-            <span className={`${styles.itemLabel} mono`}>{condition.name}</span>
-            {condition.summary === undefined ? null : (
-              <span className={styles.itemHint}>{condition.summary}</span>
-            )}
-          </button>
+          <SummaryHint key={condition.name} name={condition.name} summary={condition.summary}>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.item}
+              data-testid={`insert-wait-until-${condition.name}`}
+              onClick={() => {
+                addWaitUntil(condition.name);
+                done();
+              }}
+            >
+              <span className={styles.itemText}>
+                <span className={`${styles.itemLabel} mono`}>{condition.name}</span>
+                {/*
+                  A condition's name is a code word, not a label, so its first sentence shows under it
+                  in both description modes (issue #411); the whole summary is the long hover.
+                */}
+                {condition.summary === undefined ? null : (
+                  <span className={styles.itemSummary} data-testid={`insert-wait-summary-${condition.name}`}>
+                    {firstSentence(condition.summary)}
+                  </span>
+                )}
+              </span>
+            </button>
+          </SummaryHint>
         ))
       )}
     </>
   );
 }
 
-const MODES: Array<{ mode: ParallelStep["mode"]; title: string; body: string }> = [
-  { mode: "all", title: "All", body: "Ends when every step in it has finished." },
-  { mode: "race", title: "Race", body: "Ends as soon as the first step finishes." },
-  { mode: "deadline", title: "Deadline", body: "Ends when the step you pick finishes." },
-];
+/** One way a parallel group can end: its label, its brief in With descriptions, and the hint. */
+function ModeOption({
+  mode,
+  label,
+  checked,
+  onChoose,
+  inputRef,
+}: {
+  mode: ParallelMode;
+  label: string;
+  checked: boolean;
+  onChoose: () => void;
+  inputRef: Ref<HTMLInputElement> | undefined;
+}) {
+  const described = useDescribed(DESCRIBE_MODE[mode]);
+  return (
+    <Tooltip label={label} hint={described.hint} delay="long" side="right">
+      <label className={styles.radio} data-testid={`insert-parallel-mode-${mode}`}>
+        <input ref={inputRef} type="radio" name="parallel-mode" checked={checked} onChange={onChoose} />
+        <span className={styles.radioTitle}>{label}</span>
+        {described.brief === undefined ? null : <span className={styles.itemHint}>{described.brief}</span>}
+      </label>
+    </Tooltip>
+  );
+}
 
 function ParallelPane() {
   const state = useEditor();
   const command = (state.autoRobot?.commands ?? state.project?.robot.commands ?? [])[0];
-  const [mode, setMode] = useState<ParallelStep["mode"]>("all");
+  const [mode, setMode] = useState<ParallelMode>("all");
   const [deadline, setDeadline] = useState<DeadlineChoice>("drive");
+  // The chosen way to end takes the focus; the arrows pick another, as in any radio group.
+  const first = useFirstField<HTMLInputElement>();
   return (
     <>
-      <PaneHead title="Parallel group" />
-      <p className={styles.note}>
-        A drive{command === undefined ? "" : ` and ${command.name}`}, running at the same time. Add
-        more steps inside it afterwards.
-      </p>
+      <PaneHead title="Parallel" />
       <div role="radiogroup" aria-label="How the group ends" className={styles.radios}>
-        {MODES.map((option) => (
-          <label key={option.mode} className={styles.radio} data-testid={`insert-parallel-mode-${option.mode}`}>
-            <input
-              type="radio"
-              name="parallel-mode"
-              checked={mode === option.mode}
-              onChange={() => {
-                setMode(option.mode);
-              }}
-            />
-            <span className={styles.radioTitle}>{option.title}</span>
-            <span className={styles.itemHint}>{option.body}</span>
-          </label>
+        {PARALLEL_MODES.map((option) => (
+          <ModeOption
+            key={option.value}
+            mode={option.value}
+            label={option.label}
+            inputRef={option.value === mode ? first : undefined}
+            checked={mode === option.value}
+            onChoose={() => {
+              setMode(option.value);
+            }}
+          />
         ))}
       </div>
       {mode === "deadline" ? (
@@ -464,12 +724,14 @@ function BranchPane() {
   const [condition, setCondition] = useState(conditions[0]?.name ?? "");
   const [withElse, setWithElse] = useState(true);
   const summary = conditions.find((candidate) => candidate.name === condition)?.summary;
+  const first = useFirstField<HTMLSelectElement>();
   return (
     <>
       <PaneHead title="Branch" />
       <label className={styles.formRow}>
         <span className={styles.formLabel}>If</span>
         <select
+          ref={first}
           className={styles.select}
           value={condition}
           data-testid="insert-branch-condition"

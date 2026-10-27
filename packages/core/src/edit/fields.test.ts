@@ -9,10 +9,12 @@ import {
   setParallel,
   setSegmentKind,
   setSegmentSource,
+  setTransfer,
   setWait,
 } from "./fields.js";
 import { canonicalRoundTrip, testAuto } from "./testing.js";
 import { addStep } from "./steps.js";
+import { finish } from "./finish.js";
 
 const firstSegment = (auto: ReturnType<typeof testAuto>, stepId: string) => {
   const step = auto.steps.find((candidate) => candidate.id === stepId);
@@ -58,6 +60,21 @@ describe("setSegmentKind", () => {
     const curved = setSegmentKind(testAuto(), "leg1", 0, "bezier", { xIn: 3, yIn: 12 });
     const straight = setSegmentKind(curved, "leg1", 0, "line", { xIn: 0, yIn: 0 });
     expect(firstSegment(straight, "leg1")?.kind).toBe("line");
+  });
+
+  it("keeps the provenance the caller gives the control point", () => {
+    const auto = setSegmentKind(testAuto(), "leg1", 0, "bezier", { xIn: 3, yIn: 12, provenance: "SET FROM EDITOR" });
+    const segment = firstSegment(auto, "leg1");
+    expect(segment?.kind === "bezier" ? segment.control : []).toEqual([
+      { xIn: 3, yIn: 12, provenance: "SET FROM EDITOR" },
+    ]);
+  });
+
+  it("turns a curve into a line without a control point, and refuses a curve without one", () => {
+    const curved = setSegmentKind(testAuto(), "leg1", 0, "bezier", { xIn: 3, yIn: 12 });
+    expect(firstSegment(setSegmentKind(curved, "leg1", 0, "line"), "leg1")?.kind).toBe("line");
+    expect(() => setSegmentKind(testAuto(), "leg1", 0, "bezier")).toThrow(EditError);
+    expect(() => setSegmentKind(testAuto(), "leg1", 0, "bezier")).toThrow(/needs a control point/);
   });
 });
 
@@ -110,5 +127,149 @@ describe("the one-field edits", () => {
     expect(marker?.command.name).toBe("intakeOn");
     expect(marker?.at).toEqual({ t: 0.5 });
     expect(() => setMarkerCommand(testAuto(), "leg1", 4, { name: "intakeOn" })).toThrow(/marker/);
+  });
+});
+
+describe("setTransfer", () => {
+  const withTransfer = () =>
+    addStep(testAuto(), {
+      id: "partnerScores",
+      kind: "transfer",
+      from: "partner",
+      to: "hiveRedUpCell",
+      expectedCount: 3,
+    });
+  const transferOf = (auto: ReturnType<typeof testAuto>) => {
+    const step = auto.steps.find((candidate) => candidate.id === "partnerScores");
+    if (step?.kind !== "transfer") throw new Error("not a transfer step");
+    return step;
+  };
+
+  it("sets an actual count apart from the expected one, and clears it again", () => {
+    const failed = setTransfer(withTransfer(), "partnerScores", { actualCount: 0 });
+    expect(transferOf(failed)).toMatchObject({ expectedCount: 3, actualCount: 0 });
+    expect(canonicalRoundTrip(failed)).toContain('"actualCount": 0');
+    const cleared = setTransfer(failed, "partnerScores", { actualCount: null });
+    expect("actualCount" in transferOf(cleared)).toBe(false);
+  });
+
+  it("drops an actual count equal to the expected one, so the file carries no edge case", () => {
+    const same = setTransfer(withTransfer(), "partnerScores", { actualCount: 3 });
+    expect("actualCount" in transferOf(same)).toBe(false);
+  });
+
+  it("changes the places and the expected count, and refuses a count that is not whole", () => {
+    const moved = setTransfer(withTransfer(), "partnerScores", { from: "offField", to: "loadingZoneRed", expectedCount: 2 });
+    expect(transferOf(moved)).toMatchObject({ from: "offField", to: "loadingZoneRed", expectedCount: 2 });
+    expect(() => setTransfer(withTransfer(), "partnerScores", { expectedCount: -1 })).toThrow(EditError);
+    expect(() => setTransfer(withTransfer(), "partnerScores", { actualCount: 1.5 })).toThrow(EditError);
+  });
+
+  it("refuses a step that is not a transfer", () => {
+    expect(() => setTransfer(testAuto(), "leg1", { expectedCount: 1 })).toThrow(/not a transfer/);
+  });
+});
+
+describe("setParallel", () => {
+  /** A group that runs all of its members, the first a command and the second a path with no id. */
+  const withGroup = () =>
+    finish({
+      ...testAuto(),
+      steps: [
+        ...testAuto().steps,
+        {
+          id: "grp",
+          kind: "parallel",
+          mode: "all",
+          steps: [
+            { kind: "command", name: "launcherIdle" },
+            {
+              kind: "path",
+              segments: [{ kind: "line", from: "current", to: { xIn: 24, yIn: 24, headingRad: 0 } }],
+              heading: { mode: "tangent" },
+            },
+          ],
+        },
+      ],
+    });
+  const groupOf = (auto: ReturnType<typeof testAuto>, id: string) => {
+    const step = auto.steps.find((candidate) => candidate.id === id);
+    if (step?.kind !== "parallel") throw new Error("not a parallel group");
+    return step;
+  };
+
+  it("all to deadline picks the first member that drives, and names it when it has no id", () => {
+    const auto = setParallel(withGroup(), "grp", { mode: "deadline" });
+    const group = groupOf(auto, "grp");
+    expect(group.mode).toBe("deadline");
+    // The id it went by, grp.2, with the dot a step's id cannot hold taken out.
+    expect(group.deadline).toBe("grp2");
+    expect(group.steps[1]?.id).toBe("grp2");
+    expect(group.steps[0]?.id).toBeUndefined();
+    expect(canonicalRoundTrip(auto)).toContain('"deadline": "grp2"');
+  });
+
+  it("deadline to all or race removes the deadline key", () => {
+    for (const mode of ["all", "race"] as const) {
+      const auto = setParallel(testAuto(), "park", { mode });
+      const group = groupOf(auto, "park");
+      expect(group.mode).toBe(mode);
+      expect("deadline" in group).toBe(false);
+      expect(canonicalRoundTrip(auto)).not.toContain('"deadline"');
+    }
+  });
+
+  it("keeps a deadline group's own deadline when it is set to deadline again", () => {
+    const named = setParallel(testAuto(), "park", { deadline: "spinDown" });
+    expect(groupOf(setParallel(named, "park", { mode: "deadline" }), "park").deadline).toBe("spinDown");
+  });
+
+  it("moves the deadline to another of the group's own steps", () => {
+    expect(groupOf(setParallel(testAuto(), "park", { deadline: "spinDown" }), "park").deadline).toBe("spinDown");
+  });
+
+  it("refuses an empty deadline in plain words, not the schema's", () => {
+    expect(() => setParallel(testAuto(), "park", { deadline: "" })).toThrow(EditError);
+    expect(() => setParallel(testAuto(), "park", { deadline: "" })).toThrow(
+      'A deadline group ends when one of its own steps ends, so its deadline has to name one: "drive" or "spinDown".',
+    );
+    expect(() => setParallel(testAuto(), "park", { deadline: "" })).not.toThrow(/String must contain/);
+  });
+
+  it("refuses a deadline outside the group", () => {
+    expect(() => setParallel(testAuto(), "park", { deadline: "leg1" })).toThrow(
+      '"leg1" is not one of this group\'s own steps; its deadline has to name one: "drive" or "spinDown".',
+    );
+  });
+
+  it("refuses a deadline for a group that does not run until one", () => {
+    expect(() => setParallel(withGroup(), "grp", { deadline: "grp.2" })).toThrow(
+      /only a group in deadline mode has a deadline/,
+    );
+  });
+});
+
+describe("setWait", () => {
+  const withWait = () => addStep(testAuto(), { id: "pause", kind: "wait", seconds: 0.5 });
+
+  it("refuses both a time and a condition, and neither, in plain words", () => {
+    expect(() => setWait(withWait(), "pause", { seconds: 1, until: "hopperFull" })).toThrow(EditError);
+    expect(() => setWait(withWait(), "pause", { seconds: 1, until: "hopperFull" })).toThrow(
+      "A wait waits for a number of seconds or for a condition, not both.",
+    );
+    expect(() => setWait(withWait(), "pause", {})).toThrow(
+      "A wait needs a number of seconds or a condition to wait for.",
+    );
+  });
+
+  it("swaps a condition for a time and back, keeping the timeout", () => {
+    const waiting = addStep(testAuto(), { id: "pause", kind: "wait", until: "hopperFull", timeoutS: 1 });
+    const timed = setWait(waiting, "pause", { seconds: 1 });
+    const step = timed.steps.find((candidate) => candidate.id === "pause");
+    expect(step).toMatchObject({ kind: "wait", seconds: 1, timeoutS: 1 });
+    expect(step !== undefined && "until" in step).toBe(false);
+    const back = setWait(timed, "pause", { until: "hopperFull" }).steps.find((candidate) => candidate.id === "pause");
+    expect(back).toMatchObject({ kind: "wait", until: "hopperFull", timeoutS: 1 });
+    expect(back !== undefined && "seconds" in back).toBe(false);
   });
 });

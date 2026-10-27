@@ -63,10 +63,11 @@ import java.util.Set;
  *
  * <h2>Versioning</h2>
  * {@link #FORMAT_VERSION} is the newest {@code formatVersion} this runtime understands;
- * {@link #MIN_FORMAT_VERSION} is the oldest. 1, 2 and 3 are read today: each older number is the identity
+ * {@link #MIN_FORMAT_VERSION} is the oldest. 1, 2, 3 and 4 are read today: each older number is the identity
  * migration in memory (the content means the same thing at every number, per
- * {@code packages/schema/src/migrate.ts}; v3 only added the {@code piecewise} heading mode, which an
- * older file cannot contain), so nothing here branches on which of them a file says. A file at another version is refused at init
+ * {@code packages/schema/src/migrate.ts}; v3 only added the {@code piecewise} heading mode and v4 only
+ * the planner-only {@code transfer} step, which an older file cannot contain), so nothing here branches
+ * on which of them a file says. A file at another version is refused at init
  * with both numbers in the message, per site/docs/file-format.md, and the message says which
  * way the gap has to be closed. A file newer than the runtime needs a newer runtime: raise the
  * {@code zenith-runtime} version in the robot project's Gradle dependencies. A file older than the runtime
@@ -93,7 +94,7 @@ import java.util.Set;
 public final class AutoFile {
 
     /** The newest {@code formatVersion} this runtime understands. See the class javadoc before changing it. */
-    public static final int FORMAT_VERSION = 3;
+    public static final int FORMAT_VERSION = 4;
 
     /** The oldest {@code formatVersion} this runtime understands. See the class javadoc before changing it. */
     public static final int MIN_FORMAT_VERSION = 1;
@@ -133,22 +134,89 @@ public final class AutoFile {
      * the file it is. Nothing here stops the auto; each runtime's {@code AutoFromFile} shows them on the
      * Driver Station during init. Empty for a file the editor saved.
      *
-     * <p>Today the one case is a {@code timeoutS} on a {@code sequence}, {@code parallel} or
+     * <p>A load finds one case: a {@code timeoutS} on a {@code sequence}, {@code parallel} or
      * {@code branch}. The file format gives a timeout to {@code path}, {@code command} and {@code wait}
      * steps only, and the editor's schema drops it anywhere else, so honouring it here would run a
-     * hand-written file differently from the way the editor plans and simulates it.
+     * hand-written file differently from the way the editor plans and simulates it. At init each
+     * runtime's {@code AutoFromFile} adds what only the robot can tell ({@link #addWarning}): path
+     * speeds nothing applies ({@link PathSpeeds}) and a default speed it could not read. This list is a
+     * live view, so a warning added later shows in it.
      */
     public final List<String> warnings;
 
+    /**
+     * True for an auto whose routine is Java an exported class wrote ({@link #inCode}), not a file: it has
+     * no {@link #steps} and nothing was read.
+     */
+    public final boolean fromCode;
+
+    /**
+     * What a path with no speed of its own drives at, 0 to 1, as an exported class wrote it
+     * ({@link #inCode}), or {@code null} for a file, whose deployed {@code robot.json} says it.
+     */
+    public final Double defaultSpeedFraction;
+
+    /** What {@link #warnings} views; only {@link #addWarning} writes to it. */
+    private final List<String> warningList;
+
     private AutoFile(String name, String title, String description, String alliance,
-            Pose startPose, List<Step> steps, List<String> warnings) {
+            Pose startPose, List<Step> steps, List<String> warnings, boolean fromCode,
+            Double defaultSpeedFraction) {
         this.name = name;
         this.title = title;
         this.description = description;
         this.alliance = alliance;
         this.startPose = startPose;
         this.steps = Collections.unmodifiableList(steps);
+        this.warningList = warnings;
         this.warnings = Collections.unmodifiableList(warnings);
+        this.fromCode = fromCode;
+        this.defaultSpeedFraction = defaultSpeedFraction;
+    }
+
+    /**
+     * An auto whose routine is written out in Java, for a class {@code zenith codegen --export} wrote:
+     * no file is read, and the class builds its own routine. It carries only what the runtime needs
+     * besides the routine: the names the Driver Station shows, the alliance the poses are written for,
+     * the start pose and the default path speed. It has no {@link #steps}.
+     *
+     * @param name                 the auto's short name, for telemetry and error messages
+     * @param title                what the Driver Station shows
+     * @param alliance             the alliance the class's poses are written for, {@code "RED"} or {@code "BLUE"}
+     * @param startXIn             start pose x, field frame, inches, in {@code alliance}'s frame
+     * @param startYIn             start pose y, field frame, inches, in {@code alliance}'s frame
+     * @param startHeadingRad      start heading, radians counter-clockwise from +x, in {@code alliance}'s frame
+     * @param defaultSpeedFraction what a path with no speed of its own drives at, over 0 and at most 1
+     * @return the auto, with no steps
+     * @throws IllegalArgumentException when the alliance is not RED or BLUE, a name is empty, or the speed
+     *                                  is not over 0 and at most 1
+     */
+    public static AutoFile inCode(String name, String title, String alliance, double startXIn, double startYIn,
+            double startHeadingRad, double defaultSpeedFraction) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("an auto written in code needs a name");
+        }
+        if (!"RED".equals(alliance) && !"BLUE".equals(alliance)) {
+            throw new IllegalArgumentException(name + ": an alliance is \"RED\" or \"BLUE\", found \""
+                    + alliance + "\"");
+        }
+        if (!(defaultSpeedFraction > 0 && defaultSpeedFraction <= 1)) {
+            throw new IllegalArgumentException(name + ": a default path speed is over 0 and at most 1, found "
+                    + defaultSpeedFraction);
+        }
+        return new AutoFile(name, title == null || title.isEmpty() ? name : title, "", alliance,
+                new FilePose(startXIn, startYIn, startHeadingRad), new ArrayList<Step>(),
+                new ArrayList<String>(), true, defaultSpeedFraction);
+    }
+
+    /**
+     * Add a warning found at init, after the file was loaded: something the runtime can only know once
+     * it has the team's robot. It shows in {@link #warnings} on the Driver Station like a load warning.
+     *
+     * @param warning one message
+     */
+    public void addWarning(String warning) {
+        warningList.add(warning);
     }
 
     /**
@@ -279,7 +347,7 @@ public final class AutoFile {
             throw new IllegalArgumentException(root.get("steps").path() + ": an auto needs at least one step");
         }
         requireUniqueIds(steps, new LinkedHashSet<String>(), root.get("steps").path());
-        return new AutoFile(name, title, description, alliance, startPose, steps, warnings);
+        return new AutoFile(name, title, description, alliance, startPose, steps, warnings, false, null);
     }
 
     private static void requireVersion(Json root, String fileName) {
@@ -449,6 +517,15 @@ public final class AutoFile {
             return new WaitStep(id, timeoutS, Double.valueOf(node.num("seconds")), null);
         }
 
+        if ("transfer".equals(kind)) {
+            // formatVersion 4: a planner-only note that game pieces move between two ledger
+            // locations (a partner scoring, the human player entering pieces through the loading
+            // zone). Nothing on the robot does it, so it runs as a wait of zero seconds, which keeps
+            // its id in the trace and changes no timing.
+            // Its from, to and counts are the planner's alone and are not read here.
+            return new WaitStep(id, null, Double.valueOf(0.0), null);
+        }
+
         if ("parallel".equals(kind)) {
             String mode = node.str("mode");
             if (!"all".equals(mode) && !"race".equals(mode) && !"deadline".equals(mode)) {
@@ -501,7 +578,7 @@ public final class AutoFile {
         }
 
         throw new IllegalArgumentException(node.path() + ".kind: unknown step kind \"" + kind
-                + "\"; this runtime knows path, command, wait, parallel, branch and sequence");
+                + "\"; this runtime knows path, command, wait, transfer, parallel, branch and sequence");
     }
 
     /**

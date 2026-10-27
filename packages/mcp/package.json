@@ -1,6 +1,6 @@
 {
   "name": "@horizon36596/zenith-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The Zenith MCP server: lets an agent read, edit, check, render and simulate FTC autonomous routines over stdio.",
   "keywords": [
     "ftc",

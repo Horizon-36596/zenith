@@ -47,3 +47,12 @@ describe("estimateS grammar", () => {
     expect(estimateExpressionNames(parseEstimateExpression("max(a, b) + a * 2"))).toEqual(["a", "b"]);
   });
 });
+
+describe("estimateS names (issue #377)", () => {
+  it("reads only the scope's own names, never Object.prototype's", () => {
+    expect(evaluateEstimate("toString", {})).toBeNull();
+    expect(evaluateEstimate("toString * 2", {})).toBeNull();
+    expect(evaluateEstimate("constructor + 1", { count: 2 })).toBeNull();
+    expect(evaluateEstimate("count * 2", { count: 2 })).toBe(4);
+  });
+});

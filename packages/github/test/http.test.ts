@@ -25,6 +25,20 @@ describe("HttpClient", () => {
     await expect(http.request("https://api.github.com/ok")).resolves.toEqual({ ok: true });
   });
 
+  it("calls the global fetch on its own, not as a method, as a browser requires", async () => {
+    const real = globalThis.fetch;
+    // A browser's fetch throws "Illegal invocation" when `this` is anything but the window.
+    globalThis.fetch = function (this: unknown) {
+      if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } }));
+    } as typeof fetch;
+    try {
+      await expect(new HttpClient(auth).request("/ok")).resolves.toEqual({ ok: true });
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
   it("attaches the bearer token and the API version header", async () => {
     const { fetchImpl, calls } = createFetchStub([
       { method: "GET", match: /\/ok$/, handler: () => ({ status: 200, body: { ok: true } }) },

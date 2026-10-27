@@ -1,0 +1,30 @@
+/* The bottom panel's tabs, in the place and type of the panel title (UI_GUIDE 9.3); the open tab
+   carries the 2 px accent underline (UI_GUIDE section 4.1). */
+.tabs {
+  display: flex;
+  align-self: stretch;
+  gap: var(--space-4);
+  flex: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 0;
+  border-bottom: 2px solid transparent;
+  border-top: 2px solid transparent;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--fw-medium);
+  color: var(--text-mid);
+}
+
+.tab:hover {
+  color: var(--text-hi);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--text-hi);
+  border-bottom-color: var(--accent);
+}

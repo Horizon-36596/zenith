@@ -1,0 +1,174 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/path.json",
+  "formatVersion": 1,
+  "kind": "path",
+  "season": "biobuzz",
+  "alliance": "RED",
+  "title": "Score and park, Pedro frame",
+  "source": {
+    "planner": "hand-written fixture",
+    "exporter": "none"
+  },
+  "frame": {
+    "preset": "pedro"
+  },
+  "startPose": {
+    "x": 58.75,
+    "y": 7.75,
+    "heading": 90
+  },
+  "steps": [
+    {
+      "id": "toScore",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "x": 58.75,
+            "y": 7.75,
+            "heading": 90
+          },
+          "to": {
+            "x": 58.75,
+            "y": 34.75,
+            "heading": 90
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      }
+    },
+    {
+      "id": "scorePreload",
+      "kind": "wait",
+      "seconds": 1.5
+    },
+    {
+      "id": "gardenApproach",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "bezier",
+          "from": {
+            "x": 58.75,
+            "y": 34.75
+          },
+          "control": [
+            {
+              "x": 30.75,
+              "y": 40.75
+            }
+          ],
+          "to": {
+            "x": 12.75,
+            "y": 26.75
+          }
+        }
+      ],
+      "heading": {
+        "mode": "piecewise",
+        "ranges": [
+          {
+            "startT": 0,
+            "endT": 0.4,
+            "heading": {
+              "mode": "constant",
+              "heading": 90
+            }
+          },
+          {
+            "startT": 0.5,
+            "endT": 1,
+            "heading": {
+              "mode": "tangent"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gardenPickup",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "x": 12.75,
+            "y": 26.75
+          },
+          "to": {
+            "x": 12.75,
+            "y": 12.75
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "heading": -90
+      },
+      "speedFraction": 0.6
+    },
+    {
+      "kind": "wait",
+      "seconds": 0.8
+    },
+    {
+      "id": "backToScore",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "bezier",
+          "from": {
+            "x": 12.75,
+            "y": 12.75
+          },
+          "control": [
+            {
+              "x": 20.75,
+              "y": 20.75
+            },
+            {
+              "x": 46.75,
+              "y": 40.75
+            }
+          ],
+          "to": {
+            "x": 58.75,
+            "y": 34.75
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangentReversed"
+      },
+      "timeoutS": 4
+    },
+    {
+      "kind": "wait",
+      "seconds": 1.5
+    },
+    {
+      "id": "park",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "x": 58.75,
+            "y": 34.75
+          },
+          "to": {
+            "x": 30.75,
+            "y": 34.75
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "heading": 180
+      }
+    }
+  ]
+}

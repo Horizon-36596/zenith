@@ -54,6 +54,7 @@ The server finds its project by walking up from its own working directory lookin
 | `zenith.render` | Renders to SVG or PNG. |
 | `zenith.diff` | Structural diff between two autos. |
 | `zenith.sim` | Runs the robot repo's simulator via the CLI. |
+| `zenith.optimize` | Optimize path on one path step: a faster route between its own two ends, returned as an `OptimizeResult`, or the fastest clear route, even a slower one, when the step goes through something (`originalBlocked`). Read-only; apply the pick with `zenith.edit.setRoute`. |
 | `zenith.registry` | `robot.json`'s `commands`/`conditions` in full. |
 | `zenith.waypoints` | `waypoints.json`'s named poses in full. |
 | `zenith.edit.*` | One tool per structural edit primitive in `@horizon36596/zenith-core`'s `edit/` — see the Agents and MCP page. |

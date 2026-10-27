@@ -1,4 +1,4 @@
-# Publishes the seven @horizon36596/zenith-* packages to npm. A release is a human-pushed v* tag; the steps are in PUBLISHING.md.
+# Publishes the eight @horizon36596/zenith-* packages to npm. A release is a human-pushed v* tag; the steps are in PUBLISHING.md.
 #
 # The tag must match the root package.json version (v0.1.0 for 0.1.0), and the job stops before
 # publishing anything when it does not. The packages go out in dependency order, each with an npm
@@ -78,7 +78,7 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.publish != true }}
         run: |
           set -euo pipefail
-          for dir in schema core season-biobuzz seasons github cli mcp; do
+          for dir in schema core season-biobuzz seasons import github cli mcp; do
             name="$(node -p "require('./packages/$dir/package.json').name")"
             if npm view "$name@$VERSION" version >/dev/null 2>&1; then
               echo "$name@$VERSION is already on npm; skipping."

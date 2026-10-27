@@ -22,8 +22,8 @@ const toScreen = (point: { xIn: number; yIn: number }): { xPx: number; yPx: numb
 });
 
 const spec = (overrides: Partial<FieldImageSpec> = {}): FieldImageSpec => ({
-  src: "app:fields/biobuzz/biobuzz-dark.webp",
-  credit: "Team Juice 16236",
+  src: "app:fields/example/field-dark.webp",
+  credit: "Example Team",
   pxBounds: "fullBleed",
   rotationDeg: 90,
   variants: [],
@@ -103,14 +103,14 @@ describe("reading field.image", () => {
   });
 
   it("resolves an app: source against the app's public root and leaves others alone", () => {
-    expect(resolveImageUrl("app:fields/biobuzz/biobuzz-dark.webp")).toBe("/fields/biobuzz/biobuzz-dark.webp");
+    expect(resolveImageUrl("app:fields/example/field-dark.webp")).toBe("/fields/example/field-dark.webp");
     expect(resolveImageUrl("app:fields/x.webp", "/zenith")).toBe("/zenith/fields/x.webp");
     expect(resolveImageUrl("images/field.png")).toBe("images/field.png");
   });
 
   it("writes the credit one way, whatever form the file uses", () => {
-    for (const credit of ["Team Juice 16236", "Field image by Team Juice 16236", "Field image: Team Juice 16236"]) {
-      expect(creditLine(spec({ credit }))).toBe("Field image: Team Juice 16236");
+    for (const credit of ["Example Team", "Field image by Example Team", "Field image: Example Team"]) {
+      expect(creditLine(spec({ credit }))).toBe("Field image: Example Team");
     }
     expect(creditLine(spec({ credit: null }))).toBeNull();
   });
@@ -119,13 +119,9 @@ describe("reading field.image", () => {
 const examples = fileURLToPath(new URL("../../../../examples/starter/", import.meta.url));
 
 describe.skipIf(!existsSync(`${examples}zenith.json`))("the starter example field", () => {
-  it("ships the dark picture by default, with dark, black and light styles and its credit", () => {
+  it("names no picture: the editor draws the BIOBUZZ field from its geometry", () => {
     const loaded = loadField(JSON.parse(readFileSync(`${examples}autos/field/biobuzz.field.json`, "utf8")) as unknown);
-    const read = readFieldImage(loaded);
-    expect(read?.rotationDeg).toBe(90);
-    expect(read?.pxBounds).toBe("fullBleed");
-    expect(resolveImageUrl(chooseImageSource(read as FieldImageSpec, null))).toBe("/fields/biobuzz/biobuzz-dark.webp");
-    expect(read?.variants.map((variant) => variant.name)).toEqual(["dark", "black", "light"]);
-    expect(creditLine(read)).toBe("Field image: Team Juice 16236");
+    expect(readFieldImage(loaded)).toBeNull();
+    expect(creditLine(readFieldImage(loaded))).toBeNull();
   });
 });

@@ -1,0 +1,183 @@
+/* The Report a bug dialog (ReportBugDialog.tsx), in the modal frame of UI_GUIDE section 8.10. */
+
+/* The dialog's own column. The tall modal body sets no gap between its children (Modal.module.css
+   .tallBody), so without this each label sat flush against the field above it. Every child keeps
+   its full height (flex: none), so a scrolling body never squeezes a field under the next label,
+   and a textarea the person resizes pushes everything below it down. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.form > * {
+  flex: none;
+}
+
+.prose {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field > * {
+  flex: none;
+}
+
+.label {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.required {
+  margin-left: var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.textarea {
+  width: 100%;
+  min-height: calc(var(--row-h) * 2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  color: var(--text-hi);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  resize: vertical;
+}
+
+.textarea:hover {
+  border-color: var(--border-strong);
+}
+
+.textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}
+
+.setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+}
+
+.setupHead {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-hi);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.setupRow {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+.setupRow dt {
+  color: var(--text-lo);
+}
+
+.setupRow dd {
+  margin: 0;
+  color: var(--text-hi);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.multi {
+  white-space: pre-wrap;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.check input {
+  margin-top: 3px;
+}
+
+.check label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.warn {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--sev-warn-bg);
+  color: var(--sev-warn);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+.ok {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+@media (max-width: 560px) {
+  .setupRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+/* The new-issue page, inside a sentence (UX review, S16). */
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:hover {
+  color: var(--accent-hover);
+}
+
+/* What a disabled button's tooltip hangs on: a disabled button takes no pointer events itself. */
+.tipAnchor {
+  display: inline-flex;
+}

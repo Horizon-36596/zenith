@@ -12,7 +12,8 @@ import { continuityGaps } from "../continuity.js";
 import { resolve, type ResolvedStep } from "../resolve.js";
 import { EditError } from "./errors.js";
 import { finish } from "./finish.js";
-import { childPrefix, collectIds, effectiveId, uniqueId } from "./ids.js";
+import { childPrefix, collectIds, effectiveId, stepIdProblem, uniqueId } from "./ids.js";
+import { tidyPinnedIds } from "./rename.js";
 import { findStep, insertAfter, updateStep } from "./tree.js";
 
 /**
@@ -84,7 +85,11 @@ function replaceList(
   return null;
 }
 
-/** The step with its effective id written out, so moving it cannot change what it is called. */
+/**
+ * The step with its effective id written out, so moving it cannot change what it is called. A
+ * pinned id inside a group (`grp.2`) has a dot, which a step's id may not hold, so each edit that
+ * pins passes its result through `tidyPinnedIds`, which renames it to `grp2`.
+ */
 const pinned = (step: Step, index: number, prefix: string): Step =>
   step.id === undefined ? { ...step, id: effectiveId(step, index, prefix) } : step;
 
@@ -187,7 +192,7 @@ export function wrapStepsWithId(
       result = repointParentDeadline(result, where.parentId as string, groupId);
     }
   }
-  return { auto: finish({ ...auto, steps: result }), id: groupId };
+  return { auto: finish({ ...auto, steps: tidyPinnedIds(auto.steps, result) }), id: groupId };
 }
 
 /** Sets the `deadline` of the parallel group `parentId` to `deadline`. */
@@ -197,9 +202,21 @@ function repointParentDeadline(steps: Step[], parentId: string, deadline: string
   ).steps;
 }
 
-/** True for a path step, or a group with one somewhere inside it. */
-const stepDrives = (step: Step): boolean =>
+/**
+ * True for a path step, or a group with one somewhere inside it. A new deadline group's deadline is
+ * its first member that drives (`wrapSteps`, and `setParallel` when a group switches to deadline).
+ */
+export const stepDrives = (step: Step): boolean =>
   step.kind === "path" || childLists(step).some((list) => list.some(stepDrives));
+
+/**
+ * Which member a deadline group ends with when it names none of its own steps: its first member
+ * that drives (`stepDrives`), or its first member when none does. `setParallel` picks it when a
+ * group switches to deadline, and `removeStep` and `moveStep` pass the deadline to it when the step
+ * the deadline named leaves the group, so a deadline group always names one of its own steps.
+ */
+export const defaultDeadlineIndex = (members: readonly Step[]): number =>
+  Math.max(0, members.findIndex((member) => stepDrives(member)));
 
 /**
  * Replaces the `sequence` or `parallel` group `id` with its members, in place, in the list that
@@ -238,7 +255,7 @@ export function unwrapStep(auto: Auto, id: string): Auto {
 
   const result =
     successor?.id === undefined ? steps : renameDeadline(steps, id, successor.id);
-  return finish({ ...auto, steps: result });
+  return finish({ ...auto, steps: tidyPinnedIds(auto.steps, result) });
 }
 
 /** What `insertStepAfter` did, and what it left for the editor to offer. */
@@ -268,7 +285,8 @@ export interface InsertResult {
  * The step after the insertion point used to follow `afterId` and now follows the new step, so it
  * may no longer start where the robot is. The result names it (`continuityGapStepId`) when the
  * insertion opened a CONTINUITY gap there that was not there before, and `repairContinuity` fixes
- * it. A step without an explicit id is given one, as `addStep` does.
+ * it. A step without an explicit id is given one, and an explicit id outside the step id rule is
+ * refused, as `addStep` does.
  */
 export function insertStepAfter(
   auto: Auto,
@@ -317,13 +335,16 @@ export function insertStepAfter(
   if (step.id === undefined) {
     id = uniqueId(step.kind, taken);
   } else {
+    const problem = stepIdProblem(step.id);
+    if (problem !== null) throw new EditError(problem);
     if (taken.has(step.id)) {
       throw new EditError(`A step with id ${JSON.stringify(step.id)} already exists.`);
     }
     id = step.id;
   }
   const named = updateStep(inserted.steps, "step", PENDING, (pending) => ({ ...pending, id }));
-  const result = finish({ ...auto, steps: named.steps });
+  // The id the caller gave the new step is written as given, so the `id` returned names it.
+  const result = finish({ ...auto, steps: tidyPinnedIds(auto.steps, named.steps, [id]) });
 
   const gapsBefore = new Map(continuityGaps(before.steps, before.startPose).map((gap) => [gap.stepId, gap.gapIn]));
   const afterResolve = resolve(result, waypoints);

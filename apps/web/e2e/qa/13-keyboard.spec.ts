@@ -17,6 +17,8 @@ interface Pose {
 const ui = (page: Page) =>
   page.evaluate(`import("/src/state/ui.ts").then((u) => u.getUi())`) as Promise<{ insertOpen: boolean; stepMenu: unknown; helpMenuOpen: boolean }>;
 const looseTo = (page: Page) => editor<Pose>(page, `s.auto.steps.find((x) => x.id === "loose").segments[0].to`);
+const looseHeading = (page: Page) =>
+  editor<{ mode: string; headingRad?: number }>(page, `s.auto.steps.find((x) => x.id === "loose").heading`);
 
 /** Clicks empty, unfocusable page chrome so the keys go to the window, not a field. */
 async function blur(page: Page): Promise<void> {
@@ -123,14 +125,12 @@ test("F6 moves focus from one region to the next", async ({ page }) => {
 
 test("Enter opens Insert, Del deletes, Ctrl D duplicates, Ctrl Z and Ctrl Y undo and redo", async ({ page }) => {
   await page.getByTestId("step-row-pause").click();
-  await blur(page);
   await page.keyboard.press("Enter");
   expect((await ui(page)).insertOpen).toBe(true);
   await page.keyboard.press("Escape");
   expect((await ui(page)).insertOpen).toBe(false);
   const before = await rowIds(page);
   await page.getByTestId("step-row-pause").click();
-  await blur(page);
   await page.keyboard.press("Control+d");
   await expect.poll(async () => (await rowIds(page)).length).toBe(before.length + 1);
   await page.keyboard.press("Control+z");
@@ -139,7 +139,6 @@ test("Enter opens Insert, Del deletes, Ctrl D duplicates, Ctrl Z and Ctrl Y undo
   await expect.poll(async () => (await rowIds(page)).length).toBe(before.length + 1);
   await page.keyboard.press("Control+z");
   await page.getByTestId("step-row-pause").click();
-  await blur(page);
   await page.keyboard.press("Delete");
   await expect.poll(async () => await rowIds(page)).not.toContain("pause");
   await page.keyboard.press("Control+Shift+z");
@@ -150,7 +149,6 @@ test("Enter opens Insert, Del deletes, Ctrl D duplicates, Ctrl Z and Ctrl Y undo
 
 test("Alt+Up and Alt+Down reorder the selected step", async ({ page }) => {
   await page.getByTestId("step-row-pause").click();
-  await blur(page);
   const before = await rowIds(page);
   const at = before.indexOf("pause");
   await page.keyboard.press("Alt+ArrowUp");
@@ -161,7 +159,6 @@ test("Alt+Up and Alt+Down reorder the selected step", async ({ page }) => {
 
 test("arrows nudge the selected point half an inch, Shift two inches; R and Shift R turn it 5 degrees", async ({ page }) => {
   await selectLooseEnd(page);
-  await blur(page);
   const p0 = await looseTo(page);
   await page.keyboard.press("ArrowRight");
   expect((await looseTo(page)).xIn).toBeCloseTo(p0.xIn + 0.5, 6);
@@ -171,11 +168,14 @@ test("arrows nudge the selected point half an inch, Shift two inches; R and Shif
   expect((await looseTo(page)).xIn).toBeCloseTo(p0.xIn - 1.5, 6);
   await page.keyboard.press("Shift+ArrowDown");
   expect((await looseTo(page)).yIn).toBeCloseTo(p0.yIn - 1.5, 6);
-  const h0 = (await looseTo(page)).headingRad ?? 0;
+  // loose holds Heading: Constant, so R turns that one angle, not the point's own heading (issue #147).
+  const h0 = (await looseHeading(page)).headingRad ?? 0;
+  const pointHeading = (await looseTo(page)).headingRad;
   await page.keyboard.press("r");
-  expect((await looseTo(page)).headingRad ?? 0).toBeCloseTo(h0 + (5 * Math.PI) / 180, 6);
+  expect((await looseHeading(page)).headingRad ?? 0).toBeCloseTo(h0 + (5 * Math.PI) / 180, 6);
   await page.keyboard.press("Shift+R");
-  expect((await looseTo(page)).headingRad ?? 0).toBeCloseTo(h0, 6);
+  expect((await looseHeading(page)).headingRad ?? 0).toBeCloseTo(h0, 6);
+  expect((await looseTo(page)).headingRad).toBe(pointHeading);
 });
 
 test("Space plays and pauses; comma and full stop step the playhead a tenth of a second", async ({ page }) => {
@@ -240,7 +240,6 @@ test("browser chords with Ctrl do not trigger the single-key shortcuts", async (
 
 test("Ctrl Shift Enter runs Propose, not Insert", async ({ page }) => {
   await page.getByTestId("step-row-pause").click();
-  await blur(page);
   await page.keyboard.press("Control+Shift+Enter");
   expect((await ui(page)).insertOpen, "the Insert menu stays shut").toBe(false);
 });

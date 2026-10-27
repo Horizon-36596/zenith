@@ -7,25 +7,53 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/*
+ * One row (issue #411): the rough mark, the total, the period, a recorded total when a trace is
+ * loaded, and the level switch at the right before the ?. It never wraps, so choosing a level never
+ * moves the scrubber below (layout rule 8); the total gives up nothing, the switch's words are short.
+ */
 .head {
-  position: relative;
   display: flex;
-  flex-wrap: wrap;
-  padding-right: var(--space-6);
-  align-items: baseline;
-  gap: var(--space-1) var(--space-2);
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
-/* Each chip wraps as a whole: "of 30.00 s" never breaks across two lines in a narrow panel. */
 .head > * {
+  flex: none;
   white-space: nowrap;
 }
 
-/* The ? keeps to the top right corner, so it never wraps onto a line of its own. */
+/*
+ * The rough mark, the total and the period, in the room the switch and the ? leave (E13): the switch
+ * keeps its place at the row's end whatever the total's length, and a period with no room wraps to a
+ * second line the box hides, so it goes whole rather than cut. The total itself never wraps away: it
+ * is the box's narrowest width.
+ */
+.head > .reading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-2);
+  flex: 1 1 auto;
+  height: var(--lh-lg);
+  overflow: hidden;
+}
+
+.reading > * {
+  flex: none;
+  white-space: nowrap;
+}
+
+.totalUnit {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .headHelp {
-  position: absolute;
-  top: 0;
-  right: 0;
+  display: inline-flex;
 }
 
 .total {
@@ -48,19 +76,43 @@
   color: var(--text-lo);
 }
 
-.bound {
-  padding: 2px 6px;
-  border-radius: var(--radius-xs);
+/* Why the instant sim's total is under the estimate (W2-18): a quiet line under the scrubber. */
+.simNote {
+  margin: 0;
   font-size: var(--fs-xs);
-  letter-spacing: var(--tracking-wide);
-  color: var(--prov-unverified);
-  background: var(--prov-unverified-bg);
+  line-height: 16px;
+  color: var(--text-lo);
+}
+
+/* A Full sim run still streaming in: the recorded trace's green, as small as the budget beside it. */
+.simulating {
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--bar-actual);
+  white-space: nowrap;
+}
+
+/* A quiet "~" before a rough total; its tooltip says why it is rough. */
+.bound {
+  margin-right: calc(-1 * var(--space-1));
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  color: var(--text-lo);
+  cursor: default;
 }
 
 .tracks {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* Tall enough for the preview track, the gap and the 3 px band, whichever level is playing. */
+.levelTracks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: calc(var(--bar-h-timeline) + 2px + 3px);
 }
 
 .track {
@@ -117,66 +169,66 @@
   background-color: var(--accent);
 }
 
+/*
+ * A path's joint turn, the turn in place it makes before it drives: the start of the path's own bar,
+ * hatched and hollow like a transition, since the estimate counts it as part of the step.
+ */
+.leadIn {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: inherit;
+  background-color: var(--bar-track);
+  background-image: var(--bar-unknown-hatch);
+  box-shadow: inset 0 0 0 1px var(--bar-estimated);
+  pointer-events: none;
+}
+
+.block[data-selected="true"] .leadIn {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* The recorded run's track and, at its end, its total. */
+.actualRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.actualRow > .track {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .actualTotal {
+  flex: none;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-variant-numeric: var(--numeric);
   font-size: var(--fs-xs);
   color: var(--bar-actual);
 }
 
-/* The playback level: one labelled row under the scrubber, three segments. */
-.levelRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.levelLabel {
-  font-size: var(--fs-xs);
-  color: var(--text-mid);
-}
-
-.levelSwitch {
-  display: inline-flex;
-  flex: 1 1 auto;
-  min-width: 0;
+/* The playback level: the shared segmented switch (components/Segmented.tsx), drawn tighter so its
+   two or three short segments sit at the head row's right end. The role selector outranks the
+   shared switch's own rules, whatever order the two style sheets load in. */
+.levelSwitch[role="group"] {
+  flex-wrap: nowrap;
+  align-self: auto;
+  margin-left: auto;
   padding: 1px;
   gap: 1px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xs);
 }
 
-.levelOption {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 1px var(--space-1);
+.levelSwitch[role="group"] button {
+  flex: none;
+  height: auto;
+  padding: 1px 6px;
   border-radius: var(--radius-0);
   font-size: var(--fs-xs);
-  color: var(--text-lo);
+  font-weight: inherit;
   white-space: nowrap;
-}
-
-.levelOption[aria-disabled="true"] {
-  color: var(--text-disabled);
-  cursor: not-allowed;
-}
-
-.levelOption[aria-disabled="true"]:hover {
-  color: var(--text-disabled);
-}
-
-.levelOption:hover {
-  color: var(--text-hi);
-}
-
-.levelOption[aria-pressed="true"] {
-  background: var(--bg-raised);
-  color: var(--text-hi);
-}
-
-.levelOption:focus-visible {
-  box-shadow: var(--ring-shadow);
 }
 
 .scrub {
@@ -198,7 +250,7 @@
   color: var(--text-lo);
   min-width: 48px;
   text-align: right;
-  /* "5.23 s instant" stays on one line and whole; the slider gives up the width. */
+  /* The playhead time, "5.23 s", stays on one line and whole; the slider gives up the width. */
   flex: none;
   white-space: nowrap;
 }
@@ -235,15 +287,4 @@
 
 .track[data-stale="true"] {
   opacity: 0.6;
-}
-
-.simTotal {
-  font-family: var(--font-mono);
-  font-variant-numeric: var(--numeric);
-  font-size: var(--fs-xs);
-  color: var(--text-mid);
-}
-
-.simTotal[data-stale="true"] {
-  color: var(--text-lo);
 }

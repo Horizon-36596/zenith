@@ -1,9 +1,24 @@
-import { existsSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  GitMissingError,
   GitService,
+  PUSH_TIMEOUT_MS,
   assertNotBase,
+  execGit,
   commitMessage,
   gitArgv,
   guardArgv,
@@ -42,6 +57,8 @@ function fakeGit(options: {
   ahead?: number | null;
   push?: GitOutput;
   status?: string;
+  /** What `git rev-parse --show-prefix` prints: the project's folder inside the repository. */
+  prefix?: string;
 }) {
   const calls: string[][] = [];
   let branch = options.branch;
@@ -62,7 +79,8 @@ function fakeGit(options: {
       return options.remote === null ? fail("no remote") : ok(`${options.remote ?? "https://github.com/example-team/robot.git"}\n`);
     }
     if (key === gitArgv.status().join(" ")) return ok(options.status ?? " M autos/first-auto.auto.json\0?? notes.txt\0");
-    if (key === gitArgv.ahead().join(" ")) return options.ahead === null ? fail() : ok(`${String(options.ahead ?? 0)}\n`);
+    if (args[0] === "rev-parse" && args[1] === "--show-prefix") return ok(`${options.prefix ?? ""}\n`);
+    if (args[0] === "rev-list") return options.ahead === null ? fail() : ok(`${String(options.ahead ?? 0)}\n`);
     if (args[0] === "diff" && args[1] === "--cached") return options.staged === false ? ok() : fail();
     if (args[0] === "push") return options.push ?? ok();
     if (key === gitArgv.head().join(" ")) return ok("0123456789abcdef\n");
@@ -169,9 +187,149 @@ describe("commit", () => {
     expect(commits(git.calls)).toEqual([]);
   });
 
+  it("commits nothing, not even the render, when the auto is the same as in the last commit", async () => {
+    const git = fakeGit({ branch: "main", status: " M autos/other.auto.json\0?? notes.txt\0" });
+    await expect(new GitService({ run: git.run }).commit(root, "first-auto.auto.json", "")).rejects.toThrow(
+      /Nothing to commit: first-auto.auto.json is the same as in the last commit/,
+    );
+    // Refused before anything moved: no branch switch, nothing staged, no commit.
+    expect(git.calls.filter((args) => args[0] === "switch" || args[0] === "add")).toEqual([]);
+    expect(commits(git.calls)).toEqual([]);
+    expect(existsSync(join(root, "autos", ".renders", "first-auto.svg"))).toBe(false);
+  });
+
   it("refuses a detached HEAD", async () => {
     const git = fakeGit({ branch: null });
     await expect(new GitService({ run: git.run }).commit(root, "first-auto.auto.json", "")).rejects.toThrow(/detached/);
+  });
+
+  it("matches git's repository-relative status paths for a project in a subfolder (issue #406)", async () => {
+    const git = fakeGit({
+      branch: "auto/first-auto/me",
+      prefix: "planner/",
+      status: " M planner/autos/first-auto.auto.json\0 M planner/autos/waypoints.json\0 M autos/first-auto.auto.json\0",
+    });
+    const service = new GitService({ run: git.run });
+    await service.commit(root, "first-auto.auto.json", "");
+    // Staged from the project folder, which is where git runs, so the paths stay project-relative.
+    expect(commits(git.calls)[0]).toEqual([
+      "commit",
+      "-m",
+      "auto(first-auto): edit",
+      "--",
+      "autos/first-auto.auto.json",
+      "autos/.renders/first-auto.svg",
+      "autos/waypoints.json",
+    ]);
+    const status = await service.status(root, "first-auto.auto.json");
+    // `autos/first-auto.auto.json` at the top of the repository is another project's, not this one's.
+    expect(status.changedAutos).toEqual([{ status: " M", path: "autos/first-auto.auto.json" }]);
+    expect(status.otherChanges).toBe(2);
+  });
+
+  it("refuses a .renders that is a link, and writes nothing through it (issue #406)", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "zenith-outside-"));
+    try {
+      // A junction on Windows needs no privilege; elsewhere a directory symlink does the same job.
+      // It points inside the repository, so only the link check, not the confinement, refuses it.
+      const inside = join(root, "elsewhere");
+      mkdirSync(inside);
+      symlinkSync(inside, join(root, "autos", ".renders"), process.platform === "win32" ? "junction" : "dir");
+      const git = fakeGit({ branch: "auto/first-auto/me" });
+      await expect(new GitService({ run: git.run }).commit(root, "first-auto.auto.json", "")).rejects.toThrow(/\.renders is a link/);
+      expect(existsSync(join(inside, "first-auto.svg"))).toBe(false);
+      expect(commits(git.calls)).toEqual([]);
+
+      // And one that leads out of the repository is refused by the confinement.
+      rmSync(join(root, "autos", ".renders"), { recursive: true, force: true });
+      symlinkSync(outside, join(root, "autos", ".renders"), process.platform === "win32" ? "junction" : "dir");
+      await expect(new GitService({ run: git.run }).commit(root, "first-auto.auto.json", "")).rejects.toThrow(/through a link/);
+      expect(existsSync(join(outside, "first-auto.svg"))).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("replaces a link at the render's own name instead of writing through it (issue #406)", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "zenith-outside-"));
+    const victim = join(outside, "victim.txt");
+    writeFileSync(victim, "outside", "utf8");
+    try {
+      mkdirSync(join(root, "autos", ".renders"));
+      const svg = join(root, "autos", ".renders", "first-auto.svg");
+      try {
+        symlinkSync(victim, svg, "file");
+      } catch {
+        // A file symlink needs privilege on Windows; without one there is nothing to check here.
+        return;
+      }
+      const git = fakeGit({ branch: "auto/first-auto/me" });
+      await new GitService({ run: git.run }).commit(root, "first-auto.auto.json", "");
+      expect(readFileSync(victim, "utf8")).toBe("outside");
+      expect(readFileSync(svg, "utf8")).toContain("<svg");
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("replaces a directory link at the render's own name, and leaves what it led to alone (issue #453)", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "zenith-outside-"));
+    const kept = join(outside, "kept.txt");
+    writeFileSync(kept, "outside", "utf8");
+    try {
+      mkdirSync(join(root, "autos", ".renders"));
+      const svg = join(root, "autos", ".renders", "first-auto.svg");
+      // A junction on Windows needs no privilege, unlike a file symlink; elsewhere a directory
+      // symlink does the same job.
+      symlinkSync(outside, svg, process.platform === "win32" ? "junction" : "dir");
+      const git = fakeGit({ branch: "auto/first-auto/me" });
+      await new GitService({ run: git.run }).commit(root, "first-auto.auto.json", "");
+      expect(lstatSync(svg).isSymbolicLink()).toBe(false);
+      expect(readFileSync(svg, "utf8")).toContain("<svg");
+      expect(readFileSync(kept, "utf8")).toBe("outside");
+      expect(readdirSync(outside)).toEqual(["kept.txt"]);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a project in a subfolder of a real repository (issue #406)", () => {
+  let repo = "";
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), "zenith-desktop-repo-"));
+  });
+  afterEach(() => {
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  const git = async (cwd: string, ...args: string[]): Promise<string> => {
+    const out = await execGit(args, cwd);
+    if (out.code !== 0) throw new Error(`git ${args.join(" ")} failed: ${out.stderr}`);
+    return out.stdout;
+  };
+
+  it("sees the saved auto as changed and commits it", { timeout: 30_000 }, async () => {
+    const project = join(repo, "planner");
+    cpSync(root, project, { recursive: true });
+    await git(repo, "init", "-q", "-b", "auto/first-auto/me");
+    await git(repo, "config", "user.name", "Zenith Test");
+    await git(repo, "config", "user.email", "test@example.com");
+    await git(repo, "config", "commit.gpgsign", "false");
+    await git(repo, "config", "core.autocrlf", "false");
+    await git(repo, "add", "-A");
+    await git(repo, "commit", "-q", "-m", "chore: the robot repository");
+    patchAuto(project, "first-auto.auto.json", (auto) => {
+      auto["title"] = "Edited in a subfolder";
+    });
+
+    const service = new GitService();
+    const status = await service.status(project, "first-auto.auto.json");
+    expect(status.changedAutos.map((file) => file.path)).toEqual(["autos/first-auto.auto.json"]);
+    const result = await service.commit(project, "first-auto.auto.json", "subfolder");
+    expect(result.files).toEqual(["autos/first-auto.auto.json", "autos/.renders/first-auto.svg"]);
+    const committed = (await git(repo, "show", "--name-only", "--format=", "HEAD")).split(/\r?\n/).filter(Boolean);
+    expect(committed.sort()).toEqual(["planner/autos/.renders/first-auto.svg", "planner/autos/first-auto.auto.json"]);
   });
 });
 
@@ -193,6 +351,31 @@ describe("push", () => {
     await expect(new GitService({ run: git.run }).push(root)).rejects.toThrow(/Pull them first/);
     expect(pushes(git.calls)).toHaveLength(1);
   });
+
+  it("gives the push a time limit, and says so when it runs out", async () => {
+    const git = fakeGit({ branch: "auto/first-auto/me", push: { code: 1, stdout: "", stderr: "", timedOut: true } });
+    await expect(new GitService({ run: git.run }).push(root)).rejects.toThrow(
+      "The push took too long, so Zenith stopped it. Check the connection and try again.",
+    );
+    const call = git.run.mock.calls.find(([args]) => args[0] === "push") as unknown as [string[], string, { timeoutMs?: number }];
+    expect(call[2]).toEqual({ timeoutMs: PUSH_TIMEOUT_MS });
+  });
+
+  it("says GitHub could not be reached when there is no network", async () => {
+    const git = fakeGit({ branch: "auto/first-auto/me", push: fail("fatal: unable to access 'https://github.com/example-team/robot.git/': Could not resolve host: github.com") });
+    await expect(new GitService({ run: git.run }).push(root)).rejects.toThrow("Could not reach GitHub. Check the connection and try again.");
+  });
+});
+
+describe("without git", () => {
+  it("says git is missing, not that the folder is not a repository", async () => {
+    const run = vi.fn(async (): Promise<GitOutput> => {
+      throw new GitMissingError();
+    });
+    await expect(new GitService({ run }).status(root, "first-auto.auto.json")).rejects.toThrow(
+      "Git is not installed on this computer, so Zenith cannot commit. Install Git for Windows from git-scm.com, then reopen this panel.",
+    );
+  });
 });
 
 describe("openPullRequest", () => {
@@ -209,7 +392,7 @@ describe("openPullRequest", () => {
       if (step?.segments?.[0] === undefined) throw new Error("driveOut has no segment");
       step.segments[0].to = { xIn: -80, yIn: -36, headingRad: 1.5708 };
     });
-    const git = fakeGit({ branch: "auto/first-auto/me", ahead: 1 });
+    const git = fakeGit({ branch: "auto/first-auto/me", ahead: 1, status: "?? notes.txt\0" });
     const d = deps();
     await expect(new GitService({ run: git.run }).openPullRequest(root, "first-auto.auto.json", d)).rejects.toThrow(/Validation has \d+ errors?/);
     expect(d.openOrUpdate).not.toHaveBeenCalled();
@@ -252,6 +435,37 @@ describe("openPullRequest", () => {
       const body = (d.openOrUpdate.mock.calls[0] as unknown as [{ body: string }])[0].body;
       expect(body).toContain("## demo");
       expect(result.number).toBe(7);
+    });
+
+    it("refuses while the auto differs from the last commit, since the pull request holds only commits (issue #406)", async () => {
+      for (const status of [" M autos/demo.auto.json\0", "?? autos/demo.auto.json\0", "M  autos/demo.auto.json\0"]) {
+        const git = fakeGit({ branch: "auto/demo/me", ahead: 1, status });
+        const d = deps();
+        await expect(new GitService({ run: git.run }).openPullRequest(clean, "demo.auto.json", d)).rejects.toThrow(/not committed/);
+        expect(pushes(git.calls)).toEqual([]);
+        expect(d.openOrUpdate).not.toHaveBeenCalled();
+      }
+    });
+
+    it("names the render from the top of the repository for a project in a subfolder (issue #406)", async () => {
+      const git = fakeGit({ branch: "auto/demo/me", prefix: "planner/", status: " M autos/demo.auto.json\0" });
+      const d = deps();
+      await new GitService({ run: git.run }).openPullRequest(clean, "demo.auto.json", d);
+      expect(git.calls).toContainEqual(["cat-file", "-e", "HEAD:planner/autos/.renders/demo.svg"]);
+      const body = (d.openOrUpdate.mock.calls[0] as unknown as [{ body: string }])[0].body;
+      expect(body).toContain("https://raw.githubusercontent.com/example-team/robot/auto/demo/me/planner/autos/.renders/demo.svg");
+    });
+
+    it("compares HEAD with origin's copy of the branch, not the configured upstream (issue #406)", async () => {
+      const git = fakeGit({ branch: "auto/demo/me", ahead: 0 });
+      await new GitService({ run: git.run }).openPullRequest(clean, "demo.auto.json", deps());
+      expect(git.calls).toContainEqual(["rev-list", "--count", "refs/remotes/origin/auto/demo/me..HEAD"]);
+      expect(pushes(git.calls)).toEqual([]);
+
+      // Origin has no copy of the branch yet: rev-list fails, and the branch is pushed.
+      const unpushed = fakeGit({ branch: "auto/demo/me", ahead: null });
+      await new GitService({ run: unpushed.run }).openPullRequest(clean, "demo.auto.json", deps());
+      expect(pushes(unpushed.calls)).toHaveLength(1);
     });
   });
 });

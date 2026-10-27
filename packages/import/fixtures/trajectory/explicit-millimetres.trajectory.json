@@ -1,0 +1,41 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/trajectory.json",
+  "formatVersion": 1,
+  "kind": "trajectory",
+  "season": "biobuzz",
+  "alliance": "BLUE",
+  "frame": {
+    "originIn": {
+      "xIn": -72,
+      "yIn": -72
+    },
+    "xAxis": "+y",
+    "yAxis": "+x",
+    "units": "mm",
+    "headingUnit": "deg",
+    "headingZero": "+y",
+    "headingPositive": "cw"
+  },
+  "rateHz": 10,
+  "poses": [
+    [
+      254,
+      0,
+      0
+    ],
+    [
+      508,
+      0,
+      90
+    ],
+    [
+      762,
+      254,
+      90
+    ]
+  ],
+  "boundingBox": {
+    "lengthIn": 18,
+    "widthIn": 18
+  }
+}

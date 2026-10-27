@@ -146,6 +146,25 @@ public final class AutoSpec {
     }
 
     /**
+     * An auto whose routine is written out in Java, for a class {@code zenith codegen --export} wrote, which
+     * returns this from {@link AutoFromFile#loadSpec()}: no file is read. See {@link AutoFile#inCode}.
+     *
+     * @param name                 the auto's short name, for telemetry and error messages
+     * @param title                what the Driver Station shows
+     * @param alliance             the alliance the class's poses are written for, {@code "RED"} or {@code "BLUE"}
+     * @param startXIn             start pose x, field frame, inches, in {@code alliance}'s frame
+     * @param startYIn             start pose y, field frame, inches, in {@code alliance}'s frame
+     * @param startHeadingRad      start heading, radians counter-clockwise from +x, in {@code alliance}'s frame
+     * @param defaultSpeedFraction what a path with no speed of its own drives at, over 0 and at most 1
+     * @return the auto, with no steps
+     */
+    public static AutoSpec inCode(String name, String title, String alliance, double startXIn, double startYIn,
+            double startHeadingRad, double defaultSpeedFraction) {
+        return new AutoSpec(AutoFile.inCode(name, title, alliance, startXIn, startYIn, startHeadingRad,
+                defaultSpeedFraction));
+    }
+
+    /**
      * The waypoints in {@code source}, or an empty map when the file is absent.
      *
      * @param source where to read {@code waypoints.json} from

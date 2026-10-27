@@ -31,7 +31,16 @@ npx zenith init --command-library ivy
 npx zenith init --command-library solverslib
 ```
 
-In an existing project, add it by hand.
+In the editor, opening a robot repository that has no `zenith.json` yet offers
+[Set up](editor.md#setting-zenith-up-in-your-robot-repository), which has a **Command library**
+choice. It is filled in only when an import in your TeamCode names SolversLib or Ivy, and otherwise
+stays **Not chosen yet**.
+
+In an existing project, choose it in the editor: open **Settings** (the gear in the toolbar, or
+`Ctrl ,`) and go to **Code**. Under **This project**, pick SolversLib or Ivy, and Zenith writes it
+into the open project's `zenith.json` at once. This works for a project opened from a folder or in
+the desktop app. For a project opened from GitHub, or the read-only example, Settings shows the
+library and says why it cannot change it there. You can also add it by hand.
 
 For Ivy:
 
@@ -41,6 +50,10 @@ For Ivy:
   "dir": "TeamCode/src/main/assets/autos",
   "commandLibrary": "ivy",
   "robotClass": "org.firstinspires.ftc.teamcode.zenith.MyRobot"
+},
+"codegen": {
+  "package": "org.firstinspires.ftc.teamcode.zenith",
+  "dir": "TeamCode/src/main/java"
 }
 ```
 
@@ -52,8 +65,16 @@ For SolversLib:
   "dir": "TeamCode/src/main/assets/autos",
   "commandLibrary": "solverslib",
   "robotClass": "org.firstinspires.ftc.teamcode.zenith.MyRobot"
+},
+"codegen": {
+  "package": "org.firstinspires.ftc.teamcode.zenith",
+  "dir": "TeamCode/src/main/java"
 }
 ```
+
+The `codegen` section, which `zenith init` writes, says where the generated Java goes. Without it,
+`zenith deploy` writes no OpMode, and the Driver Station lists none of your autos unless your own
+OpModes load them.
 
 There is no default. Until the key is set, every command that would write Java refuses, and says:
 
@@ -68,8 +89,9 @@ Exactly two things write Java:
 - **`zenith deploy`**, and the desktop app's Deploy preview and button, write one OpMode stub per auto
   when `zenith.json` has a `codegen` section, which says where the stubs go. With a `codegen` section
   they need the key, and check it before they copy anything. Without one they only copy the auto,
-  robot, field and waypoint files, which name no library, so they run without the key and say that no
-  library was needed.
+  robot, field and waypoint files, which name no library, so they run without the key. They then
+  write no OpMode, and they warn that the Driver Station will not list the autos unless your own
+  OpModes load them.
 
 Everything else works without it: a `zenith.json` with no `commandLibrary` opens in the editor, and
 `zenith validate`, the checks and the sims run as usual.
@@ -201,7 +223,9 @@ and the `commandLibrary` key change together, so do the steps in one go and depl
     ```
 
     Under `--json`, the output has `"commandLibrary": "ivy"`. If the line says SolversLib, the
-    `commandLibrary` inside the `deploy` block still says `"solverslib"`.
+    `commandLibrary` inside the `deploy` block still says `"solverslib"`. If it says that no Java is
+    written, `zenith.json` has no `codegen` section, so no stub was rewritten; add the one shown
+    under [You must choose](#you-must-choose).
 
 8. **Generated classes.** If your team keeps readable classes from `zenith codegen`, run it again for
    each one, so they are written against Ivy too.

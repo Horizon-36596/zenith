@@ -87,6 +87,28 @@
   white-space: nowrap;
 }
 
+/* A row with a detail line grows to fit it, so a long command summary is read whole. */
+.tall {
+  height: auto;
+  min-height: var(--row-h-comfortable);
+  padding-block: var(--space-1);
+}
+
+.text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.detail {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
 .match {
   background: transparent;
   color: var(--text-hi);
@@ -103,5 +125,13 @@
   margin: 0;
   padding: var(--space-3);
   font-size: var(--fs-md);
+  color: var(--text-lo);
+}
+
+/* An action a switch in Settings hides (spec 15 section 7): greyed, but still a choice, since
+   choosing it opens Settings at the switch, so it uses the quiet text colour rather than the
+   disabled one, which is for inert controls only. */
+.off,
+.rowActive.off {
   color: var(--text-lo);
 }

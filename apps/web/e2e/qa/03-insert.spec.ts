@@ -8,6 +8,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   dragWorld,
   editor,
+  findingRows,
   installCanvasProbe,
   knownBug,
   lastFrame,
@@ -27,13 +28,14 @@ test.beforeEach(async ({ page }) => {
 });
 
 /**
- * toGarden is the third of the example's eight top-level steps and ends at gardenApproach,
- * (-61, -44), facing the south wall. The step after it, sweepGarden, starts from "current".
+ * toGarden is the ninth of the example's thirteen top-level steps and ends at gardenSweepStart,
+ * (-46, -62), heading west along the south wall. The step after it, sweepGarden, starts from
+ * "current".
  */
 const ANCHOR = "toGarden";
-const ANCHOR_END = { xIn: -61, yIn: -44 };
-/** Where the routine's last step ends, the scoreSouth waypoint: what v1 wrongly continued from. */
-const ROUTINE_END = { xIn: -12, yIn: -36 };
+const ANCHOR_END = { xIn: -46, yIn: -62 };
+/** Where the routine's last step ends, the scoreNorth waypoint: what v1 wrongly continued from. */
+const ROUTINE_END = { xIn: -13, yIn: 44 };
 
 async function openInsert(page: Page): Promise<void> {
   await page.getByTestId("insert-step").click();
@@ -51,6 +53,7 @@ interface Kind {
 
 const KINDS: Kind[] = [
   { name: "path", rows: 1, prefix: /^path/, pick: async (page) => page.getByTestId("insert-kind-path").click() },
+  { name: "turn on the spot", rows: 1, prefix: /^turn/, pick: async (page) => page.getByTestId("insert-kind-turn").click() },
   {
     name: "command",
     rows: 1,
@@ -101,17 +104,20 @@ const KINDS: Kind[] = [
   },
 ];
 
-test("the insert menu offers every kind, each with an icon and a line of help", async ({ page }) => {
+test("the insert menu offers every kind, each with an icon and its name, and its help on a long hover", async ({ page }) => {
   await loadExample(page);
   await selectStep(page, ANCHOR);
   await openInsert(page);
-  for (const kind of ["path", "command", "wait", "sequence", "parallel", "branch"]) {
+  for (const kind of ["path", "turn", "command", "wait", "sequence", "parallel", "branch"]) {
     const item = page.getByTestId(`insert-kind-${kind}`);
     await expect(item, kind).toBeVisible();
     await expect(item.locator("svg").first(), `${kind} has an icon`).toBeVisible();
+    // Labels only, the default: the name and nothing under it (issue #246).
     const text = (await item.innerText()).trim();
-    expect(text.split(/\s+/).length, `${kind} has a line of help: "${text}"`).toBeGreaterThanOrEqual(4);
+    expect(text.split(/\s+/).length, `${kind} shows a name only: "${text}"`).toBeLessThanOrEqual(4);
   }
+  await page.getByTestId("insert-kind-sequence").hover();
+  await expect(page.locator('[role="tooltip"]')).toContainText("Steps in order, as one block.");
   await shot(page, "03-insert-menu");
   await page.getByTestId("insert-kind-wait").click();
   await expect(page.getByTestId("insert-wait-seconds")).toBeVisible();
@@ -179,12 +185,13 @@ test("a path inserted in the middle starts where the selected step ends, not whe
 
 test("a path inserted by the menu after a step facing a wall stays on the field", async ({ page }) => {
   await loadExample(page);
-  // sweepGarden ends at gardenPickup, (-61, -62), facing the south wall 10 in away.
+  // sweepGarden ends at gardenSweepEnd, (-62, -62), facing the west wall 10 in away.
   await selectStep(page, "sweepGarden");
   await openInsert(page);
   await page.getByTestId("insert-kind-path").click();
   const id = await editor<string>(page, "s.selection.stepId");
   const to = await editor<{ xIn: number; yIn: number }>(page, `s.auto.steps.find((x) => x.id === ${JSON.stringify(id)}).segments[0].to`);
+  expect(to.xIn).toBeGreaterThan(-72);
   expect(to.yIn).toBeGreaterThan(-72);
   const perimeter = await editor<string[]>(
     page,
@@ -226,35 +233,31 @@ test("the add-path tool's rubber band starts at the selected step's end", async 
   void dragWorld;
 });
 
-test("inserting before a step with a fixed start flags the gap and offers Connect", async ({ page }) => {
+test("inserting before a step with a fixed start flags the gap, with its fix in Problems", async ({ page }) => {
   await loadExample(page);
   // sweepGarden starts from "current" in the example, so give it a fixed start first: the
-  // gardenApproach waypoint, which is where toGarden leaves the robot, so there is no gap until the
+  // gardenSweepStart waypoint, which is where toGarden leaves the robot, so there is no gap until the
   // insert puts a path between them.
   await selectStep(page, "sweepGarden");
-  await page.getByTestId("inspector-from-kind-0").selectOption("ref");
-  await page.getByTestId("inspector-from-ref-0").selectOption("gardenApproach");
+  await page.getByTestId("inspector-from-source-0").selectOption("ref:gardenSweepStart");
   await expect
     .poll(async () => editor<unknown>(page, `s.auto.steps.find((x) => x.id === "sweepGarden").segments[0].from`))
-    .toEqual({ ref: "gardenApproach" });
+    .toEqual({ ref: "gardenSweepStart" });
   const continuityNow = async () =>
     editor<number>(page, `m.currentDerived().findings.filter((f) => f.code === "CONTINUITY").length`);
   expect(await continuityNow()).toBe(0);
   await selectStep(page, ANCHOR);
   await openInsert(page);
   await page.getByTestId("insert-kind-path").click();
-  const id = await editor<string>(page, "s.selection.stepId");
-  const connect = page.locator('[data-testid^="connect-fix-"]');
   const continuity = async () =>
     editor<number>(page, `m.currentDerived().findings.filter((f) => f.code === "CONTINUITY").length`);
-  await expect.poll(async () => (await connect.count()) + (await continuity())).toBeGreaterThan(0);
+  await expect.poll(continuity).toBeGreaterThan(0);
+  // The gap is offered in one place, the CONTINUITY row in Problems; the list keeps only the
+  // step's severity dot (issue #411).
+  await expect(findingRows(page, "CONTINUITY").first()).toBeVisible();
+  await expect(page.locator('[data-testid^="connect-fix-"]')).toHaveCount(0);
+  await expect(page.getByTestId("step-dot-sweepGarden")).toBeAttached();
   await shot(page, "03-connect-offered");
-  if ((await connect.count()) > 0) {
-    await connect.first().click();
-    await expect.poll(continuity).toBe(0);
-    await expect(connect).toHaveCount(0);
-  }
-  void id;
 });
 
 test("inserting before a step that continues from 'current' leaves no gap", async ({ page }) => {
@@ -274,12 +277,115 @@ test("the inspector of each new kind has a ? on every section", async ({ page })
     await selectStep(page, ANCHOR);
     await openInsert(page);
     await kind.pick(page);
-    const inspector = page.getByTestId("inspector");
-    await expect(inspector).toBeVisible();
+    // The selection header, which holds the kind's ?, is part of the panel, not of its scroll area (issue #431).
+    const inspector = page.getByTestId("inspector-panel");
+    await expect(page.getByTestId("inspector")).toBeVisible();
     const headers = await inspector.locator("h2, h3, [data-section]").count();
     const helps = await inspector.locator('[data-testid^="help-"]').count();
     if (helps === 0 || helps < Math.min(headers, 1)) missing.push(`${kind.name}: ${String(helps)} ? for ${String(headers)} headers`);
     await shot(page, `03-inspector-${kind.name.replace(/\s+/g, "-")}`);
   }
   expect(missing).toEqual([]);
+});
+
+interface TurnStep {
+  segments: { kind: string; from: unknown; to: unknown }[];
+  heading: { mode: string; fromRad: number; toRad: number };
+  timeoutS?: number;
+}
+
+interface TurnPlan {
+  arrival: number;
+  end: { xIn: number; yIn: number; headingRad: number };
+  samples: number;
+  nominalS: number;
+}
+
+const turnStep = (page: Page, id: string) => editor<TurnStep>(page, `s.auto.steps.find((x) => x.id === ${JSON.stringify(id)})`);
+
+/** The plan of a turn: the heading the robot arrives with, its end pose, its samples and its seconds. */
+const turnPlan = (page: Page, id: string) =>
+  editor<TurnPlan>(
+    page,
+    `(() => { const d = m.currentDerived(); const steps = d.plan.steps; const at = steps.findIndex((x) => x.id === ${JSON.stringify(id)}); return { arrival: steps[at - 1].endPose.headingRad, end: steps[at].endPose, samples: steps[at].samples.length, nominalS: d.estimate.byStepId[${JSON.stringify(id)}].nominalS }; })()`,
+  );
+
+/**
+ * Turn on the spot (issue #187, decision D10): a line from "current" to the anchor's own end, which
+ * the runtime holds at its end heading. After driveOut, which ends on the scoreSouth waypoint, the
+ * turn ends on the same waypoint and turns a quarter turn from the way the robot arrives. Its end
+ * arrow, the one heading handle a turn has, is drawn at the point and turns its To when dragged.
+ */
+test("Turn on the spot after driveOut adds a step whose arrow can be dragged on the field", async ({ page }) => {
+  await loadExample(page);
+  await selectStep(page, "driveOut");
+  await openInsert(page);
+  await page.getByTestId("insert-kind-turn").click();
+  await expect(page.getByTestId("insert-menu")).toHaveCount(0);
+
+  const after = await rowIds(page);
+  const id = after[after.indexOf("driveOut") + 1] ?? "";
+  expect(id).toMatch(/^turn/);
+  expect(await editor<string | undefined>(page, "s.selection.stepId")).toBe(id);
+  const step = await turnStep(page, id);
+  expect(step.segments).toEqual([{ kind: "line", from: "current", to: { ref: "scoreSouth" } }]);
+  const planned = await turnPlan(page, id);
+  expect(step.heading.mode).toBe("linear");
+  expect(step.heading.fromRad).toBeCloseTo(planned.arrival, 3);
+  expect(Math.cos(step.heading.toRad - planned.arrival - Math.PI / 2)).toBeCloseTo(1, 6);
+  // Planned as a turn: sampled by angle at one point, ending at To, and timed as the turn rather
+  // than as 0.25 s of settle.
+  expect(planned.samples).toBeGreaterThan(2);
+  expect(Math.cos(planned.end.headingRad - step.heading.toRad)).toBeCloseTo(1, 6);
+  expect(planned.nominalS).toBeGreaterThan(0.25);
+  // A default timeout, so a hold that never settles cannot stall the auto: a half turn at the
+  // starter robot's 6 rad/s plus core's 1.5 s margin, rounded up to a tenth, well past the turn.
+  expect(step.timeoutS).toBeCloseTo(Math.ceil((Math.PI / 6 + 1.5) * 10) / 10, 9);
+  expect(step.timeoutS ?? 0).toBeGreaterThan(planned.nominalS);
+
+  // Its end arrow sits on the point, 26 px along To; drag it round to an eighth of a turn the other way.
+  const view = await canvasView(page);
+  const reachIn = 26 / view.pxPerIn;
+  const base = planned.end;
+  const grab = await worldToScreen(page, base.xIn + reachIn * Math.cos(step.heading.toRad), base.yIn + reachIn * Math.sin(step.heading.toRad));
+  const towards = planned.arrival - Math.PI / 4;
+  const to = await worldToScreen(page, base.xIn + 12 * Math.cos(towards), base.yIn + 12 * Math.sin(towards));
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i += 1) await page.mouse.move(grab.x + ((to.x - grab.x) * i) / 8, grab.y + ((to.y - grab.y) * i) / 8);
+  await page.mouse.up();
+  const turned = (await turnStep(page, id)).heading;
+  expect(Math.cos(turned.toRad - towards)).toBeCloseTo(1, 3);
+  expect(turned.fromRad).toBe(step.heading.fromRad);
+  await expect(page.getByTestId("inspector-heading-to")).toBeVisible();
+  // The drag turned the new step: driveOut still ends on its waypoint, and the turn is still one.
+  expect(await editor<unknown>(page, `s.auto.steps.find((x) => x.id === "driveOut").segments[0].to`)).toEqual({ ref: "scoreSouth" });
+  expect((await turnStep(page, id)).segments[0]?.to).toEqual({ ref: "scoreSouth" });
+  await shot(page, "03-turn-on-the-spot");
+});
+
+test("the canvas menu on a path's end offers Turn on the spot after it", async ({ page }) => {
+  await loadExample(page);
+  await selectStep(page, "driveOut");
+  const middle = await editor<{ xIn: number; yIn: number }>(
+    page,
+    `(() => { const step = m.currentDerived().plan.steps.find((x) => x.id === "driveOut"); return step.endPose; })()`,
+  );
+  // Selecting a step opens the inspector, which resizes the canvas; aim once the view has settled.
+  let at = await worldToScreen(page, middle.xIn, middle.yIn);
+  await expect
+    .poll(async () => {
+      const now = await worldToScreen(page, middle.xIn, middle.yIn);
+      const still = Math.hypot(now.x - at.x, now.y - at.y) < 0.5;
+      at = now;
+      return still;
+    })
+    .toBe(true);
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.click(at.x, at.y, { button: "right" });
+  const item = page.getByTestId("canvas-context-menu").locator('[data-action="insert.turn"]');
+  await expect(item).toBeEnabled();
+  await item.click();
+  const after = await rowIds(page);
+  expect(after[after.indexOf("driveOut") + 1] ?? "").toMatch(/^turn/);
 });

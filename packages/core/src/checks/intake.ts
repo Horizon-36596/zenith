@@ -1,4 +1,4 @@
-import type { CommandCall, MarkerAt, Mouth, Robot } from "@horizon36596/zenith-schema";
+import { childLists, type CommandCall, type MarkerAt, type Mouth, type Robot } from "@horizon36596/zenith-schema";
 import type { PlanStep } from "../types.js";
 
 /**
@@ -42,11 +42,28 @@ export function intakeCall(robot: Robot, call: CommandCall): IntakeCall | null {
   return { mouthIds, running };
 }
 
-/** Where along a path step each mouth starts running: 0 when it already was, or a marker's t. */
-export type RunningFrom = ReadonlyMap<string, number>;
+/**
+ * One stretch of a path step over which a mouth runs, as path fractions: from `fromT` up to, not
+ * including, `toT`. A mouth still running when the step ends has `toT` of infinity.
+ */
+export interface RunningSpan {
+  fromT: number;
+  toT: number;
+}
+
+/**
+ * Where along a path step each mouth runs: one span from 0 when it already was, a span from a
+ * marker's t when a marker starts it, and a span that ends at a marker's t when a marker stops it.
+ * A mouth that never runs on the step is not in the map.
+ */
+export type RunningFrom = ReadonlyMap<string, readonly RunningSpan[]>;
+
+/** True when one of `spans` covers `t`. */
+export const runningAt = (spans: readonly RunningSpan[] | undefined, t: number): boolean =>
+  (spans ?? []).some((span) => t >= span.fromT && t < span.toT);
 
 export interface IntakeTimeline {
-  /** For each path step id, the mouths running on it and where they started. */
+  /** For each path step id, the mouths running on it and where. */
   byStepId: ReadonlyMap<string, RunningFrom>;
 }
 
@@ -59,13 +76,14 @@ export const markerT = (at: MarkerAt, lengthIn: number): number => {
 };
 
 /**
- * Walks the auto once and works out, for every path step, which mouths are running over it: those
- * a previous command turned on and never stopped, those a marker turns on part way through, and,
- * inside a parallel group, those any other member of the group turns on, because that member runs
- * alongside the drive (a deadline drive with an intake sequence beside it is the common case).
+ * Walks the auto once and works out, for every path step, which mouths are running over it and
+ * where: those a previous command turned on and never stopped, those a marker turns on or off part
+ * way through, and, inside a parallel group, those any other member of the group turns on, because
+ * that member runs alongside the drive (a deadline drive with an intake sequence beside it is the
+ * common case). Each arm of a branch starts from the state the branch was entered with, and the
+ * steps after the branch see a mouth running when either arm leaves it running.
  */
 export function intakeTimeline(steps: readonly PlanStep[], robot: Robot): IntakeTimeline {
-  const running = new Set<string>();
   const byStepId = new Map<string, RunningFrom>();
 
   const turnedOn = (list: readonly PlanStep[], into: Set<string>): Set<string> => {
@@ -80,7 +98,8 @@ export function intakeTimeline(steps: readonly PlanStep[], robot: Robot): Intake
     return into;
   };
 
-  const walk = (list: readonly PlanStep[], alongside: ReadonlySet<string> = new Set()): void => {
+  /** Walks `list` in order, turning mouths on and off in `running`. */
+  const walk = (list: readonly PlanStep[], running: Set<string>, alongside: ReadonlySet<string>): void => {
     for (const planned of list) {
       const step = planned.step;
       if (step.kind === "command") {
@@ -94,36 +113,60 @@ export function intakeTimeline(steps: readonly PlanStep[], robot: Robot): Intake
         continue;
       }
       if (step.kind === "path") {
-        const from = new Map<string, number>();
-        for (const id of running) from.set(id, 0);
-        for (const id of alongside) from.set(id, 0);
-        for (const marker of step.markers ?? []) {
-          const call = intakeCall(robot, marker.command);
-          if (call === null) continue;
-          const t = markerT(marker.at, planned.lengthIn);
+        // The markers in path order; markers at the same t keep the order the file gives them.
+        const events = (step.markers ?? [])
+          .map((marker, index) => ({ t: markerT(marker.at, planned.lengthIn), index, call: intakeCall(robot, marker.command) }))
+          .filter((event): event is { t: number; index: number; call: IntakeCall } => event.call !== null)
+          .sort((a, b) => a.t - b.t || a.index - b.index);
+        const opened = new Map<string, number>();
+        for (const id of running) opened.set(id, 0);
+        for (const id of alongside) opened.set(id, 0);
+        const spans = new Map<string, RunningSpan[]>();
+        const close = (id: string, toT: number): void => {
+          const fromT = opened.get(id);
+          if (fromT === undefined) return;
+          opened.delete(id);
+          if (toT > fromT) spans.set(id, [...(spans.get(id) ?? []), { fromT, toT }]);
+        };
+        for (const { t, call } of events) {
           for (const id of call.mouthIds) {
             if (call.running) {
-              from.set(id, Math.min(from.get(id) ?? 1, t));
+              if (!opened.has(id)) opened.set(id, t);
               running.add(id);
             } else {
-              from.delete(id);
+              close(id, t);
               running.delete(id);
             }
           }
         }
-        byStepId.set(planned.id, from);
+        for (const id of [...opened.keys()]) close(id, Number.POSITIVE_INFINITY);
+        byStepId.set(planned.id, spans);
         continue;
       }
       if (planned.children === undefined) continue;
       if (step.kind === "parallel") {
-        walk(planned.children, turnedOn(planned.children, new Set(alongside)));
+        walk(planned.children, running, turnedOn(planned.children, new Set(alongside)));
+      } else if (step.kind === "branch") {
+        // Only one arm runs, so each starts from the state on entry; afterwards a mouth may be
+        // running when either arm (or, with no else, skipping the branch) leaves it running.
+        const entry = new Set(running);
+        const arms = childLists(step).map((arm) => arm.length);
+        if (arms.length < 2) arms.push(0);
+        running.clear();
+        let offset = 0;
+        for (const length of arms) {
+          const state = new Set(entry);
+          walk(planned.children.slice(offset, offset + length), state, alongside);
+          for (const id of state) running.add(id);
+          offset += length;
+        }
       } else {
-        walk(planned.children, alongside);
+        walk(planned.children, running, alongside);
       }
     }
   };
 
-  walk(steps);
+  walk(steps, new Set(), new Set());
   return { byStepId };
 }
 

@@ -1,0 +1,89 @@
+# The retention clean-up, once a day: deletes what the docs site's retention policy says is due.
+# Shares and invites that ended (expired or were revoked) more than 30 days ago, with the requests for
+# more time and the proposals under those shares, old bug reports, and what accounts that no longer
+# exist in sign-in left behind. Everything else is kept. The logic and its tests are in
+# packages/cloud/src/cleanup; cloud/README.md, "Retention clean-up", has the setup.
+#
+# It runs in the public Horizon-36596/zenith repository, whose Actions minutes are free, and only
+# there: the job checks the repository's name, so a fork or a copy never runs it.
+#
+# It needs the repository secret ZENITH_FIREBASE_SERVICE_ACCOUNT: the JSON key of a service account
+# that can read and delete Firestore documents and read sign-in accounts. That key can read the
+# whole database: only repository admins manage secrets, a pull request from a fork never sees them,
+# and anyone who can push a workflow here could use it, so write access to this repository is for
+# people trusted with the whole database. Without the secret the job ends green with a notice.
+#
+# A run that fails leaves the rest for the next day's run, which finds everything still due again.
+
+name: Retention clean-up
+
+on:
+  schedule:
+    # 04:17 UTC every day. Off the hour on purpose: GitHub delays scheduled runs most at the start of an hour.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run: list what would be deleted and delete nothing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# Never two runs at once; a second one waits for the first.
+concurrency:
+  group: retention-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.repository == 'Horizon-36596/zenith'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Secrets cannot be tested in an `if`, so this step looks and says whether the rest runs.
+      - name: Check that the clean-up is configured
+        id: configured
+        env:
+          KEY: ${{ secrets.ZENITH_FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::notice title=Retention clean-up is not configured::The ZENITH_FIREBASE_SERVICE_ACCOUNT secret is not set, so nothing was read or deleted. cloud/README.md, Retention clean-up, says how to set it up."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.configured.outputs.present == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        if: steps.configured.outputs.present == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.configured.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.configured.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # The key goes to this one step, through the environment only; the runner never writes it to a
+      # file or prints it. A scheduled run deletes; a run started by hand is a dry run unless the box
+      # is unticked.
+      - name: Clean up
+        if: steps.configured.outputs.present == 'true'
+        env:
+          ZENITH_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.ZENITH_FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            pnpm cloud:cleanup --dry-run
+          else
+            pnpm cloud:cleanup
+          fi

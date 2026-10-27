@@ -12,6 +12,8 @@ import {
   DESKTOP_API_VERSION,
   type DesktopFileChange,
   type DesktopMenuCommand,
+  type DesktopNavigation,
+  type DesktopSignInProgress,
   type DesktopSimEvent,
   type ZenithDesktopBridge,
 } from "../../../web/src/project/desktopBridge.js";
@@ -47,13 +49,42 @@ const bridge: ZenithDesktopBridge = {
     reopen: (root) => call(CHANNELS.projectReopen, root),
     listAutos: (root) => call(CHANNELS.projectListAutos, root),
     read: (root, path) => call(CHANNELS.projectRead, root, path),
+    hasAuto: (root, fileName) => call(CHANNELS.projectHasAuto, root, String(fileName)),
     writeAuto: (root, fileName, text) => call(CHANNELS.projectWriteAuto, root, fileName, text),
+    setCommandLibrary: (root, library) => call(CHANNELS.projectSetCommandLibrary, root, library),
+    writeRobot: (root, robot) => call(CHANNELS.projectWriteRobot, root, robot),
+    writeWaypoints: (root, waypoints) => call(CHANNELS.projectWriteWaypoints, root, waypoints),
+    listPresets: (root) => call(CHANNELS.projectListPresets, root),
+    writePreset: (root, fileName, text) => call(CHANNELS.projectWritePreset, root, String(fileName), String(text)),
     watch: (root) => call(CHANNELS.projectWatch, root),
+    saveFullProject: (payload) => call(CHANNELS.projectSaveFull, payload),
+    saveAutoInto: (fileName, text) => call(CHANNELS.projectSaveAutoInto, String(fileName), String(text)),
+    pickAutoTarget: (fileName) => call(CHANNELS.projectPickAutoTarget, String(fileName)),
+    writeAutoInto: (root, fileName, text, addWaypoints) =>
+      call(CHANNELS.projectWriteAutoInto, root, String(fileName), String(text), addWaypoints),
+    setupScan: (root) => call(CHANNELS.projectSetupScan, root),
+    setup: (root, request) => call(CHANNELS.projectSetup, root, request),
+    githubOrigin: (root) => call(CHANNELS.projectGitHubOrigin, root),
     onChange: (listener) => subscribe<DesktopFileChange>(EVENTS.fileChanged, listener),
   },
 
+  saveCopy: (suggestedName, text) => call(CHANNELS.saveCopy, String(suggestedName), String(text)),
+  // Text, or the bytes of a picture; main checks the name, the kind and the size again.
+  saveFile: (suggestedName, data) => call(CHANNELS.saveFile, String(suggestedName), typeof data === "string" ? data : new Uint8Array(data)),
+
+  drafts: {
+    hold: (draft) => call(CHANNELS.draftHold, draft === null ? null : { root: draft.root, fileName: String(draft.fileName), text: String(draft.text) }),
+    take: () => call(CHANNELS.draftTake),
+  },
+
+  updates: {
+    check: () => call(CHANNELS.updateCheck),
+  },
+
   sim: {
-    start: (root, fileName) => call(CHANNELS.simStart, root, fileName),
+    // Only the speed crosses: the main process reads everything else from the project's own files.
+    start: (root, fileName, options) => call(CHANNELS.simStart, root, fileName, { speed: options?.speed }),
+    configure: (root, speed) => call(CHANNELS.simConfigure, root, speed),
     cancel: (runId) => call(CHANNELS.simCancel, runId),
     onEvent: (listener) => subscribe<DesktopSimEvent>(EVENTS.simEvent, listener),
   },
@@ -71,11 +102,35 @@ const bridge: ZenithDesktopBridge = {
 
   github: {
     status: () => call(CHANNELS.githubStatus),
-    setToken: (token) => call(CHANNELS.githubSetToken, token),
+    setToken: (token, remember) => call(CHANNELS.githubSetToken, token, remember !== false),
     forgetToken: () => call(CHANNELS.githubForgetToken),
+    cliStatus: () => call(CHANNELS.githubCliStatus),
+    // The one call that hands the page a token: the GitHub CLI's, for GitHub mode, held in memory there.
+    cliToken: () => call(CHANNELS.githubCliToken),
+    oauthAvailability: () => call(CHANNELS.signInRepoAvailability),
+    // GitHub's device flow with the repo scope; progress and cancel are cloudSignIn's.
+    oauthToken: () => call(CHANNELS.signInRepoStart),
+  },
+
+  openRequests: {
+    take: () => call(CHANNELS.openRequestTake),
+    // The event carries nothing; the page takes the request itself, so it is handed over once.
+    onRequest: (listener) =>
+      subscribe<undefined>(EVENTS.openRequest, () => {
+        listener();
+      }),
+  },
+
+  cloudSignIn: {
+    providers: () => call(CHANNELS.signInProviders),
+    start: (provider) => call(CHANNELS.signInStart, String(provider)),
+    cancel: () => call(CHANNELS.signInCancel),
+    onProgress: (listener) => subscribe<DesktopSignInProgress>(EVENTS.signInProgress, listener),
   },
 
   showMenu: (x, y) => call(CHANNELS.menuShow, Number(x), Number(y)),
+  // Plain data only: the main process checks every id and key again, so nothing here is trusted.
+  setMenuKeys: (payload) => call(CHANNELS.menuKeys, payload),
   onMenu: (listener) => subscribe<DesktopMenuCommand>(EVENTS.menu, listener),
 
   onCloseRequest: (listener) => {
@@ -86,6 +141,12 @@ const bridge: ZenithDesktopBridge = {
     return unsubscribe;
   },
   answerClose: (ok) => call(CHANNELS.closeAnswer, ok === true),
+
+  // Only the two directions reach the page, whatever arrives on the channel.
+  onNavigate: (listener) =>
+    subscribe<DesktopNavigation>(EVENTS.navigate, (direction) => {
+      if (direction === "back" || direction === "forward") listener(direction);
+    }),
 };
 
 contextBridge.exposeInMainWorld("zenithDesktop", bridge);

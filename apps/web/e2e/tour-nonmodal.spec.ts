@@ -13,7 +13,13 @@
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { CORE_STOPS, FULL_STOPS } from "../src/tour/stops";
-import { canvasView, editor, waitForFonts, worldToScreen } from "./qa/helpers";
+import { canvasView, choosePreset, editor, waitForFonts, worldToScreen } from "./qa/helpers";
+import { turnOnFeatures } from "./features";
+
+// The tour walks every stop, so every feature is on; `features.spec.ts` checks the ones a switch hides.
+test.beforeEach(async ({ page }) => {
+  await turnOnFeatures(page);
+});
 
 interface Box {
   left: number;
@@ -259,6 +265,20 @@ const PROBES: Record<string, Probe> = {
     const seen = await hoverEveryHelp(page, anchor, "the inspector");
     expect(seen, "the inspector has ? tips to hover").toBeGreaterThan(1);
   },
+  async waypoints(page, anchor) {
+    expect(await hoverEveryHelp(page, anchor, "Waypoints")).toBe(1);
+    // The list works under the tour: the other waypoints, the section after it (issue #431), fold and
+    // open, clear of the card. Full shows every pin, so the group starts open there, and the press
+    // folds it first.
+    const others = page.getByTestId("inspector-waypoints-others");
+    if ((await others.getAttribute("aria-expanded")) === "true") {
+      await others.click();
+      await expect(others).toHaveAttribute("aria-expanded", "false");
+    }
+    await others.click();
+    await expect(others).toHaveAttribute("aria-expanded", "true");
+    await expectCardClear(page, anchor.getByTestId("inspector-waypoints"), "the Waypoints list");
+  },
   async findings(page, anchor) {
     await hoverEveryHelp(page, anchor, "Problems");
     const toggle = anchor.locator('[data-testid^="findings-count-"]').first();
@@ -294,27 +314,34 @@ const PROBES: Record<string, Probe> = {
   },
   async "tool.heading"(page) {
     await hoverForTooltip(page, page.getByTestId("toolbar-tool.heading"), "Heading");
-    // The stop selected a path whose arrows turn: the example's sweepGarden, a Constant heading.
-    await expect.poll(() => editor<string | undefined>(page, "s.selection.stepId")).toBe("sweepGarden");
-    const { end, headingRad } = await editor<{ end: { xIn: number; yIn: number }; headingRad: number }>(
+    // The stop selected a path whose arrows turn: the example's toOtherSide, whose piecewise heading
+    // starts on a Linear range that turns the robot west as it leaves the scoring spot. Its end arrow
+    // points north into collectFlower's marker pin, so the probe turns the first range's start arrow,
+    // which sits 15 % of the way into that range (RANGE_INSET_SHARE).
+    await expect.poll(() => editor<string | undefined>(page, "s.selection.stepId")).toBe("toOtherSide");
+    const headingOf = `JSON.stringify(s.auto.steps.find((x) => x.id === "toOtherSide").heading)`;
+    const before = await editor<string>(page, headingOf);
+    const { base, headingRad } = await editor<{ base: { xIn: number; yIn: number }; headingRad: number }>(
       page,
-      `(() => ({
-        end: m.currentDerived().plan.steps.find((x) => x.id === "sweepGarden").endPose,
-        headingRad: s.auto.steps.find((x) => x.id === "sweepGarden").heading.headingRad,
-      }))()`,
+      `(() => {
+        const first = s.auto.steps.find((x) => x.id === "toOtherSide").heading.ranges[0];
+        const t = first.startT + (first.endT - first.startT) * 0.15;
+        const samples = m.currentDerived().plan.steps.find((x) => x.id === "toOtherSide").samples;
+        const near = samples.reduce((best, x) => (Math.abs(x.t - t) < Math.abs(best.t - t) ? x : best));
+        return { base: { xIn: near.pose.xIn, yIn: near.pose.yIn }, headingRad: first.heading.fromRad };
+      })()`,
     );
-    // The end arrow is drawn 26 px along the heading from the pose; drag it round a quarter turn.
+    // The arrow is drawn 26 px along the heading from its base; drag it round a quarter turn.
     const view = await canvasView(page);
     const reachIn = 26 / view.pxPerIn;
-    const grab = await worldToScreen(page, end.xIn + reachIn * Math.cos(headingRad), end.yIn + reachIn * Math.sin(headingRad));
+    const grab = await worldToScreen(page, base.xIn + reachIn * Math.cos(headingRad), base.yIn + reachIn * Math.sin(headingRad));
     const turned = headingRad + Math.PI / 2;
-    const to = await worldToScreen(page, end.xIn + 12 * Math.cos(turned), end.yIn + 12 * Math.sin(turned));
+    const to = await worldToScreen(page, base.xIn + 12 * Math.cos(turned), base.yIn + 12 * Math.sin(turned));
     await page.mouse.move(grab.x, grab.y);
     await page.mouse.down();
     for (let i = 1; i <= 8; i += 1) await page.mouse.move(grab.x + ((to.x - grab.x) * i) / 8, grab.y + ((to.y - grab.y) * i) / 8);
     await page.mouse.up();
-    const after = await editor<number>(page, `s.auto.steps.find((x) => x.id === "sweepGarden").heading.headingRad`);
-    expect(after, "the arrow turned the heading").not.toBeCloseTo(headingRad, 2);
+    expect(await editor<string>(page, headingOf), "the arrow turned the heading").not.toBe(before);
   },
   async "tool.measure"(page) {
     await hoverForTooltip(page, page.getByTestId("toolbar-tool.measure"), "Measure");
@@ -388,6 +415,13 @@ const PROBES: Record<string, Probe> = {
     await expect(page.getByTestId("palette-input")).toBeVisible();
     await expectCardClear(page, page.getByRole("dialog", { name: "Command palette" }), "the command palette");
   },
+  async settings(page) {
+    await page.getByTestId("toolbar-settings").click();
+    await expect(page.getByTestId("settings")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("settings")).toHaveCount(0);
+    await expect(card(page)).toHaveAttribute("data-stop", "settings");
+  },
   async help(page) {
     await page.getByTestId("toolbar-help").click();
     await expectCardClear(page, page.getByTestId("menu-help.tour").locator("xpath=.."), "the help menu");
@@ -440,6 +474,8 @@ test.describe("the tour never blocks the app", () => {
     });
     await page.goto("/");
     await expect(page.getByTestId("step-row-driveOut")).toBeVisible();
+    // Full, so every stop of the full tour is there to walk.
+    await choosePreset(page, "full");
     await expect(card(page)).toBeVisible();
     await waitForFonts(page);
   });
@@ -452,7 +488,9 @@ test.describe("the tour never blocks the app", () => {
   test("every full-tour stop: target and popovers usable, card clear, tasks done for real", async ({ page }) => {
     for (let i = 0; i < CORE_STOPS.length; i += 1) await page.getByTestId("tour-next").click();
     await page.getByTestId("tour-full").click();
-    for (let index = 0; index < FULL_STOPS.length; index += 1) await walkStop(page, FULL_STOPS, index);
+    // The example is not a GitHub project, so there is no Propose button and no stop for it (issue #412).
+    const full = FULL_STOPS.filter((stop) => stop.id !== "run.propose");
+    for (let index = 0; index < full.length; index += 1) await walkStop(page, full, index);
     await expect(page.getByTestId("tour-finished")).toBeVisible();
   });
 

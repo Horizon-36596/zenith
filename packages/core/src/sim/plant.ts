@@ -4,7 +4,7 @@ import type { PlantParams } from "./types.js";
 
 /**
  * The simulated chassis, matched to the robot repository's headless sim: four
- * first-order wheels, `MecanumDrivePlant`'s mounting-sign
+ * `SimLoop/.../fakehardware/FakeMotor` first-order wheels, `MecanumDrivePlant`'s mounting-sign
  * bookkeeping (which cancels and so is left out), and `MecanumPoseIntegrator`'s forward kinematics
  * with its roller-slip factor on the lateral velocity. The powers reach the wheels the way Pedro's
  * `Mecanum.applyDrive` and `CachedMotor.setPower` write them.
@@ -102,6 +102,31 @@ export class MecanumPlant {
       twistX: body.vx,
       twistY: body.vy,
     };
+  }
+
+  /**
+   * Puts the chassis at a pose moving at a field-frame velocity, kinematically: the wheel speeds are
+   * set to the ones that give that velocity, and the powers to zero, so a velocity of zero leaves it
+   * at rest. Only the instant sim's drift (`drift.ts`) does this, for a command that drives the robot
+   * in a way the sim does not model; nothing on the robot can.
+   */
+  place(pose: { x: number; y: number; heading: number }, velocity: { vx: number; vy: number; omega: number }): void {
+    const st = this.state;
+    st.x = pose.x;
+    st.y = pose.y;
+    st.heading = pose.heading;
+    const cos = Math.cos(pose.heading);
+    const sin = Math.sin(pose.heading);
+    const bodyVx = velocity.vx * cos + velocity.vy * sin;
+    const bodyVy = -velocity.vx * sin + velocity.vy * cos;
+    const v = this.params.maxForwardVelInPerS;
+    const wheelsVy = bodyVy / this.lateralEfficiency;
+    const turn = velocity.omega * this.params.leverArmIn;
+    st.speeds[0] = (bodyVx - wheelsVy - turn) / v;
+    st.speeds[1] = (bodyVx + wheelsVy + turn) / v;
+    st.speeds[2] = (bodyVx + wheelsVy - turn) / v;
+    st.speeds[3] = (bodyVx - wheelsVy + turn) / v;
+    for (let i = 0; i < 4; i += 1) st.powers[i] = 0;
   }
 
   /** One tick: the wheels chase their powers, then the pose integrates the chassis velocity. */

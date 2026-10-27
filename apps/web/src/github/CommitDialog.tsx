@@ -41,7 +41,7 @@ export function CommitDialog() {
           </Button>
           <Button
             kind="primary"
-            disabled={busy || onBase}
+            whyDisabled={busy ? "Saving now." : onBase ? `${repo?.branch ?? "This"} is the base branch, which Zenith never writes to.` : null}
             testId="github-commit-submit"
             onClick={() => {
               setDialog(null);
@@ -75,21 +75,15 @@ export function CommitDialog() {
         />
       </div>
       <p className={styles.prose}>
-        The commit message will be <code className="mono">{message}</code>, on branch{" "}
+        Commits <code className="mono">{message}</code> on{" "}
         <code className="mono">{repo?.branch ?? "—"}</code>.
       </p>
       {onBase ? (
         <p className={styles.warn}>
           {repo?.branch} is the base branch, which Zenith never writes to. Name a work branch in the
-          open-project dialog, or open an auto so one is named for you.
+          open-project dialog.
         </p>
-      ) : (
-        <p className={styles.hint}>
-          The branch is created from {repo?.base} the first time you commit to it. Nothing is
-          force-pushed, and nothing outside the directories <code className="mono">zenith.json</code>{" "}
-          declares is ever written.
-        </p>
-      )}
+      ) : null}
     </Modal>
   );
 }

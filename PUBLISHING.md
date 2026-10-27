@@ -8,9 +8,9 @@ One tag starts three workflows:
 
 | workflow | what it publishes | where |
 |---|---|---|
-| `docs-publish.yml` | the docs site, the web app and the JSON Schemas, as one Pages artifact | <https://libraries.horizon36596.org/zenith/>, `/zenith/app/`, `/zenith/schema/v1/<kind>.json` |
+| `docs-publish.yml` | the docs site, a copy of the web app and the JSON Schemas, as one Pages artifact | <https://libraries.horizon36596.org/zenith/>, `/zenith/app/`, `/zenith/schema/v1/<kind>.json` |
 | `release.yml` | `Zenith-Setup-<version>.exe`, `Zenith-Portable-<version>.exe` and `SHA256SUMS.txt`, with the notes from `CHANGELOG.md` | <https://github.com/Horizon-36596/zenith/releases> |
-| `npm-publish.yml` | the seven `@horizon36596/zenith-*` packages, with provenance | <https://www.npmjs.com/org/horizon36596> |
+| `npm-publish.yml` | the eight `@horizon36596/zenith-*` packages, with provenance | <https://www.npmjs.com/org/horizon36596> |
 
 The fourth channel, the robot runtime on JitPack, builds on demand from the tag (see
 [The robot runtime on JitPack](#the-robot-runtime-on-jitpack)).
@@ -191,7 +191,7 @@ Open <https://jitpack.io/#Horizon-36596/zenith>, find `v0.1.0` under Releases or
 **Get it**. Or ask for the POM, which starts the build and waits for it (a few minutes):
 
 ```powershell
-Invoke-WebRequest -UseBasicParsing -TimeoutSec 900 https://jitpack.io/com/github/Horizon-36596/zenith/v0.1.1/zenith-v0.1.1.pom | Select-Object StatusCode
+Invoke-WebRequest -UseBasicParsing -TimeoutSec 900 https://jitpack.io/com/github/Horizon-36596/zenith/v0.1.2/zenith-v0.1.2.pom | Select-Object StatusCode
 ```
 
 [The robot runtime on JitPack](#the-robot-runtime-on-jitpack) says what a good build log looks like.
@@ -204,8 +204,16 @@ The docs site answers, and its footer carries the version:
 $page = Invoke-WebRequest -UseBasicParsing https://libraries.horizon36596.org/zenith/; "$($page.StatusCode) footer has 0.1.0: $($page.Content.Contains('Zenith 0.1.0'))"
 ```
 
-The web app answers and loads its assets from under `/zenith/app/`. Open it in a browser afterwards
-and press **Load example**; the field picture should draw.
+The web app answers at <https://zenith.horizon36596.org/>, the address the docs, the README and the
+desktop app's share links send people to. Vercel deploys it from the public repository's `main` on its
+own, so give it a few minutes after the push. Open it in a browser afterwards and press **Load
+example**; the field picture should draw.
+
+```powershell
+$web = Invoke-WebRequest -UseBasicParsing https://zenith.horizon36596.org/; "$($web.StatusCode) assets under /assets/: $($web.Content.Contains('/assets/'))"
+```
+
+The Pages copy of the web app answers too, and loads its assets from under `/zenith/app/`:
 
 ```powershell
 $app = Invoke-WebRequest -UseBasicParsing https://libraries.horizon36596.org/zenith/app/; "$($app.StatusCode) assets under /zenith/app/: $($app.Content.Contains('/zenith/app/assets/'))"
@@ -220,7 +228,7 @@ foreach ($kind in 'auto', 'robot', 'field', 'waypoints', 'link') { $url = "https
 The npm packages are at the new version:
 
 ```powershell
-foreach ($name in 'schema', 'core', 'season-biobuzz', 'seasons', 'github', 'cli', 'mcp') { "@horizon36596/zenith-$name $(npm view "@horizon36596/zenith-$name" version)" }
+foreach ($name in 'schema', 'core', 'season-biobuzz', 'seasons', 'import', 'github', 'cli', 'mcp') { "@horizon36596/zenith-$name $(npm view "@horizon36596/zenith-$name" version)" }
 ```
 
 The Release has its three files, and the checksums match the downloads:
@@ -247,7 +255,7 @@ gh repo archive Horizon-36596/zenith-dev --yes
 ### 14. Add Zenith to the library site
 
 The landing page is `index.html` in `Horizon-36596/Horizon-36596.github.io`. Add this card inside
-`<main>`, alongside the other library cards:
+`<main>`, after the SimLoop card:
 
 ```html
     <a class="library" href="/zenith/" aria-label="Zenith - read the documentation">
@@ -284,8 +292,29 @@ After the merge, <https://libraries.horizon36596.org/> shows the card and its li
 
 ## Every later release
 
+These steps are the owner's. An agent does none of them, the version bump in step 2 included, unless
+the owner has approved that exact version in the same conversation (`CLAUDE.md` rule 11).
+
+0. **Once, before the first release with accounts:** the web app and the desktop app are built with
+   the cloud on (`cloud/README.md`, "Public builds"), and both workflows fail without it. Give the
+   public repository at least one desktop sign-in client (Settings, Secrets and variables, Actions).
+   In PowerShell 5.1, one at a time; `gh` asks for each value:
+
+   ```powershell
+   gh variable set ZENITH_GITHUB_CLIENT_ID --repo Horizon-36596/zenith
+   gh variable set ZENITH_GOOGLE_DESKTOP_CLIENT_ID --repo Horizon-36596/zenith
+   gh variable set ZENITH_MICROSOFT_CLIENT_ID --repo Horizon-36596/zenith
+   gh secret set ZENITH_GOOGLE_DESKTOP_CLIENT_SECRET --repo Horizon-36596/zenith
+   ```
+
+   The App Check site key (`appCheckSiteKey` in `cloud/web-config.json`) is optional: without it the
+   release builds warn and App Check stays off. Add it once the console supports it
+   (`cloud/README.md` step 7).
+
 1. Move the `[Unreleased]` entries in `CHANGELOG.md` under a new `## [x.y.z] - YYYY-MM-DD` heading and
-   add its link at the bottom.
+   add its link at the bottom. The notes say what the version adds and fixes for someone using it.
+   They never compare Zenith with another tool or describe a feature as closing a gap, and the scrub
+   fails a snapshot that does.
 2. Set the version in the root `package.json`, stamp it everywhere and check for drift (see
    [The npm packages](#the-npm-packages)), commit, and let CI go green.
 3. Tag and push the tag:
@@ -354,7 +383,7 @@ runtimes: the Ivy classes in `org.horizon36596.zenith.ivy`, the SolversLib class
 and runs the Ivy tests. Teams on either library install the same line:
 
 ```groovy
-implementation 'com.github.Horizon-36596:zenith:v0.1.1'
+implementation 'com.github.Horizon-36596:zenith:v0.1.2'
 ```
 
 The version is the tag exactly as written, `v` included. JitPack only builds public repositories on its
@@ -400,10 +429,11 @@ free tier, so the repository must be public before this works.
 4. Check that the artifact is served under the repository's name:
 
    ```powershell
-   Invoke-WebRequest -UseBasicParsing -Method Head https://jitpack.io/com/github/Horizon-36596/zenith/v0.1.1/zenith-v0.1.1.pom | Select-Object StatusCode
+   Invoke-WebRequest -UseBasicParsing -Method Head https://jitpack.io/com/github/Horizon-36596/zenith/v0.1.2/zenith-v0.1.2.pom | Select-Object StatusCode
    ```
 
-   `200` means teams can install it. A `404` after a green build means JitPack published it under a
+   `200` means teams can install it. (SimLoop's first build was served the same way, as
+   `com/github/Horizon-36596/simloop/v0.1.0-beta1/simloop-v0.1.0-beta1.aar`.) A `404` after a green build means JitPack published it under a
    different name; the log's file list shows which, and `robot/README.md`
    and `site/docs/robot-runtime.md` then need the real
    coordinate.
@@ -416,9 +446,11 @@ failed build on the JitPack page (the log view has a delete control for the owne
 
 ## The npm packages
 
-`.github/workflows/npm-publish.yml` publishes the seven packages on the same `v*` tag, in dependency
-order: `@horizon36596/zenith-schema`, `-core`, `-season-biobuzz`, `-seasons`, `-github`, `-cli` and
-`-mcp`. Each goes out with an npm provenance statement. The job fails before publishing anything
+`.github/workflows/npm-publish.yml` publishes the eight packages on the same `v*` tag, in dependency
+order: `@horizon36596/zenith-schema`, `-core`, `-season-biobuzz`, `-seasons`, `-import`, `-github`,
+`-cli` and `-mcp`. `-import` is new in 0.1.2 and `-cli` depends on it, so 0.1.2 creates it on npm:
+the token must be allowed to create packages under the scope, not only to update the seven that
+exist. Each goes out with an npm provenance statement. The job fails before publishing anything
 when the tag does not match the root `package.json` version, and it skips a version npm already has,
 so a run that stopped halfway can be re-run.
 
@@ -438,7 +470,7 @@ so a run that stopped halfway can be re-run.
    node scripts/stamp-version.mjs; if ($?) { node scripts/check-version.mjs }
    ```
 
-2. The packages build, pack and install cleanly. This packs all seven, installs the tarballs into an
+2. The packages build, pack and install cleanly. This packs all eight, installs the tarballs into an
    empty folder and runs `zenith --version`, `zenith validate` and a `zenith-mcp` session:
 
    ```powershell

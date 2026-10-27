@@ -19,8 +19,9 @@ build on it. The user-facing side is the docs site's GitHub page
 
 ### Creating a token
 
-Zenith v1 signs in with a pasted **fine-grained personal access token**.
-There is no OAuth App and no device flow yet.
+Zenith's sign-in dialog opens on **Sign in with GitHub**, an OAuth token with the `repo` scope (the
+web app gets it through Firebase's GitHub popup, the desktop app through GitHub's device flow). A
+pasted **fine-grained personal access token** is the way to give Zenith one repository only:
 
 1. On github.com: **Settings -> Developer settings -> Personal access tokens -> Fine-grained
    tokens -> Generate new token**.
@@ -45,8 +46,9 @@ actions, settings or anything else in the one repository it can reach, and expir
 - The token is held in memory for the life of the tab or process. It is never written to disk by
   this package.
 - In the browser, `BrowserTokenStore` can also mirror it to `sessionStorage` (the default) so a
-  page reload does not force a re-paste; that mirror is cleared when the tab closes. It is never
-  written to `localStorage`, which would outlive the browser session.
+  page reload does not force a re-paste; that mirror is cleared when the tab closes. Given
+  `storage: localStorage`, it lasts in that browser until `clear()`; the web app does that only when
+  the person picks "In this browser until I sign out".
 - In Node (the CLI), `NodeTokenStore` is a no-op: nothing persists between runs, and it is the
   caller's job (an environment variable, a local file the user manages themselves, an interactive
   prompt) to hand the token to `PatAuth` each time.
@@ -72,7 +74,7 @@ not just by convention:
   naming the files involved when the work branch cannot be brought up to date with the base branch
   cleanly, instead of leaving a half-merged branch behind.
 
-### Where the device flow plugs in later
+### Other ways to get a token
 
 Everything in this package that needs a token depends only on the `AuthProvider` interface:
 
@@ -82,11 +84,11 @@ interface AuthProvider {
 }
 ```
 
-`PatAuth` is the only implementation today: it wraps a pasted token and always returns it. A later
-device-flow implementation (show a code, poll `github.com` for the token, store it with the same `TokenStore`) is a second class implementing the
-same interface; `GitHubClient`, `GitHubProject`, `propose` and `loadReview` take an `AuthProvider`
-and never construct one, so none of them change when it arrives. Swapping sign-in methods is then a
-matter of which `AuthProvider` the app hands to `GitHubClient`, not a rewrite of this package.
+`PatAuth` is the only implementation: it wraps a token and always returns it, whether the token was
+pasted, found by `findSignIn`, or came from the app's Sign in with GitHub (Firebase's popup in the web
+app, the device flow in the desktop app's main process). `GitHubClient`, `GitHubProject`, `propose`
+and `loadReview` take an `AuthProvider` and never construct one, so none of them depend on how the
+token was obtained.
 
 ### Exported API
 
@@ -94,10 +96,16 @@ See `src/index.ts` for the full surface. In short:
 
 - **Auth**: `AuthProvider`, `PatAuth`, `validateToken`, `TokenStore` (`MemoryTokenStore`,
   `BrowserTokenStore`, `NodeTokenStore`).
+- **Sign-in from the environment**: `findSignIn` looks for `GH_TOKEN`, then `GITHUB_TOKEN`, then
+  `gh auth token --hostname github.com`, and throws `NoSignInError` with the one next step when there
+  is none. It runs `gh` through a `CommandRunner` the host passes in, so this package stays free of
+  Node APIs and a test never runs the real GitHub CLI. `parseGitHubRemote` reads owner and repository
+  from a github.com remote URL; `remoteHost` gives only the host, safe to print.
 - **Client**: `GitHubClient` — `repos`, `branches`, `contents`, `git`, `pulls`, `users`.
 - **Project**: `GitHubProject` — `open`, `workBranch`, `save`; `isPathAllowed` /
   `assertPathAllowed`.
-- **Propose**: `propose`, `RENDER_URL_PLACEHOLDER`.
+- **Propose**: `propose`, `RENDER_URL_PLACEHOLDER`, and its parts `openOrUpdatePull` and
+  `fillRenderUrl`, which `zenith propose` reuses after it commits and pushes with git.
 - **Review**: `loadReview`, `lineAnchor`, `diffFileHash`, `diffAnchor`.
 - **Errors**: `AuthError`, `NotFoundError`, `ConflictError`, `RateLimitError`,
   `MergeConflictError`, `PathNotAllowedError`, `BaseBranchWriteError`, `GitHubError`.

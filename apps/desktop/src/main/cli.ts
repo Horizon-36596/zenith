@@ -8,6 +8,8 @@
  */
 export {
   AUTO_NAME_PATTERN,
+  AUTO_SWITCH,
+  OPEN_SWITCH,
   applyDeploy,
   confinePath,
   findJava,
@@ -18,6 +20,7 @@ export {
   MissingToolError,
   planDeploy,
   ProjectError,
+  readJavaSources,
   resolveLauncher,
   splitShellWords,
   tryCore,

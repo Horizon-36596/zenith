@@ -1,9 +1,11 @@
 import type { Field, Robot } from "@horizon36596/zenith-schema";
 import { footprintAt } from "./footprint.js";
 import { makePath, sampleDistances, SAMPLE_SPACING_IN, type PathGeometry } from "./geometry/path.js";
+import { wrapAngle } from "./geometry/angle.js";
 import type { Pose } from "./geometry/vec.js";
 import { headingFunction } from "./heading.js";
 import type { ResolvedAuto, ResolvedStep } from "./resolve.js";
+import { holdTurnRad, TURN_IN_PLACE_LENGTH_IN, TURN_SAMPLE_RAD } from "./turnInPlace.js";
 import type { Finding, Plan, PlanSample, PlanStep } from "./types.js";
 
 export interface PlanOptions {
@@ -100,6 +102,21 @@ export function plan(
           ? () => step.startPose.headingRad
           : headingFunction(heading, geometry);
 
+      if (geometry.lengthIn <= TURN_IN_PLACE_LENGTH_IN) {
+        const turn = turnSamples(step, geometry);
+        return {
+          id: step.id,
+          kind: step.kind,
+          step: step.step,
+          startPose: (turn[0] as PlanSample).pose,
+          endPose: (turn[turn.length - 1] as PlanSample).pose,
+          lengthIn: geometry.lengthIn,
+          samples: turn,
+          geometry,
+          segments: step.segments,
+        };
+      }
+
       const samples: PlanSample[] = [];
       for (const sIn of sampleDistances(geometry, spacingIn)) {
         const t = geometry.tAtDistance(sIn);
@@ -152,6 +169,30 @@ export function plan(
       lengthIn: 0,
       samples: [staticSample(step.startPose)],
     };
+  };
+
+  /**
+   * A turn on the spot (`turnInPlace.ts`), sampled by angle at its one point. The runtime holds the
+   * step's end heading there, so the robot turns from the heading it arrives with, the step's
+   * resolved start, to the end heading `resolve` gives the next step, the short way round, as the
+   * hold turns it. A sample at least every `TURN_SAMPLE_RAD`, so PERIMETER and STRUCTURE sweep the
+   * corners through the whole turn; `t` runs from 0 to 1 through the turn and `sIn` stays 0.
+   */
+  const turnSamples = (step: ResolvedStep, geometry: PathGeometry): PlanSample[] => {
+    const point = geometry.pointAtDistance(geometry.lengthIn);
+    const fromRad = step.startPose.headingRad;
+    const toRad = step.endPose.headingRad;
+    const turnRad = holdTurnRad(fromRad, toRad);
+    const count = Math.max(1, Math.ceil(Math.abs(turnRad) / TURN_SAMPLE_RAD - 1e-9));
+    const samples: PlanSample[] = [];
+    for (let index = 0; index <= count; index += 1) {
+      const t = index / count;
+      const headingRad = index === count ? toRad : wrapAngle(fromRad + turnRad * t);
+      const pose: Pose = { xIn: point.xIn, yIn: point.yIn, headingRad };
+      const footprint = footprintAt(pose, robot, which);
+      samples.push({ sIn: 0, t, pose, footprintIn: footprint.bodyIn, mouthsIn: footprint.mouthsIn });
+    }
+    return samples;
   };
 
   const planStep = (step: ResolvedStep): PlanStep => {

@@ -16,21 +16,23 @@ type Counting = {
   launched: number;
   collected: string[];
   tips: number;
+  /** Where each launch came from, in order. */
+  shots: { target: string; xIn: number; yIn: number }[];
 };
 
 const counting: SeasonRules = {
   id: "counting",
-  initialState: () => ({ held: 0, launched: 0, collected: [], tips: 0 }) as unknown as SeasonState,
+  initialState: () => ({ held: 0, launched: 0, collected: [], tips: 0, shots: [] }) as unknown as SeasonState,
   start: (state, holds) =>
     ({ ...(state as unknown as Counting), held: holds["pollen"] ?? 0 }) as unknown as SeasonState,
   holds: (state) => ({ pollen: (state as unknown as Counting).held }),
-  onLaunch: (state, target, count) => {
-    void target;
+  onLaunch: (state, target, count, pose) => {
     const current = state as unknown as Counting;
     return {
       ...current,
       held: current.held - count,
       launched: current.launched + count,
+      shots: [...current.shots, { target, xIn: pose.xIn, yIn: pose.yIn }],
     } as unknown as SeasonState;
   },
   onCollect: (state, containerId, count) => {
@@ -154,6 +156,199 @@ describe("ledger", () => {
     expect(result.byStepId["yes"]?.launched).toBe(1);
     expect(result.byStepId["no"]).toBeUndefined();
     expect((result.finalState as unknown as Counting).launched).toBe(1);
+  });
+
+  it("issue #373 finding 2: after a known else side, a launch is judged from where that side left the robot", () => {
+    // hopperEmpty reads false with 4 aboard, so the else side runs and drives to (0, -30).
+    const result = run([
+      {
+        id: "fork",
+        kind: "branch",
+        condition: "hopperEmpty",
+        then: [leg("toTheRight")],
+        else: [
+          {
+            ...leg("upField"),
+            segments: [{ kind: "line", from: "current", to: { xIn: 0, yIn: -30 } }],
+          },
+        ],
+      },
+      { id: "volley", kind: "command", name: "shootAll", args: { count: 1 } },
+    ]);
+    expect(result.byStepId["fork"]?.branch).toMatchObject({ known: true, then: false });
+    expect(result.byStepId["upField"]).toBeDefined();
+    expect(result.byStepId["toTheRight"]).toBeUndefined();
+    const shots = (result.finalState as unknown as Counting).shots;
+    expect(shots).toHaveLength(1);
+    expect(shots[0]?.xIn).toBeCloseTo(0, 6);
+    expect(shots[0]?.yIn).toBeCloseTo(-30, 6);
+    expect(result.byStepId["volley"]?.launchPose?.yIn).toBeCloseTo(-30, 6);
+  });
+
+  it("issue #373 finding 3: a count beside collectFrom on a command with no launches hint only collects", () => {
+    const result = run([
+      { id: "grab", kind: "command", name: "setIntake", expect: { collectFrom: "gardenRed", count: 3 } },
+    ]);
+    expect(result.entries[0]?.launched).toBe(0);
+    expect(result.entries[0]?.collected).toEqual({ containerId: "gardenRed", count: 3 });
+    expect(result.entries[0]?.holds).toEqual({ pollen: 7 });
+    expect(result.entries[0]?.row?.label).toBe("grab: collected 3 from gardenRed");
+  });
+
+  it("issue #373 finding 3: a command with no hint still launches when its expect says where", () => {
+    const result = run([
+      { id: "lob", kind: "command", name: "setIntake", expect: { launchesInto: "theTarget", count: 2 } },
+    ]);
+    expect(result.entries[0]?.launched).toBe(2);
+    expect((result.finalState as unknown as Counting).shots[0]?.target).toBe("theTarget");
+  });
+
+  it("issue #373 finding 4: a deadline group cancels a member that would start after its deadline", () => {
+    const group = (deadlineS: number): unknown => ({
+      id: "group",
+      kind: "parallel",
+      mode: "deadline",
+      deadline: "short",
+      steps: [
+        { id: "short", kind: "wait", seconds: deadlineS },
+        {
+          id: "late",
+          kind: "sequence",
+          steps: [
+            { id: "settle", kind: "wait", seconds: 2 },
+            { id: "volley", kind: "command", name: "shootAll", args: { count: 3 } },
+          ],
+        },
+      ],
+    });
+    const cut = run([group(1)]);
+    expect(cut.byStepId["settle"]).toBeDefined();
+    expect(cut.byStepId["volley"]).toBeUndefined();
+    expect((cut.finalState as unknown as Counting).launched).toBe(0);
+
+    const inTime = run([group(3)]);
+    expect(inTime.byStepId["volley"]?.launched).toBe(3);
+  });
+
+  it("issue #373 finding 4: the member that sets a group's end is never cut by that end", () => {
+    // The deadline member's own last step starts exactly as the group ends, and still runs.
+    const deadline = run([
+      {
+        id: "group",
+        kind: "parallel",
+        mode: "deadline",
+        deadline: "lead",
+        steps: [
+          {
+            id: "lead",
+            kind: "sequence",
+            steps: [
+              { id: "settle", kind: "wait", seconds: 2 },
+              { id: "volley", kind: "command", name: "assumeTipped" },
+              { id: "flick", kind: "command", name: "setIntake", expect: { launchesInto: "theTarget", count: 1 } },
+            ],
+          },
+          { id: "beside", kind: "wait", seconds: 1 },
+        ],
+      },
+    ]);
+    expect(deadline.byStepId["flick"]?.launched).toBe(1);
+    expect(deadline.byStepId["volley"]?.tipped).toBe("own");
+
+    // The same for the quickest member of a race.
+    const race = run([
+      {
+        id: "race",
+        kind: "parallel",
+        mode: "race",
+        steps: [
+          {
+            id: "quick",
+            kind: "sequence",
+            steps: [
+              { id: "settle", kind: "wait", seconds: 1 },
+              { id: "flick", kind: "command", name: "setIntake", expect: { launchesInto: "theTarget", count: 1 } },
+            ],
+          },
+          { id: "slow", kind: "wait", seconds: 3 },
+        ],
+      },
+    ]);
+    expect(race.byStepId["flick"]?.launched).toBe(1);
+  });
+
+  it("issue #373 finding 4: a race ends with its quickest member and cancels what would start later", () => {
+    const result = run([
+      {
+        id: "race",
+        kind: "parallel",
+        mode: "race",
+        steps: [
+          { id: "quick", kind: "wait", seconds: 1 },
+          {
+            id: "slow",
+            kind: "sequence",
+            steps: [
+              { id: "settle", kind: "wait", seconds: 2 },
+              { id: "volley", kind: "command", name: "shootAll", args: { count: 3 } },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(result.byStepId["volley"]).toBeUndefined();
+    expect((result.finalState as unknown as Counting).launched).toBe(0);
+  });
+
+  it("issue #373 finding 4: an all group cancels nothing", () => {
+    const result = run([
+      {
+        id: "group",
+        kind: "parallel",
+        mode: "all",
+        steps: [
+          { id: "short", kind: "wait", seconds: 1 },
+          {
+            id: "late",
+            kind: "sequence",
+            steps: [
+              { id: "settle", kind: "wait", seconds: 2 },
+              { id: "volley", kind: "command", name: "shootAll", args: { count: 3 } },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(result.byStepId["volley"]?.launched).toBe(3);
+  });
+
+  it("issue #373 finding 5: a path's markers launch through their commands' hints, at the marker's pose", () => {
+    const result = run([
+      {
+        ...leg("drive"),
+        markers: [{ at: { t: 0.5 }, command: { name: "shootAll", args: { count: 3 } } }],
+      },
+    ]);
+    const entry = result.byStepId["drive"];
+    expect(entry?.launched).toBe(3);
+    expect(entry?.holds).toEqual({ pollen: 1 });
+    expect(entry?.launchedFromMarker).toBe(true);
+    expect(entry?.launchPose?.xIn).toBeCloseTo(10, 0);
+    expect(entry?.row?.label).toBe("drive: launched 3");
+  });
+
+  it("issue #373 finding 5: markers run in the order they sit along the path", () => {
+    const result = run([
+      {
+        ...leg("drive"),
+        markers: [
+          { at: { distanceFromEndIn: 2 }, command: { name: "shootAll", args: { count: 1 } } },
+          { at: { distanceIn: 2 }, command: { name: "shootAll", args: { count: 2 } } },
+        ],
+      },
+    ]);
+    const shots = (result.finalState as unknown as Counting).shots;
+    expect(shots.map((shot) => Math.round(shot.xIn))).toEqual([2, 18]);
   });
 
   it("is deterministic and leaves the state it was given alone", () => {

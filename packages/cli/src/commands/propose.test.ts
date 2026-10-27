@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeProject, simpleAuto, writeAuto } from "../testSupport.js";
-import { runPropose } from "./propose.js";
+import { runPropose, runProposeDryRun } from "./propose.js";
 
 let root = "";
 let out: string[] = [];
@@ -29,12 +29,24 @@ afterEach(() => {
 });
 
 describe("zenith propose", () => {
-  it("without --dry-run, names the alternative and exits 2 (GitHub mode is not this package's)", () => {
+  it("without --dry-run outside a git clone, exits 2 and says to run it in one, without asking GitHub anything", async () => {
     makeProject(root);
     writeAuto(root, "autos", "demo", simpleAuto("demo"));
-    const code = runPropose("demo", { cwd: root });
+    const fetchImpl = vi.fn();
+    const code = await runPropose(
+      "demo",
+      { cwd: root, json: true },
+      {
+        run: async () => ({ code: 128, stdout: "", stderr: "fatal: not a git repository" }),
+        env: {},
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      },
+    );
     expect(code).toBe(2);
-    expect(errOut.join("")).toContain("--dry-run");
+    const parsed = JSON.parse(out.join("")) as { error: string; next: string };
+    expect(parsed.error).toContain("not inside a git repository");
+    expect(parsed.next).toContain("clone");
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("--dry-run blocks on a finding error before touching core.render", () => {
@@ -55,7 +67,7 @@ describe("zenith propose", () => {
         ],
       }),
     );
-    const code = runPropose("bad", { cwd: root, dryRun: true });
+    const code = runProposeDryRun("bad", { cwd: root });
     expect(code).toBe(1);
     expect(existsSync(join(root, "autos/.renders"))).toBe(false);
   });
@@ -63,7 +75,7 @@ describe("zenith propose", () => {
   it("--dry-run either renders and prints the PR body (core.render landed) or the core M1 gate message (it has not)", () => {
     makeProject(root);
     writeAuto(root, "autos", "demo", simpleAuto("demo"));
-    const code = runPropose("demo", { cwd: root, dryRun: true });
+    const code = runProposeDryRun("demo", { cwd: root });
 
     if (code === 0) {
       expect(existsSync(join(root, "autos/.renders/demo.svg"))).toBe(true);
@@ -77,7 +89,7 @@ describe("zenith propose", () => {
   it("--dry-run --json either prints the render path and body, or the error, an agent can parse", () => {
     makeProject(root);
     writeAuto(root, "autos", "demo", simpleAuto("demo"));
-    const code = runPropose("demo", { cwd: root, dryRun: true, json: true });
+    const code = runProposeDryRun("demo", { cwd: root, json: true });
     const parsed = JSON.parse(out.join("")) as Record<string, unknown>;
 
     if (code === 0) {
@@ -93,7 +105,7 @@ describe("zenith propose", () => {
     makeProject(root);
     writeAuto(root, "autos", "escape", simpleAuto("../../../../ESCAPED"));
 
-    const code = runPropose("escape", { cwd: root, dryRun: true });
+    const code = runProposeDryRun("escape", { cwd: root });
     expect(code).toBe(1);
     expect(out.join("")).toContain("SCHEMA");
     expect(existsSync(join(root, "..", "..", "..", "..", "ESCAPED.svg"))).toBe(false);

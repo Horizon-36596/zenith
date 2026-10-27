@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -100,6 +100,36 @@ describe("the project handlers", () => {
     expect(() => writeAuto(root, "first-auto.auto.json", "not json")).toThrow(/not valid JSON/);
     expect(() => writeAuto(root, "../first-auto.auto.json", text)).toThrow(BridgeError);
     expect(() => writeAuto(root, "first-auto.auto.json", 12)).toThrow(BridgeError);
+  });
+
+  it("never writes through a file or link already at the temporary file's name (issue #406)", () => {
+    const target = join(root, "autos", "first-auto.auto.json");
+    const text = `${readFileSync(target, "utf8").trimEnd()}\n`;
+    // The name the save used to write to, which a cloned repository could hold in advance: a link
+    // out of the repository where one can be made (a file symlink needs privilege on Windows), else
+    // a plain file.
+    const plantedName = `first-auto.auto.json.zenith-${String(process.pid)}.tmp`;
+    const planted = join(root, "autos", plantedName);
+    const outside = mkdtempSync(join(tmpdir(), "zenith-outside-"));
+    const victim = join(outside, "victim.txt");
+    writeFileSync(victim, "outside", "utf8");
+    try {
+      let linked = false;
+      try {
+        symlinkSync(victim, planted, "file");
+        linked = true;
+      } catch {
+        writeFileSync(planted, "planted", "utf8");
+      }
+      expect(writeAuto(root, "first-auto.auto.json", text)).toBe("autos/first-auto.auto.json");
+      expect(readFileSync(target, "utf8")).toBe(text);
+      expect(readFileSync(victim, "utf8")).toBe("outside");
+      expect(readFileSync(planted, "utf8")).toBe(linked ? "outside" : "planted");
+      // Nothing of this save is left behind: the planted name is the only one ending in .tmp.
+      expect(readdirSync(join(root, "autos")).filter((name) => name.endsWith(".tmp"))).toEqual([plantedName]);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("refuses a folder with no zenith.json", () => {

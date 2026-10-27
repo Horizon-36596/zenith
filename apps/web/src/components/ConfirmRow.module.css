@@ -1,0 +1,37 @@
+/* The in-place question (UI_GUIDE 9.14). Every value is a token. */
+
+.confirm {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-inset);
+  border-radius: var(--radius-xs);
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sentence {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+/* Cancel on the left, the verb on the right, at the right edge (UI_GUIDE 9.14). */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.inline .actions {
+  margin-left: auto;
+}

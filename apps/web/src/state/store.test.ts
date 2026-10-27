@@ -8,7 +8,7 @@
 import { canonicalize, loadAuto, setPose } from "@horizon36596/zenith-core";
 import { SCHEMA_ID } from "@horizon36596/zenith-schema";
 import { beforeEach, describe, expect, it } from "vitest";
-import { beginTransaction, commit, endTransaction, getState, openAuto, undo } from "./store";
+import { beginTransaction, commit, endTransaction, getState, openAuto, redo, setDialog, setPaletteOpen, undo } from "./store";
 
 const fixture = () =>
   loadAuto({
@@ -92,5 +92,47 @@ describe("drag transactions", () => {
     dragTo(30);
     dragTo(31);
     expect(getState().undo).toHaveLength(2);
+  });
+});
+
+describe("a commit that changes nothing", () => {
+  it("pushes no undo entry when the file it would write is the same (issue #314)", () => {
+    dragTo(24);
+    expect(getState().undo).toHaveLength(0);
+    // A copy that is a different object but the same file, as an edit that rounds back gives.
+    const current = getState().auto;
+    if (current === null) throw new Error("expected an open document");
+    commit(structuredClone(current));
+    expect(getState().undo).toHaveLength(0);
+  });
+
+  it("leaves the redo stack alone, so a non-edit does not throw away a redo", () => {
+    dragTo(30);
+    undo();
+    expect(getState().redo).toHaveLength(1);
+    dragTo(24);
+    expect(getState().redo).toHaveLength(1);
+    redo();
+    const moved = getState().auto?.steps.find((step) => step.id === "leg1");
+    expect(moved?.kind === "path" && moved.segments[0]?.to).toEqual({ xIn: 0, yIn: 30, headingRad: 0 });
+  });
+});
+
+describe("the palette and the dialogs", () => {
+  it("closes the palette when a dialog opens, since the palette is what opened it", () => {
+    setPaletteOpen(true);
+    setDialog("open");
+    expect(getState().paletteOpen).toBe(false);
+    expect(getState().dialog).toBe("open");
+    setDialog(null);
+  });
+
+  it("leaves an open palette alone when a dialog is cleared, as Open folder does after the browser's database answers", () => {
+    // Open folder shows the project before it awaits the remembered-folder write and clears the
+    // dialog, so a person who presses Ctrl+K in between must not have the palette taken away.
+    setPaletteOpen(true);
+    setDialog(null);
+    expect(getState().paletteOpen).toBe(true);
+    setPaletteOpen(false);
   });
 });

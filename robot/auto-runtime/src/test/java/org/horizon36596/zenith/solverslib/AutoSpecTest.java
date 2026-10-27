@@ -100,6 +100,20 @@ class AutoSpecTest {
     }
 
     @Test
+    void runsAPlannerOnlyTransferAsAZeroSecondWait() {
+        // formatVersion 4: the counts are the planner's, so an actualCount of 0 changes nothing here.
+        Json root = Json.parse("{\"formatVersion\": 4, \"start\": {\"pose\": {\"xIn\": 0, \"yIn\": 0}},"
+                + " \"steps\": [{\"id\": \"partnerScores\", \"kind\": \"transfer\", \"from\": \"partner\","
+                + " \"to\": \"hiveRedUpCell\", \"expectedCount\": 3, \"actualCount\": 0}]}", "transfer.auto.json");
+        AutoSpec spec = AutoSpec.parse(root, "transfer", Collections.<String, Pose2d>emptyMap());
+        AutoSpec.WaitStep wait = (AutoSpec.WaitStep) spec.steps.get(0);
+        assertEquals("partnerScores", wait.id);
+        assertEquals(Double.valueOf(0.0), wait.seconds);
+        assertNull(wait.until);
+        assertNull(wait.timeoutS);
+    }
+
+    @Test
     void anUnknownWaypointNamesTheStep() {
         Json root = Json.parse("{\"formatVersion\": 3, \"start\": {\"pose\": {\"xIn\": 0, \"yIn\": 0}},"
                 + " \"steps\": [{\"id\": \"go\", \"kind\": \"path\", \"heading\": {\"mode\": \"tangent\"},"

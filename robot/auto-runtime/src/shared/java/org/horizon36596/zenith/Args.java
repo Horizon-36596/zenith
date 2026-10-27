@@ -77,6 +77,11 @@ public final class Args {
             throw new IllegalArgumentException(command + ": argument \"" + key
                     + "\" must be a whole number, found " + raw);
         }
+        // A cast would clamp silently: 2147483648 would become 2147483647, and infinity the largest int.
+        if (raw < Integer.MIN_VALUE || raw > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(command + ": argument \"" + key
+                    + "\" must fit in an int, found " + raw);
+        }
         return (int) raw;
     }
 

@@ -6,6 +6,9 @@ coverage/
 *.tsbuildinfo
 .env
 .env.local
+# Every mode's env file, such as apps/web/.env.production.local, which can hold the cloud's
+# config and the desktop sign-in clients' secret (cloud/README.md step 4a).
+.env.*
 .vercel/
 playwright-report/
 test-results/
@@ -21,3 +24,8 @@ packages/*/NOTICE
 
 # Agent worktrees made by Claude Code
 .claude/worktrees/
+
+# Logs the Firebase emulators write into the directory they run from.
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

@@ -5,7 +5,7 @@
  * mouths, flush against the wall, and the problems panel must show no PERIMETER for that step.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { clearStatus, dragWorld, editor, fixture, openProjectWith, shot, skipTour, withCore } from "./helpers";
+import { clearStatus, dragWorld, editor, findingRows, fixture, openProjectWith, shot, skipTour, withCore } from "./helpers";
 
 interface Pose {
   xIn: number;
@@ -59,7 +59,7 @@ for (const deg of [0, 45, 90, 180]) {
       await shot(page, `05-wall-${String(deg)}-${wall}`);
     }
     // The problems panel agrees with the store: no PERIMETER row names this step.
-    await expect(page.getByTestId("finding-row").filter({ hasText: step }).filter({ hasText: "PERIMETER" })).toHaveCount(0);
+    await expect(findingRows(page, "PERIMETER").filter({ hasText: step })).toHaveCount(0);
     expect(failures).toEqual([]);
   });
 }

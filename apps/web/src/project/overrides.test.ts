@@ -98,6 +98,20 @@ describe("resolveAutoOverrides", () => {
     expect(resolved.error).toBeNull();
   });
 
+  it("uses the project's own files, without reading them again, when the auto names the same ones", async () => {
+    // The bundled example and picked files cannot read a file by path; every starter auto names
+    // zenith.json's own robot and field, which opening one used to report as an error.
+    const project = baseProject();
+    const backend = fixtureBackend({});
+    const auto = autoWith({ robot: `./${project.link.robot}`, field: project.link.field });
+
+    const resolved = await resolveAutoOverrides(project, backend, auto);
+
+    expect(resolved.error).toBeNull();
+    expect(resolved.robot).toBe(project.robot);
+    expect(resolved.field).toBe(project.field);
+  });
+
   it("resolves auto.robot against a second robot file through the backend, relative to the project root", async () => {
     const project = baseProject();
     const backend = fixtureBackend({ "autos/robot-b.json": robotBText });

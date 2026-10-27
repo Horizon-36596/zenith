@@ -1,0 +1,5 @@
+{
+  "capturedFrom": "main at c1c3fb47, the 12 in choice, before issue #428 drew the seams' tabs",
+  "far": { "widthPx": 480, "heightPx": 300, "count": 413, "sha256": "75170e99ed1f5cd0788efd4dc7a2884c14d4c604c9358baeb21fc7afcf7466e2" },
+  "fittedWithoutSeams": { "widthPx": 1440, "heightPx": 900, "count": 364, "sha256": "ead0c8a0e0389ca8678208cf01f071036f3d851190445b32eb17144b8afb55ca" }
+}

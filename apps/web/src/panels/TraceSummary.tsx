@@ -7,8 +7,9 @@
  * says so rather than printing a zero that would read as "none happened".
  */
 import { traceSummary } from "@horizon36596/zenith-core";
-import { seconds as fmtSeconds } from "../lib/format";
 import { useDerived, useEditor } from "../state/store";
+import { againstPlan, recordedTotal } from "./recordedTotal";
+import { seconds as fmtSeconds } from "../lib/format";
 import styles from "./TraceSummary.module.css";
 
 const INERT_LABEL: Record<string, string> = {
@@ -22,8 +23,9 @@ export function TraceSummary() {
   if (trace === null) return null;
 
   const summary = traceSummary(trace);
-  const estimatedS = derived.totalS;
-  const deltaS = estimatedS === null ? null : summary.totalS - estimatedS;
+  // The total the timeline's track shows, from the same function, against the same plan (0.1.2 UX review).
+  const totalS = recordedTotal(trace).seconds;
+  const against = againstPlan(totalS, derived.totalS);
   const tips = Object.entries(summary.tips);
   const measuresContacts = !summary.inert.includes("structureContacts");
 
@@ -31,20 +33,14 @@ export function TraceSummary() {
     <dl className={styles.summary} data-testid="trace-summary" data-level="full">
       <div className={styles.row}>
         <dt>Level</dt>
-        <dd>Full sim, the robot repository&apos;s own simulation</dd>
+        <dd>Full sim, your robot repository&apos;s own simulation</dd>
       </div>
       <div className={styles.row}>
         <dt>Total</dt>
-        <dd>
-          {fmtSeconds(summary.totalS)}
+        <dd data-testid="trace-summary-total">
+          {fmtSeconds(totalS)}
           <span className="unit">s</span>
-          {estimatedS === null || deltaS === null ? null : (
-            <span className={styles.delta}>
-              {deltaS >= 0 ? "+" : ""}
-              {fmtSeconds(deltaS)}
-              <span className="unit">s vs estimate</span>
-            </span>
-          )}
+          {against === null ? null : <span className={styles.delta}>{`, ${against}`}</span>}
         </dd>
       </div>
       <div className={styles.row}>

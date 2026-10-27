@@ -1,0 +1,442 @@
+/*
+ * The proposer's editor and the owner's review of a proposal, on the tokens of apps/web/UI_GUIDE.md:
+ * no new colours and no new sizes. Both are the editor's frame with its panels swapped, like the
+ * pull-request review, so the layout classes come from App.module.css and these are only the rows.
+ */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  min-height: var(--row-h-comfortable);
+  padding: var(--space-1) var(--pad-row-x);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-default);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.bannerTitle {
+  font-family: var(--font-display);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-md);
+  color: var(--text-hi);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: var(--numeric);
+  color: var(--text-lo);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.textButton {
+  font-size: var(--fs-sm);
+  color: var(--accent);
+}
+
+.textButton:hover {
+  color: var(--accent-hover);
+}
+
+.textButton[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+/* The buttons are UI_GUIDE 9.9's one recipe, composed from the shared primitives. */
+.secondary {
+  composes: secondary from "../components/primitives.module.css";
+}
+
+.primary {
+  composes: primary from "../components/primitives.module.css";
+}
+
+/* ---- The step list and the change list ------------------------------------------------------ */
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.stepRow {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-h);
+  padding-right: var(--pad-row-x);
+  border-left: 2px solid transparent;
+  cursor: default;
+}
+
+.stepRow:hover {
+  background: var(--bg-hover);
+}
+
+.stepRow[aria-selected="true"] {
+  background: var(--bg-selected);
+  border-left-color: var(--accent);
+}
+
+.stepIcon {
+  color: var(--text-mid);
+}
+
+.stepName {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.stepId {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.stepDetail {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: var(--numeric);
+  color: var(--text-lo);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The row actions take no width until the row is hovered, focused or selected, so the step's
+   words keep the whole row at rest. */
+.stepActions {
+  display: none;
+  gap: 2px;
+}
+
+.stepRow:hover .stepActions,
+.stepRow:focus-within .stepActions,
+.stepRow[aria-selected="true"] .stepActions {
+  display: flex;
+}
+
+.mark {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  background: var(--bg-inset);
+  color: var(--text-lo);
+}
+
+.mark[data-mark="added"] {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.mark[data-mark="changed"] {
+  color: var(--sev-info);
+  background: var(--sev-info-bg);
+}
+
+.listFoot {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--pad-row-x);
+}
+
+.change {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--pad-row-x);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.change[aria-selected="true"] {
+  background: var(--bg-selected);
+}
+
+.changeHead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+}
+
+.changeNumber {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+  padding-top: 2px;
+}
+
+.changeSummary {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+  text-align: left;
+}
+
+.changeWhy {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--sev-error);
+}
+
+.changeWhy[data-kind="conflict"],
+.changeWhy[data-kind="invalid"],
+.changeWhy[data-kind="refused"] {
+  color: var(--sev-error);
+}
+
+.commentWrap {
+  display: block;
+}
+
+.comment {
+  width: 100%;
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.comment::placeholder {
+  color: var(--text-lo);
+}
+
+.comment:hover,
+.comment:focus {
+  background: var(--bg-inset);
+  border-color: var(--border-strong);
+  color: var(--text-hi);
+}
+
+.quote {
+  margin: 0;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border-strong);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.status {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  background: var(--bg-inset);
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+.status[data-status="applied"] {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.status[data-status="accepted"] {
+  color: var(--sev-info);
+  background: var(--sev-info-bg);
+}
+
+.status[data-status="conflict"],
+.status[data-status="invalid"],
+.status[data-status="refused"] {
+  color: var(--sev-error);
+  background: var(--sev-error-bg);
+}
+
+.changeFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.delta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-variant-numeric: var(--numeric);
+  color: var(--text-mid);
+  white-space: nowrap;
+}
+
+.delta[data-sign="slower"] {
+  color: var(--sev-warn);
+}
+
+.delta[data-sign="faster"] {
+  color: var(--ok);
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+}
+
+.segment {
+  height: var(--ctl-h-sm);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.segment[aria-pressed="true"] {
+  background: var(--bg-raised);
+  color: var(--text-hi);
+}
+
+.segment[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.totals {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--pad-row-x);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-3) var(--pad-row-x);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+.note {
+  margin: 0;
+  padding: var(--space-2) var(--pad-row-x);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.note strong {
+  color: var(--text-hi);
+  font-weight: var(--fw-medium);
+}
+
+/* ---- The scrubber and the findings under the field -------------------------------------------- */
+
+.scrub {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: none;
+  height: var(--row-h);
+  padding-inline: var(--pad-row-x);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-default);
+}
+
+.scrub input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bottom {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  height: var(--findings-h);
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-default);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.group + .group {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-height: var(--row-h);
+  padding: var(--space-1) var(--pad-row-x) 0;
+}
+
+.groupTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-md);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-mid);
+}
+
+.groupNote {
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.rowBody {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* ---- The partner step inspector ---------------------------------------------------------------- */
+
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-4);
+}
+
+.readout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--pad-row-x);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.readout code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--pad-row-x);
+}

@@ -277,6 +277,53 @@ describe.skipIf(!existsSync(`${starter}zenith.json`))("codegen for the starter's
   });
 });
 
+describe("generateAutoJava: a planner-only transfer", () => {
+  const withTransfer = (actualCount: number | undefined) =>
+    parseAuto({
+      $schema: SCHEMA_ID.auto,
+      formatVersion: 4,
+      name: "partner",
+      alliance: "RED",
+      start: { pose: { xIn: 0, yIn: 0, headingRad: 0 } },
+      steps: [
+        {
+          id: "partnerScores",
+          kind: "transfer",
+          from: "partner",
+          to: "hiveRedUpCell",
+          expectedCount: 3,
+          ...(actualCount === undefined ? {} : { actualCount }),
+        },
+        { id: "settle", kind: "wait", seconds: 0.5 },
+      ],
+    });
+  const java = (actualCount: number | undefined): string =>
+    generateAutoJava(corePlan(resolve(withTransfer(actualCount), waypoints), robot, field), {
+      packageName: "org.example",
+      shaHex: "deadbeef",
+      sourcePath: "autos/partner.auto.json",
+      commandLibrary: "solverslib",
+    });
+
+  it("writes the transfer as a comment over the zero-second wait the runtime runs in its place", () => {
+    const out = java(undefined);
+    expect(out).toContain(
+      '// Planner-only transfer: 3 expected, from "partner" to "hiveRedUpCell". The robot does nothing here.',
+    );
+    expect(out).toContain("return new WaitRobotTime(0, this);");
+    expect(out).toContain('step("partnerScores", stepPartnerScores())');
+  });
+
+  it("changes only that comment when the actual count is edited", () => {
+    const before = java(undefined).split("\n");
+    const after = java(0).split("\n");
+    const changed = after.filter((line, index) => line !== before[index]);
+    expect(changed).toEqual([
+      expect.stringContaining("// Planner-only transfer: 3 expected, actual 0,"),
+    ]);
+  });
+});
+
 describe("generateAutoJava: a piecewise heading", () => {
   it("clips the ranges to each segment and emits Pedro's piecewise interpolator", () => {
     const piecewise = parseAuto({

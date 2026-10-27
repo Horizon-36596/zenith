@@ -152,7 +152,12 @@ export function buildSimReport(trace: TraceFile, plan: Plan, estimateResult: Est
     simTimeS: trace.simTimeS,
     steps,
     totalEstimateS: estimateResult?.nominalS ?? null,
-    totalActualS: trace.steps.reduce((sum, step) => sum + (step.endS - step.startS), 0),
+    // The span from the first start to the last end: each child of a parallel group has its own
+    // step record, so summing durations would count overlapping time more than once.
+    totalActualS:
+      trace.steps.length === 0
+        ? 0
+        : Math.max(...trace.steps.map((step) => step.endS)) - Math.min(...trace.steps.map((step) => step.startS)),
     structureContacts: trace.structureContacts.length,
     launches,
     tips,

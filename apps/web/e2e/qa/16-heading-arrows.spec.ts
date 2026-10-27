@@ -13,6 +13,7 @@
  */
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import { saveExampleAuto } from "../saveExample";
 import { canvasView, editor, fixture, installCanvasProbe, openProjectWith, shot, skipTour, worldToScreen } from "./helpers";
 
 interface Range {
@@ -107,6 +108,22 @@ test("Split heading here, on the path's context menu, makes a piecewise heading"
   await expect(page.getByTestId("inspector-heading-mode")).toHaveAttribute("data-value", "piecewise");
 });
 
+test("with Advanced heading off, the path's context menu has no Split heading here (spec 15 section 4.1)", async ({ page }) => {
+  await page.getByTestId("toolbar-settings").click();
+  await page.getByTestId("settings-nav-general").click();
+  const off = page.getByTestId("settings-feature-advancedHeading-choice-off");
+  await off.click();
+  await expect(off).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("settings")).toHaveCount(0);
+
+  const at = await worldToScreen(page, hopAt(0.25).xIn, hopAt(0.25).yIn);
+  await page.mouse.click(at.x, at.y, { button: "right" });
+  const menu = page.getByTestId("canvas-context-menu");
+  await expect(menu.locator('[data-action="canvas.split"]')).toHaveCount(1);
+  await expect(menu.locator('[data-action="canvas.splitHeading"]')).toHaveCount(0);
+});
+
 test("a piecewise heading: split on the track, one Constant and one Linear range, boundary dragged on the canvas, saved", async ({ page }) => {
   await pickMode(page, "inspector-heading-mode", "piecewise");
   await expect(page.getByTestId("heading-ranges")).toBeVisible();
@@ -115,6 +132,9 @@ test("a piecewise heading: split on the track, one Constant and one Linear range
   if (box === null) throw new Error("the heading track has no box");
   await track.click({ position: { x: box.width / 2, y: box.height / 2 } });
   await expect(page.getByTestId("heading-range-1")).toBeVisible();
+  // Each range's rows unfold from its row (issue #431).
+  await page.getByTestId("heading-range-0-toggle").click();
+  await page.getByTestId("heading-range-1-toggle").click();
 
   await pickMode(page, "heading-range-0-mode", "constant");
   await setNumber(page, "heading-range-0-constant", 30);
@@ -138,16 +158,15 @@ test("a piecewise heading: split on the track, one Constant and one Linear range
   const boundary = heading.ranges?.[0]?.endT ?? 0;
   expect(Math.abs(boundary - 0.75), `the boundary is at t ${String(boundary)}`).toBeLessThan(0.01);
   expect(heading.ranges?.[1]?.startT).toBe(boundary);
-  await expect(page.getByTestId("heading-range-0-end")).toHaveValue(boundary.toFixed(2));
+  await expect(page.getByTestId("heading-range-0-end")).toHaveValue(String(Math.round(boundary * 100)));
   await shot(page, "16-piecewise");
 
-  const download = page.waitForEvent("download");
-  await page.keyboard.press("Control+s");
+  const download = saveExampleAuto(page);
   const saved = JSON.parse(readFileSync(await (await download).path(), "utf8")) as {
     formatVersion: number;
     steps: Array<{ id: string; heading?: StepHeading }>;
   };
-  expect(saved.formatVersion).toBe(3);
+  expect(saved.formatVersion).toBe(4);
   // The file rounds radians to four places (site/docs/file-format.md).
   const written = saved.steps.find((step) => step.id === "hop")?.heading;
   expect(written?.mode).toBe("piecewise");

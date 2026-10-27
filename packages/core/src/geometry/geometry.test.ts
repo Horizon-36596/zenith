@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { angleDelta, lerpAngle, wrapAngle } from "./angle.js";
 import { arcLength, makeCurve } from "./curve.js";
 import { makePath, sampleDistances } from "./path.js";
-import { polygonOutsideBox, polygonOverlapsBox, rectCorners } from "./sat.js";
+import {
+  boxCorners,
+  boxGapIn,
+  convexPolygonsGap,
+  convexPolygonsOverlap,
+  polygonOutsideBox,
+  polygonOverlapsBox,
+  rectCorners,
+} from "./sat.js";
 import { distance } from "./vec.js";
 
 describe("arc length", () => {
@@ -144,6 +152,33 @@ describe("separating-axis test", () => {
     expect(polygonOverlapsBox(rect, box).overlaps).toBe(false);
   });
 
+  it("issue #152: reports how far an 18 in robot has to move to clear a 1 in bar it straddles", () => {
+    // The old frameBarWest (before issue #229): 1 in wide in x, 38.8 in long in y. The robot drives north
+    // along its centre line, so the bar runs right through the footprint. The overlap interval on
+    // the x axis is only the bar's own 1 in, but the robot has to move 9.5 in either way to get off
+    // it, and that is the depth a person needs to read.
+    const bar = { minXIn: -25, maxXIn: -24, minYIn: -19.4, maxYIn: 19.4 };
+    const rect = rectCorners({ centreIn: { xIn: -24.5, yIn: 0 }, lengthIn: 18, widthIn: 18, headingRad: Math.PI / 2 });
+    const result = polygonOverlapsBox(rect, bar);
+    expect(result.overlaps).toBe(true);
+    expect(result.penetrationIn).toBeCloseTo(9.5, 9);
+    expect(convexPolygonsOverlap(rect, boxCorners(bar)).penetrationIn).toBeCloseTo(9.5, 9);
+  });
+
+  it("issue #152: keeps the M0 contract's 1 in for a footprint whose edge is 1 in into the hive", () => {
+    // The M0 contract's line: an 18 by 14 in robot driving east at y = 12, centred over the 8 in
+    // hiveRedBase box (y -6 to 6). Its south edge is at y = 5, 1 in inside.
+    const hive = { minXIn: -16.75, maxXIn: -8.75, minYIn: -6, maxYIn: 6 };
+    const rect = rectCorners({ centreIn: { xIn: -12.75, yIn: 12 }, lengthIn: 18, widthIn: 14, headingRad: 0 });
+    expect(polygonOverlapsBox(rect, hive).penetrationIn).toBeCloseTo(1, 9);
+    expect(convexPolygonsOverlap(rect, boxCorners(hive)).penetrationIn).toBeCloseTo(1, 9);
+  });
+
+  it("issue #152: keeps the head-on 2 in for two convex polygons as well", () => {
+    const rect = rectCorners({ centreIn: { xIn: 12, yIn: 0 }, lengthIn: 18, widthIn: 14, headingRad: 0 });
+    expect(convexPolygonsOverlap(rect, boxCorners(box)).penetrationIn).toBeCloseTo(2, 9);
+  });
+
   it("measures how far a polygon pokes out of the field", () => {
     const rect = rectCorners({
       centreIn: { xIn: 68, yIn: 0 },
@@ -154,5 +189,38 @@ describe("separating-axis test", () => {
     const outside = polygonOutsideBox(rect, { minXIn: -72, maxXIn: 72, minYIn: -72, maxYIn: 72 });
     expect(outside.outside).toBe(true);
     expect(outside.worstIn).toBeCloseTo(5, 9);
+  });
+});
+
+describe("the gap between two convex polygons (CLEARANCE)", () => {
+  const box = boxCorners({ minXIn: 0, maxXIn: 10, minYIn: 0, maxYIn: 10 });
+
+  it("is the distance between facing edges", () => {
+    const beside = boxCorners({ minXIn: 10.5, maxXIn: 20, minYIn: 2, maxYIn: 8 });
+    const gap = convexPolygonsGap(beside, box);
+    expect(gap.gapIn).toBeCloseTo(0.5, 9);
+    expect(gap.pointOnA.xIn).toBeCloseTo(10.5, 9);
+    expect(gap.pointOnB.xIn).toBeCloseTo(10, 9);
+  });
+
+  it("is corner to corner across a diagonal", () => {
+    const corner = rectCorners({ centreIn: { xIn: 13, yIn: 14 }, lengthIn: 2, widthIn: 2, headingRad: 0 });
+    // Nearest corner (12, 13) to the box's corner (10, 10): sqrt(4 + 9).
+    expect(convexPolygonsGap(corner, box).gapIn).toBeCloseTo(Math.sqrt(13), 9);
+  });
+
+  it("is a rotated corner to an edge", () => {
+    const diamond = rectCorners({ centreIn: { xIn: 5, yIn: 12 }, lengthIn: Math.SQRT2, widthIn: Math.SQRT2, headingRad: Math.PI / 4 });
+    // The diamond's lowest corner is at y 11, 1 in above the box's top edge.
+    expect(convexPolygonsGap(diamond, box).gapIn).toBeCloseTo(1, 9);
+  });
+
+  it("is 0 when they overlap", () => {
+    expect(convexPolygonsGap(boxCorners({ minXIn: 9, maxXIn: 12, minYIn: 0, maxYIn: 1 }), box).gapIn).toBe(0);
+  });
+
+  it("box gap is a lower bound: 0 for overlapping boxes, the corner distance for diagonal ones", () => {
+    expect(boxGapIn({ minXIn: 0, maxXIn: 1, minYIn: 0, maxYIn: 1 }, { minXIn: 0.5, maxXIn: 2, minYIn: 0.5, maxYIn: 2 })).toBe(0);
+    expect(boxGapIn({ minXIn: 0, maxXIn: 1, minYIn: 0, maxYIn: 1 }, { minXIn: 4, maxXIn: 5, minYIn: 5, maxYIn: 6 })).toBeCloseTo(5, 9);
   });
 });

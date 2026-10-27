@@ -1,7 +1,8 @@
-import type { Field, FieldElement, FieldTarget, Step, Waypoints } from "@horizon36596/zenith-schema";
+import type { Field, FieldElement, Step, Waypoints } from "@horizon36596/zenith-schema";
 import { markerT } from "./checks/intake.js";
 import { fieldBounds } from "./footprint.js";
 import { totalBound } from "./estimate.js";
+import { obstacleShadowIn } from "./geometry/obstacle.js";
 import type { Vec2 } from "./geometry/vec.js";
 import { robotHeightIn } from "./kinematics.js";
 import { mirrorForField, mirrorHeadingRad, mirrorVec, shouldMirror } from "./mirror.js";
@@ -129,8 +130,8 @@ export function render(
 }
 
 /** The header's suffix for a total that is a bound (see `totalBound`). */
-function boundSuffix(estimateResult: Estimate): string {
-  const bound = totalBound(estimateResult);
+function boundSuffix(estimateResult: Estimate, plan: Plan): string {
+  const bound = totalBound(estimateResult, plan);
   return bound === "lower" ? " at least" : bound === "upper" ? " at most" : "";
 }
 
@@ -150,7 +151,7 @@ function drawHeader(
   const timing =
     estimateResult === null || estimateResult.nominalS === null
       ? "no estimate"
-      : `${n(estimateResult.nominalS)} s (${n(estimateResult.lowS ?? 0)}-${n(estimateResult.highS ?? 0)})${boundSuffix(estimateResult)}`;
+      : `${n(estimateResult.nominalS)} s (${n(estimateResult.lowS ?? 0)}-${n(estimateResult.highS ?? 0)})${boundSuffix(estimateResult, plan)}`;
   const counts =
     errors + warnings === 0
       ? "no findings"
@@ -222,26 +223,36 @@ function drawField(
     );
   }
 
-  // Obstacles are drawn by their z class: one the robot would hit is filled, because you cannot
-  // drive there; one it passes under is an outline, because you can (`03` section 4, STRUCTURE).
+  // Obstacles are drawn by their z class, from the shadow STRUCTURE checks (`obstacleShadowIn`):
+  // the part the robot would hit is filled, because you cannot drive there; what it passes under is
+  // an outline, because you can (`03` section 4, STRUCTURE). A box is one or the other. A strut, a
+  // slanted bar, is both: the whole bar dashed, and the part below the robot's top filled over it,
+  // so the band grows with the robot's height (issue #230).
   const heightIn = robotHeightIn(plan.robot);
   for (const obstacle of field.obstacles ?? []) {
-    const blocks = (obstacle.solidToRobot ?? true) && obstacle.minZIn < heightIn;
-    parts.push(
-      blocks
-        ? boxRect(obstacle, frame, TOKENS.fieldObstacle, TOKENS.fieldObstacleFill, 1)
-        : boxRect(obstacle, frame, TOKENS.fieldObstacle, "none", 0, "3 3"),
-    );
+    const shadow = (obstacle.solidToRobot ?? true) ? obstacleShadowIn(obstacle, heightIn) : null;
+    if (obstacle.kind === "box") {
+      parts.push(
+        shadow !== null
+          ? boxRect(obstacle, frame, TOKENS.fieldObstacle, TOKENS.fieldObstacleFill, 1)
+          : boxRect(obstacle, frame, TOKENS.fieldObstacle, "none", 0, "3 3"),
+      );
+      continue;
+    }
+    const whole = obstacleShadowIn(obstacle, Math.max(obstacle.fromIn.zIn, obstacle.toIn.zIn) + obstacle.radiusIn);
+    if (whole !== null) {
+      parts.push(polygonShape(`overhead-${obstacle.id}`, whole, frame, TOKENS.fieldObstacle, "none", 0, "3 3"));
+    }
+    if (shadow !== null) {
+      parts.push(polygonShape(`band-${obstacle.id}`, shadow, frame, TOKENS.fieldObstacle, TOKENS.fieldObstacleFill, 1));
+    }
   }
 
   for (const element of field.elements ?? []) {
     parts.push(...drawElement(element, frame));
   }
-  for (const target of field.targets ?? []) {
-    parts.push(...drawTarget(target, field, frame));
-  }
   if (options.waypoints !== undefined) {
-    parts.push(...drawWaypoints(options.waypoints, frame, point));
+    parts.push(...drawWaypoints(options.waypoints, new Set(options.hiddenWaypoints ?? []), frame, point));
   }
 
   parts.push(`</g>`);
@@ -314,6 +325,28 @@ function boxRect(
   return `<rect x="${n(corner.x)}" y="${n(corner.y)}" width="${n(width)}" height="${n(height)}"${fillAttribute} stroke="${stroke}" stroke-width="1"${dashAttribute}/>`;
 }
 
+/** A field polygon, such as a strut's shadow, with an id so a reader of the picture can find it. */
+function polygonShape(
+  id: string,
+  polygon: readonly Vec2[],
+  frame: Frame,
+  stroke: string,
+  fill: string,
+  fillOpacity: number,
+  dash?: string,
+): string {
+  const points = polygon
+    .map((corner) => {
+      const at = frame.at(corner);
+      return `${n(at.x)},${n(at.y)}`;
+    })
+    .join(" ");
+  const dashAttribute = dash === undefined ? "" : ` stroke-dasharray="${dash}"`;
+  const fillAttribute =
+    fill === "none" ? ` fill="none"` : ` fill="${fill}" fill-opacity="${n(fillOpacity)}"`;
+  return `<polygon id="${escapeText(id)}" points="${points}"${fillAttribute} stroke="${stroke}" stroke-width="1"${dashAttribute}/>`;
+}
+
 function boxLabel(box: Box, text: string, frame: Frame, fill: string): string {
   const at = frame.at({ xIn: (box.minXIn + box.maxXIn) / 2, yIn: (box.minYIn + box.maxYIn) / 2 });
   return `<text x="${n(at.x)}" y="${n(at.y)}" fill="${fill}" font-size="9" text-anchor="middle" font-family="${FONTS.mono}" opacity="0.7">${escapeText(text)}</text>`;
@@ -349,39 +382,10 @@ function drawElement(element: FieldElement, frame: Frame): string[] {
   return parts;
 }
 
-/** A scoring target as a reticle, placed on whatever element or hive it names. */
-function drawTarget(target: FieldTarget, field: Field, frame: Frame): string[] {
-  const row = target as Record<string, unknown>;
-  const ofId = typeof row["element"] === "string" ? row["element"] : row["hive"];
-  const element = (field.elements ?? []).find((candidate) => candidate.id === ofId);
-  if (element === undefined) return [];
-
-  const pivot = (element as Record<string, unknown>)["pivotIn"];
-  const centre: Vec2 | null =
-    element.xIn !== undefined && element.yIn !== undefined
-      ? { xIn: element.xIn, yIn: element.yIn }
-      : typeof pivot === "object" && pivot !== null
-        ? {
-            xIn: Number((pivot as Record<string, unknown>)["xIn"] ?? 0),
-            yIn: Number((pivot as Record<string, unknown>)["yIn"] ?? 0),
-          }
-        : null;
-  if (centre === null) return [];
-
-  const at = frame.at(centre);
-  const r = 5;
-  return [
-    `<g id="target-${escapeText(target.id)}" stroke="${TOKENS.fieldTarget}" stroke-width="1" fill="none">`,
-    `<circle cx="${n(at.x)}" cy="${n(at.y)}" r="${n(r)}"/>`,
-    `<line x1="${n(at.x - r - 3)}" y1="${n(at.y)}" x2="${n(at.x + r + 3)}" y2="${n(at.y)}"/>`,
-    `<line x1="${n(at.x)}" y1="${n(at.y - r - 3)}" x2="${n(at.x)}" y2="${n(at.y + r + 3)}"/>`,
-    `</g>`,
-  ];
-}
-
-function drawWaypoints(waypoints: Waypoints, frame: Frame, point: (p: Vec2) => Vec2): string[] {
+function drawWaypoints(waypoints: Waypoints, hidden: ReadonlySet<string>, frame: Frame, point: (p: Vec2) => Vec2): string[] {
   const parts: string[] = [`<g id="waypoints">`];
   for (const [name, waypoint] of Object.entries(waypoints.waypoints)) {
+    if (hidden.has(name)) continue;
     const at = frame.at(point({ xIn: waypoint.xIn, yIn: waypoint.yIn }));
     parts.push(
       `<circle cx="${n(at.x)}" cy="${n(at.y)}" r="2.5" fill="none" stroke="${TOKENS.fieldWaypoint}" stroke-width="1"/>`,

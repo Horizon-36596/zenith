@@ -1,8 +1,9 @@
 # Publishes libraries.horizon36596.org/zenith/ to GitHub Pages when a release tag is pushed: the
-# documentation site at /zenith/, the web editor at /zenith/app/ and the JSON Schemas at
-# /zenith/schema/v1/<kind>.json, all from one artifact that scripts/build-pages.mjs puts together.
+# documentation site at /zenith/, the web editor at /zenith/app/ and the JSON Schemas (the file
+# formats and the interchange formats trajectory.json and path.json) at /zenith/schema/v1/<kind>.json,
+# all from one artifact that scripts/build-pages.mjs puts together.
 #
-# The settings it depends on are not visible from this file,
+# It follows SimLoop's docs-publish.yml. The settings it depends on are not visible from this file,
 # and a deployment fails without them. They are a person's to set, once, and PUBLISHING.md has the
 # exact steps:
 #
@@ -73,11 +74,17 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # The same one command a person runs. It fails on a broken docs link (mkdocs --strict), on a
-      # schema whose $id does not resolve inside the artifact, and on an app asset addressed from the
-      # site root instead of /zenith/app/.
+      # The same one command a person runs. It builds the editor with the production cloud and its
+      # App Check site key when it has one (cloud/web-config.json), and fails on a broken docs link (mkdocs --strict),
+      # on a schema whose $id does not resolve inside the artifact, and on an app asset addressed from
+      # the site root instead of /zenith/app/.
       - name: Build the Pages artifact
         run: node scripts/build-pages.mjs build/pages
+
+      # The published editor has accounts, teams and sharing on. Fail if it was built without the
+      # cloud (a missing App Check key only warns). Only the artifact: this job's apps/web/dist is the plain `pnpm build`.
+      - name: Check the cloud is on in the editor
+        run: node scripts/release-cloud.mjs check --pages build/pages --pages-only
 
       - name: Package the site for Pages
         uses: actions/upload-pages-artifact@v5

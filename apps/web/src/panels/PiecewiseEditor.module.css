@@ -1,20 +1,18 @@
+/* The piecewise heading editor (issue #431): an 18 px track, then one 24 px row per range on the
+   Inspector's grid, its rows unfolding under it. */
+
 .editor {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-1) 0 var(--space-2);
+  padding: 2px 0 0;
 }
 
-/* The path from t 0 to 1, one block per range. */
+/* The path from 0% to 100%, one block per range, with 2 px between blocks. */
 .track {
   position: relative;
-  height: 22px;
-  margin: 0 var(--pad-row-x);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--bg-canvas);
+  height: 18px;
+  margin: 2px var(--space-3) 0 var(--inspector-gutter);
   cursor: copy;
-  overflow: hidden;
 }
 
 .block {
@@ -24,33 +22,42 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-right: 1px solid var(--border-default);
-  background: color-mix(in srgb, var(--handle-heading) 10%, transparent);
+  /* A clear 1 px on each side, so neighbouring blocks have a 2 px gap that the boundary sits in. */
+  border-inline: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--bg-inset);
+  background-clip: padding-box;
   overflow: hidden;
+  /* So a label can ask how wide its own block is, and give way when it does not fit. */
+  container-type: inline-size;
 }
 
-.block:last-child {
-  border-right: 0;
+/* The widest label, Constant, needs about 60 px: below that no text is drawn rather than a clipped
+   one, and the block's tooltip names its mode (issue #410). */
+@container (max-width: 62px) {
+  .blockLabel {
+    display: none;
+  }
 }
 
 .block:hover {
-  background: color-mix(in srgb, var(--handle-heading) 24%, transparent);
+  background: var(--bg-hover);
 }
 
-/* The modes the path decides read fainter than the ones set by hand. */
-.block[data-mode="tangent"],
-.block[data-mode="tangentReversed"] {
-  background: transparent;
+/* The range under the pointer, or open below, is underlined in the heading colour. */
+.block[data-active] {
+  box-shadow: inset 0 -2px 0 var(--canvas-annotation);
 }
 
 .blockLabel {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--text-mid);
+  font-size: var(--fs-micro);
+  color: var(--text-lo);
   white-space: nowrap;
   pointer-events: none;
 }
 
+/* A boundary is a 9 px drag target over the gap between two blocks, its line shown on hover. */
 .boundary {
   position: absolute;
   top: -1px;
@@ -65,56 +72,140 @@
 .boundary::after {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 3px;
-  width: 3px;
+  top: 2px;
+  bottom: 2px;
+  left: 4px;
+  width: 1px;
   border-radius: 1px;
-  background: var(--handle-heading);
+  background: var(--border-strong);
 }
 
 .boundary:hover::after {
-  left: 2px;
-  width: 5px;
+  left: 3px;
+  width: 3px;
+  background: var(--handle-heading);
 }
 
+/* The 0% and 100% ticks under the track. */
 .scale {
   display: flex;
   justify-content: space-between;
-  margin: 0 var(--pad-row-x);
+  margin: 1px var(--space-3) 2px var(--inspector-gutter);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-micro);
+  line-height: 12px;
   color: var(--text-lo);
 }
 
+/* One range: its 24 px row, then, when open, its own rows. No box (UI_GUIDE layout rule 4). */
 .range {
-  margin: var(--space-1) var(--pad-row-x) 0;
-  padding-bottom: var(--space-1);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-}
-
-.range:hover {
-  border-color: var(--border-strong);
+  display: flex;
+  flex-direction: column;
 }
 
 .rangeHead {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: var(--row-h-compact);
-  padding-inline: var(--pad-row-x);
-  border-bottom: 1px solid var(--border-subtle);
+  height: var(--row-h-list);
+  padding-right: var(--space-1);
 }
 
-.rangeTitle {
+.rangeHead:hover,
+.rangeHead[data-active],
+.range[data-open] > .rangeHead {
+  background: var(--bg-hover);
+}
+
+/* The row's button: the index and span in the label column, the mode at 120 px, then the angles. */
+.rangeToggle {
+  display: grid;
+  flex: 1;
+  grid-template-columns: calc(var(--inspector-label-w) + var(--space-2)) 64px minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0 0 var(--inspector-gutter);
+  text-align: left;
+}
+
+.rangeToggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+}
+
+.rangeLabel {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.rangeIndex {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--text-mid);
-  letter-spacing: var(--tracking-wide);
 }
 
+.rangeSpan {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+.rangeMode {
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+  white-space: nowrap;
+}
+
+.rangeValues {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-label);
+  color: var(--text-mid);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The scissors and the bin show on the row's hover or focus, and always on a touch screen. They sit
+   over the row's right end, on its hover colour, so at rest the angles have the whole row. */
 .rangeActions {
+  position: absolute;
+  top: 0;
+  right: var(--space-1);
   display: flex;
+  align-items: center;
   gap: 2px;
+  height: 100%;
+  padding-left: var(--space-1);
+  background: var(--bg-hover);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.rangeActions button {
+  color: var(--text-lo);
+}
+
+.rangeHead:hover .rangeActions,
+.rangeHead:focus-within .rangeActions,
+.range[data-open] > .rangeHead .rangeActions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .rangeActions {
+    opacity: 1;
+  }
+}
+
+/* An open range's rows sit 16 px in, as a sub-group's do, so their values keep the 120 px column. */
+.rangeBody {
+  --inspector-gutter: 40px;
+  --inspector-label-w: 72px;
+  padding-bottom: var(--space-1);
 }

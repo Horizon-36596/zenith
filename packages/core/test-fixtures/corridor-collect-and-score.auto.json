@@ -1,0 +1,319 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 4,
+  "name": "collect-and-score",
+  "title": "Collect and score",
+  "description": "A full BIOBUZZ auto. Drive out and shoot all four preloaded pollen, which tips the hive on the first volley; the tip turns the up cell to the north, so the robot goes to the other side of the hive, takes four pollen from the flower on the north wall and scores them, then collects the RED garden line and scores again on the north side for the second tip. It shows three ways to run a command alongside driving: a marker on a path, a parallel deadline group with a sequence in it, and a wait until the robot reports full.",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "alliance": "RED",
+  "authors": [
+    "Horizon (FTC 36596)"
+  ],
+  "created": "2026-09-23",
+  "start": {
+    "pose": {
+      "xIn": -9,
+      "yIn": -63,
+      "headingRad": 1.5708,
+      "provenance": "CARRIED OVER: the starter's start waypoint before issue #365, against the south wall in RED's half, its east side on the centre line"
+    },
+    "holds": {
+      "pollen": 4
+    }
+  },
+  "steps": [
+    {
+      "id": "driveOut",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -9,
+            "yIn": -63,
+            "headingRad": 1.5708,
+            "provenance": "CARRIED OVER: the starter's start waypoint before issue #365, against the south wall in RED's half, its east side on the centre line"
+          },
+          "to": {
+            "xIn": -9,
+            "yIn": -36,
+            "headingRad": 1.5708,
+            "provenance": "CARRIED OVER: the starter's scoreSouth waypoint before issue #365, south of the RED hive on x = -9"
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "notes": "A straight line north to the scoring spot south of the hive, facing its up cell."
+    },
+    {
+      "id": "shootPreloads",
+      "kind": "command",
+      "name": "score",
+      "args": {
+        "count": 4
+      },
+      "notes": "Launches all four preloaded pollen in one volley. The up cell starts with 3 nectar, and the tip table says 3 pollen tip a cell holding 3 nectar, so this volley tips the hive: it dumps the cell onto the floor on the south side and the empty north cell comes up."
+    },
+    {
+      "id": "toOtherSide",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "bezier",
+          "from": "current",
+          "control": [
+            {
+              "xIn": -5,
+              "yIn": 10,
+              "provenance": "PLACEHOLDER: starter example, a curve control point that runs the robot north under the hive, east of the hive frame's west legs"
+            },
+            {
+              "xIn": -5,
+              "yIn": 40,
+              "provenance": "PLACEHOLDER: starter example, a curve control point that keeps the robot east of the hive frame's west legs until it is past them"
+            },
+            {
+              "xIn": -24,
+              "yIn": 34,
+              "provenance": "PLACEHOLDER: starter example, a curve control point that lines the robot up south of flower1, heading north"
+            }
+          ],
+          "to": {
+            "ref": "flowerNorthApproach"
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "notes": "After the tip the up cell faces north, and a launch only scores from the up cell's own quarter of the field, so the robot goes to the other side of the hive. It drives north under the hive, away from where the tip dumps the cell, on about x = -7: the hive frame's legs slope in from their feet toward the pivot, so an 18 in robot clears them only east of about x = -9, and a taller robot has to go farther east. It stays there until it is past the frame and arrives with its intake facing north for the flower."
+    },
+    {
+      "id": "collectFlower",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "ref": "flowerNorthPickup"
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "speedFraction": 0.3,
+      "markers": [
+        {
+          "at": {
+            "t": 0
+          },
+          "command": {
+            "name": "intakeOn"
+          }
+        }
+      ],
+      "endCondition": {
+        "condition": "hopperFull"
+      },
+      "expect": {
+        "collectFrom": "flower1",
+        "count": 4
+      },
+      "notes": "Drives slowly up to flower1 with the intake running. The marker starts the intake as the path starts, without a separate step; endCondition ends the path early once the robot is full, and expect tells the ledger it takes the flower's four pollen."
+    },
+    {
+      "id": "waitForFull",
+      "kind": "wait",
+      "until": "hopperFull",
+      "timeoutS": 1,
+      "notes": "Gives the intake up to one more second. A wait until ends as soon as its condition is true, and timeoutS stops it waiting forever."
+    },
+    {
+      "id": "stopIntake",
+      "kind": "command",
+      "name": "intakeOff"
+    },
+    {
+      "id": "toScoreNorth",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "bezier",
+          "from": "current",
+          "control": [
+            {
+              "xIn": -24,
+              "yIn": 38,
+              "provenance": "PLACEHOLDER: starter example, a curve control point that backs the robot straight off the flower"
+            },
+            {
+              "xIn": -5,
+              "yIn": 18,
+              "provenance": "PLACEHOLDER: starter example, a curve control point that brings the robot in to the scoring spot from the hive side"
+            }
+          ],
+          "to": {
+            "xIn": -9,
+            "yIn": 36,
+            "headingRad": -1.5708,
+            "provenance": "CARRIED OVER: the starter's scoreNorth waypoint before issue #365, north of the RED hive on x = -9"
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangentReversed"
+      },
+      "notes": "Turns around on the way to the scoring spot north of the hive, so the launcher faces the up cell when it gets there."
+    },
+    {
+      "id": "scoreFlowerPollen",
+      "kind": "command",
+      "name": "score",
+      "args": {
+        "count": 4
+      },
+      "notes": "Four pollen into the north cell. It came up empty, and an empty cell takes 8 pollen to tip, so this is half of the second tip."
+    },
+    {
+      "id": "toGarden",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "bezier",
+          "from": "current",
+          "control": [
+            {
+              "xIn": -5,
+              "yIn": -56,
+              "provenance": "PLACEHOLDER: starter example, a curve control point that runs the robot south under the hive, east of the hive frame's west legs"
+            },
+            {
+              "xIn": -16,
+              "yIn": -62,
+              "provenance": "PLACEHOLDER: starter example, a curve control point that turns the robot west along the south wall"
+            }
+          ],
+          "to": {
+            "ref": "gardenSweepStart"
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "notes": "Back south under the hive, east of the frame's west legs, to the east end of the RED garden line, turning so the intake faces west along it."
+    },
+    {
+      "id": "sweepGarden",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "ref": "gardenSweepEnd"
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "headingRad": 3.1416
+      },
+      "speedFraction": 0.3,
+      "markers": [
+        {
+          "at": {
+            "t": 0
+          },
+          "command": {
+            "name": "intakeOn"
+          }
+        }
+      ],
+      "endCondition": {
+        "condition": "hopperFull"
+      },
+      "expect": {
+        "collectFrom": "gardenRed",
+        "count": 4
+      },
+      "notes": "Drives slowly west along the south wall with the intake leading, over the four pollen of the RED garden line. The first tip's dump also lands in this quarter, so the line may have been knocked about; watch a real tip before trusting this sweep."
+    },
+    {
+      "id": "stopGardenIntake",
+      "kind": "command",
+      "name": "intakeOff"
+    },
+    {
+      "id": "returnToScore",
+      "kind": "parallel",
+      "mode": "deadline",
+      "deadline": "driveBack",
+      "steps": [
+        {
+          "id": "driveBack",
+          "kind": "path",
+          "segments": [
+            {
+              "kind": "bezier",
+              "from": "current",
+              "control": [
+                {
+                  "xIn": -5,
+                  "yIn": -62,
+                  "provenance": "PLACEHOLDER: starter example, a curve control point that backs the robot east along the south wall"
+                },
+                {
+                  "xIn": -5,
+                  "yIn": -40,
+                  "provenance": "PLACEHOLDER: starter example, a curve control point that runs the robot north under the hive, east of the hive frame's west legs"
+                }
+              ],
+              "to": {
+                "xIn": -9,
+                "yIn": 36,
+                "headingRad": -1.5708,
+                "provenance": "CARRIED OVER: the starter's scoreNorth waypoint before issue #365, north of the RED hive on x = -9"
+              }
+            }
+          ],
+          "heading": {
+            "mode": "tangentReversed"
+          },
+          "notes": "East along the south wall and north under the hive once more, east of the frame's west legs, to the scoring spot north of it, turning to face the up cell."
+        },
+        {
+          "id": "clearThenSpinUp",
+          "kind": "sequence",
+          "steps": [
+            {
+              "id": "clearGarden",
+              "kind": "wait",
+              "seconds": 0.5
+            },
+            {
+              "id": "readyLauncher",
+              "kind": "command",
+              "name": "spinUp"
+            }
+          ]
+        }
+      ],
+      "notes": "A deadline group ends when its deadline member, the drive, ends. The sequence beside it keeps the intake on for half a second while the robot leaves the garden, then stops it and spins the launcher up on the way back."
+    },
+    {
+      "id": "scoreGardenPollen",
+      "kind": "command",
+      "name": "score",
+      "args": {
+        "count": 4
+      },
+      "notes": "Four more pollen into the north cell, which now holds 8, so the hive tips a second time."
+    }
+  ]
+}

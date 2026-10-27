@@ -184,8 +184,8 @@ export function imageToScreen(
 
 /**
  * The credit line drawn in the canvas corner while the picture is showing, always in the one form
- * "Field image: <who>", whether the file says "Team Juice 16236", "Field image by Team Juice 16236"
- * or "Field image: Team Juice 16236".
+ * "Field image: <who>", whether the file says "Example Team", "Field image by Example Team" or
+ * "Field image: Example Team".
  */
 export function creditLine(spec: FieldImageSpec | null): string | null {
   if (spec === null || spec.credit === null) return null;

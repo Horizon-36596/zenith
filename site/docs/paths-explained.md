@@ -16,9 +16,7 @@ The field is a square 144 inches (12 feet) on a side. To say where something is,
 - **y** runs from the audience side to the far side. Positive y is away from the audience.
 - The centre of the field is `(0, 0)`. The corners are at 72 inches in each direction.
 
-The field file for a season (`field.json`) declares this frame, so every tool, and the robot, agrees on it. On the BIOBUZZ field that file also describes where the hives, the flowers, the loading zones and the gardens are, as shapes the checks can test against, not just as a picture.
-
-The BIOBUZZ field images Zenith draws under the routine are by Team Juice 16236.
+The field file for a season (`field.json`) declares this frame, so every tool, and the robot, agrees on it. On the BIOBUZZ field that file also describes where the hives, the flowers, the loading zones and the gardens are, as shapes the checks can test against, and the editor draws the field from those same shapes.
 
 ## Poses: where the robot is and which way it faces
 
@@ -29,10 +27,10 @@ The heading is the direction the front of the robot points. A heading of 0° poi
 The editor shows headings in degrees. Files store them in radians, and every number in a file names its unit in its key, such as `xIn`, `yIn` and `headingRad`, so there is never a doubt what a number means.
 
 ```json
-{ "xIn": -12, "yIn": -63, "headingRad": 1.5708, "provenance": "PLACEHOLDER: starter example, against the south wall in RED's half, facing the hive; measure your own start tile" }
+{ "xIn": -13, "yIn": -63, "headingRad": 1.5708, "provenance": "SET FROM EDITOR: starter example, against the south wall in RED's half, 4 in west of the centre line, facing the hive, so it drives straight north to scoreSouth; measure your own start tile" }
 ```
 
-That pose is the `start` waypoint of the starter example: 12 inches left of centre, 63 inches toward the audience, facing away from the audience (1.5708 radians is 90°).
+That pose is the `start` waypoint of the starter example: 13 inches left of centre, 63 inches toward the audience, facing away from the audience (1.5708 radians is 90°). Its provenance records an editor change; it is not a measured starting pose for your robot.
 
 ### Where a number came from
 
@@ -40,7 +38,7 @@ Every pose and every robot constant carries a **provenance**: a short note sayin
 
 ### Named waypoints
 
-Some poses get used again and again: a starting spot against the wall, the place in front of a flower, a shooting spot. You can give a pose a name in `waypoints.json` and refer to it from any routine, such as `{ "ref": "scoreSouth" }`. The team measures it once on the field, and every auto that uses it picks up the measured value.
+Some poses get used again and again: a starting spot against the wall, the place in front of a flower, a shooting spot. You can give a pose a name in `waypoints.json` and refer to it from any routine, such as `{ "ref": "scoreSouth" }`. The team measures it once on the field, and every auto that uses it picks up the measured value. The waypoint belongs to the project rather than to one path, so it outlives any path that uses it; many planners keep each point inside a single path instead. See [Waypoints explained](editor.md#waypoints-explained).
 
 ## The two alliances
 
@@ -48,13 +46,15 @@ In BIOBUZZ the field is point-symmetric: the blue half is the red half rotated h
 
 ## Paths
 
-A **path** step drives the robot from one pose to another. It is made of one or more **segments**. Each segment has a start and an end, and is either a straight line or a curve.
+A **path chain** step drives the robot from one pose to another. It is made of one or more **paths**, followed as one. Each path has a start and an end, and is either a straight line or a curve. The file calls the step `path` and its paths `segments`; in Pedro Pathing v3 the chain is `Paths.path(p1, …, pn)`, called a `PathChain` in Pedro 1.x and 2.x.
 
 A path's start is usually `"current"`, which means "wherever the robot is when this step begins". That keeps a routine joined up when you move an earlier step.
 
+Inside a chain, a later path's start can be `"current"` too, which means "where the path before it ends". The editor writes it that way when you add or remove a path in the chain, so the point where two paths meet can never come apart.
+
 ### Curves and control points
 
-A curved segment is a **Bezier curve**. Besides its start and end, it has one to three **control points**.
+A curved path is a **Bezier curve**. Besides its start and end, it has one to three **control points**.
 
 A control point is not a place the robot drives through. It pulls the curve toward itself, like a magnet bending a wire. Put a control point off to the side of a straight line and the line bows toward it. The curve leaves its start heading toward the first control point and arrives at its end coming from the last one. More control points give you more say over the shape.
 
@@ -62,6 +62,8 @@ In the editor, control points are the hollow squares joined to the path by thin 
 
 - A **smooth** point keeps the two handles on either side of it in a straight line, so the path flows through without a kink.
 - A **corner** point lets the two handles move independently, so the path can change direction sharply.
+
+To make a curve from a straight path, right-click it on the field and choose **Make curve**, or set the path's **Kind** to **Curve** in the inspector. The new curve has one control point, in the middle of the line, so at first it is exactly the straight line; drag the hollow square to bend it. **Make straight line** turns it back.
 
 !!! tip "Why not just drive straight lines?"
     A straight line from a flower to a hive may cut through a field element, or leave the robot facing
@@ -82,7 +84,7 @@ Constant (`path.constant(heading)`)
 :   The robot keeps one heading for the whole path, whatever direction it drives. Good for short sideways moves where turning would waste time.
 
 Linear (`path.linear(start, end)`)
-:   The robot turns smoothly from a starting heading to an ending heading over the length of the path. Use it to arrive facing a target without stopping to turn.
+:   The robot turns smoothly from a starting heading to an ending heading over the length of the path. Use it to arrive facing a target without stopping to turn. On a curve, Pedro paces the turn by the curve's own parameter rather than its length, so the turn can run a little ahead or behind; the editor draws it where the robot does it.
 
 Facing point (`path.facingPoint(point)`)
 :   The robot keeps turning so its front points at one spot on the field while it drives, such as the centre of a hive. Useful when a mechanism must stay aimed at something.
@@ -139,27 +141,27 @@ Each finding is a plain sentence with a short code, such as `PERIMETER` (part of
 
 ## The BIOBUZZ example, in one picture
 
-Put together, a simple BIOBUZZ routine reads like this. It is `collect-and-score.auto.json` from the starter example:
+Put together, a full BIOBUZZ routine reads like this. It is `collect-and-score.auto.json` from the starter example, the auto the app opens with:
 
 1. **Start** against your alliance's wall at the `start` waypoint, holding four pollen.
 2. **Path** `driveOut`, a straight line to `scoreSouth`, a legal scoring spot south of your hive, heading mode tangent.
-3. **Command** `scorePreload`: `score` the four pollen into the hive.
-4. **Path** `toGarden`, a curve to `gardenApproach` above your garden, heading mode tangent so the front intake leads.
-5. **Path** `sweepGarden`, slowly onto the garden row, with a marker that starts the intake as it sets off and an end condition that stops it once the robot is full.
-6. **Wait** `waitForFull` gives the intake up to one more second, then **command** `stopIntake` runs `intakeOff`.
-7. **Parallel** `returnToScore`: drive back to `scoreSouth` backwards while the launcher spins up.
-8. **Command** `scoreCollected`: `score` the four collected pollen.
+3. **Command** `shootPreloads`: `score` all four pollen into the hive's up cell. It starts with 3 nectar, so 3 pollen tip it: the first volley tips the hive, and the up cell is now the north one.
+4. **Path** `toOtherSide`, round the west side of the hive frame and on to `flowerNorthApproach`, because a launch only scores from the up cell's own quarter of the field. Under the hive, between the frame's west legs and the centre line, an 18 in robot has a fraction of an inch to spare, and a robot past the centre line during auto breaks G402, which [`OPPONENT_SIDE`](checks-and-findings.md#opponent_side) reports as an error.
+5. **Path** `collectFlower`, slowly up to the flower on the north wall, with a marker that starts the intake as it sets off and an end condition that stops it once the robot is full. **Wait** `waitForFull` gives the intake up to one more second, then **command** `stopIntake` runs `intakeOff`.
+6. **Path** `toScoreNorth`, backing off the flower to `scoreNorth`, then **command** `scoreFlowerPollen` puts four pollen into the north cell, half of the 8 an empty cell needs.
+7. **Path** `toGarden` back round the west side of the frame to the RED garden line, turning to face west as it comes down to the wall, and **path** `sweepGarden` west along it with the intake running.
+8. **Parallel** `returnToScore`: drive back to `scoreNorth` backwards while the launcher spins up, then **command** `scoreGardenPollen` puts in four more, and the hive tips a second time.
 
-Step 5 in the file:
+Step 7's sweep in the file:
 
 ```json
 {
   "id": "sweepGarden",
   "kind": "path",
   "segments": [
-    { "kind": "line", "from": "current", "to": { "ref": "gardenPickup" } }
+    { "kind": "line", "from": "current", "to": { "ref": "gardenSweepEnd" } }
   ],
-  "heading": { "mode": "constant", "headingRad": -1.5708 },
+  "heading": { "mode": "constant", "headingRad": 3.1416 },
   "speedFraction": 0.3,
   "markers": [
     { "at": { "t": 0 }, "command": { "name": "intakeOn" } }
@@ -169,4 +171,4 @@ Step 5 in the file:
 }
 ```
 
-The ledger tracks the pollen through steps 3, 5 and 8, the checks test the robot outline along each path against the hive and the flowers, and the timeline adds the steps up against 30 seconds. When the Problems panel is empty, the plan fits the field, the time and the robot, as far as the robot and field files describe them.
+The ledger tracks the pollen and the two tips through steps 3, 5, 6, 7 and 8, the checks test the robot outline along each path against the hive and the flowers, and the timeline adds the steps up against 30 seconds. When the Problems panel is empty, the plan fits the field, the time and the robot, as far as the robot and field files describe them.

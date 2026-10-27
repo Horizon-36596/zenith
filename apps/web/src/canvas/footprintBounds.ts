@@ -17,6 +17,7 @@
 import {
   footprintAt,
   footprintBoundsIn,
+  footprintPolygons,
   headingFunction,
   makePath,
   type Box2,
@@ -56,6 +57,20 @@ export const unionBounds = (boxes: readonly Box2[]): Box2 => ({
  * polygons `footprintPolygons` hands the PERIMETER check. Re-exported so the canvas has one import.
  */
 export { footprintBoundsIn };
+
+/**
+ * The robot's half-diagonal, as Zoom to fit allows for it (issue #151): the farthest the outline the
+ * canvas draws (the expanded body and every mouth, `liveLayer.ts`) reaches from the pose, which is
+ * the same at every heading. For a frame that turns about its middle, with its mouths inside its own
+ * circle, that is half the frame's diagonal.
+ */
+export function robotReachIn(robot: Robot): number {
+  let reachIn = 0;
+  for (const polygon of footprintPolygons(footprintAt({ xIn: 0, yIn: 0, headingRad: 0 }, robot, "expandedIn"))) {
+    for (const corner of polygon) reachIn = Math.max(reachIn, Math.hypot(corner.xIn, corner.yIn));
+  }
+  return reachIn;
+}
 
 /** The body alone, so the readout can tell a mouth-driven wall snap apart. */
 export const bodyBoundsIn = (

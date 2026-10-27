@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://libraries.horizon36596.org/zenith/schema/v1/field.json",
-  "title": "Zenith field file, formatVersion 2",
+  "title": "Zenith field file, formatVersion 3",
   "type": "object",
   "properties": {
     "$schema": {
@@ -9,7 +9,7 @@
     },
     "formatVersion": {
       "type": "number",
-      "const": 2
+      "const": 3
     },
     "season": {
       "type": "string",
@@ -109,13 +109,11 @@
       "properties": {
         "xIn": {
           "type": "number",
-          "exclusiveMinimum": true,
-          "minimum": 0
+          "exclusiveMinimum": 0
         },
         "yIn": {
           "type": "number",
-          "exclusiveMinimum": true,
-          "minimum": 0
+          "exclusiveMinimum": 0
         }
       },
       "required": [
@@ -154,13 +152,11 @@
                 },
                 "right": {
                   "type": "number",
-                  "exclusiveMinimum": true,
-                  "minimum": 0
+                  "exclusiveMinimum": 0
                 },
                 "bottom": {
                   "type": "number",
-                  "exclusiveMinimum": true,
-                  "minimum": 0
+                  "exclusiveMinimum": 0
                 }
               },
               "required": [
@@ -221,13 +217,11 @@
       "properties": {
         "autoS": {
           "type": "number",
-          "exclusiveMinimum": true,
-          "minimum": 0
+          "exclusiveMinimum": 0
         },
         "teleopS": {
           "type": "number",
-          "exclusiveMinimum": true,
-          "minimum": 0
+          "exclusiveMinimum": 0
         }
       },
       "required": [
@@ -239,52 +233,110 @@
     "obstacles": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "const": "box"
+              },
+              "minXIn": {
+                "type": "number"
+              },
+              "maxXIn": {
+                "type": "number"
+              },
+              "minYIn": {
+                "type": "number"
+              },
+              "maxYIn": {
+                "type": "number"
+              },
+              "minZIn": {
+                "type": "number"
+              },
+              "maxZIn": {
+                "type": "number"
+              },
+              "solidToRobot": {
+                "type": "boolean"
+              },
+              "provenance": {
+                "$ref": "#/properties/image/properties/provenance"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "minXIn",
+              "maxXIn",
+              "minYIn",
+              "maxYIn",
+              "minZIn",
+              "maxZIn"
+            ],
+            "additionalProperties": false
           },
-          "kind": {
-            "type": "string",
-            "const": "box"
-          },
-          "minXIn": {
-            "type": "number"
-          },
-          "maxXIn": {
-            "type": "number"
-          },
-          "minYIn": {
-            "type": "number"
-          },
-          "maxYIn": {
-            "type": "number"
-          },
-          "minZIn": {
-            "type": "number"
-          },
-          "maxZIn": {
-            "type": "number"
-          },
-          "solidToRobot": {
-            "type": "boolean"
-          },
-          "provenance": {
-            "$ref": "#/properties/image/properties/provenance"
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "const": "strut"
+              },
+              "fromIn": {
+                "type": "object",
+                "properties": {
+                  "xIn": {
+                    "type": "number"
+                  },
+                  "yIn": {
+                    "type": "number"
+                  },
+                  "zIn": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "xIn",
+                  "yIn",
+                  "zIn"
+                ],
+                "additionalProperties": false
+              },
+              "toIn": {
+                "$ref": "#/properties/obstacles/items/anyOf/1/properties/fromIn"
+              },
+              "radiusIn": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "solidToRobot": {
+                "type": "boolean"
+              },
+              "provenance": {
+                "$ref": "#/properties/image/properties/provenance"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "fromIn",
+              "toIn",
+              "radiusIn"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "id",
-          "kind",
-          "minXIn",
-          "maxXIn",
-          "minYIn",
-          "maxYIn",
-          "minZIn",
-          "maxZIn"
-        ],
-        "additionalProperties": false
+        ]
       }
     },
     "zones": {
@@ -317,6 +369,12 @@
           },
           "appliesInAuto": {
             "type": "boolean"
+          },
+          "ledger": {
+            "type": "string",
+            "enum": [
+              "loadingZone"
+            ]
           },
           "provenance": {
             "$ref": "#/properties/image/properties/provenance"

@@ -18,15 +18,20 @@ from one to the other.
 The runtime is published through JitPack. One artifact holds both runtimes; your Gradle file declares
 the command library your robot code uses next to it.
 
+Use a runtime compatible with the editor and CLI that saved your auto. If you are reading these docs
+on an unreleased source branch, the dependency examples may still name the last published version.
+Build the corresponding runtime source or wait for the matching release; an older artifact may not
+read the development branch's newer file format.
+
 | | |
 |---|---|
-| JitPack coordinate | `com.github.Horizon-36596:zenith:v0.1.1` |
+| JitPack coordinate | `com.github.Horizon-36596:zenith:v0.1.2` |
 | Java package | `org.horizon36596.zenith.ivy` (Ivy), `org.horizon36596.zenith.solverslib` (SolversLib), `org.horizon36596.zenith` (shared) |
 | Packaging | Android library (AAR), minSdk 24 |
 | Maven group and artifact (local builds only) | `org.horizon36596:zenith-runtime` |
 
 JitPack names the artifact after the repository and uses the git tag as the version, `v` included, so
-the coordinate is `...:zenith:v0.1.0`, not `...:zenith:0.1.0`.
+the coordinate is `...:zenith:v0.1.1`, not `...:zenith:0.1.1`.
 
 The runtime declares no dependencies of its own. Your project declares its command library and Pedro
 Pathing next to it, at the versions below, so your Pedro pin never moves and a vendored SolversLib never
@@ -47,7 +52,7 @@ dependencies {
     // ...the FTC SDK lines that are already here...
     implementation 'com.pedropathing.ivy:pedro:1.1.1'
     implementation 'com.pedropathing:core:3.0.0-20260828.185437-17'
-    implementation 'com.github.Horizon-36596:zenith:v0.1.1'
+    implementation 'com.github.Horizon-36596:zenith:v0.1.2'
 }
 ```
 
@@ -68,7 +73,7 @@ dependencies {
     // ...the FTC SDK lines that are already here...
     implementation 'org.solverslib:core:0.3.6'
     implementation 'com.pedropathing:core:3.0.0-20260828.185437-17'
-    implementation 'com.github.Horizon-36596:zenith:v0.1.1'
+    implementation 'com.github.Horizon-36596:zenith:v0.1.2'
 }
 ```
 
@@ -94,7 +99,7 @@ Paths are built with the Pedro Pathing **v3** API (`com.pedropathing.api.Paths`)
 pre-release v3 line, not the v1 or v2 API most Pedro tutorials describe. It has no `PathChain`, no
 `PathBuilder` and no `BezierLine`.
 
-Zenith 0.1.0 is built and checked against this snapshot:
+The runtime source is built and checked against this snapshot:
 
 | | |
 |---|---|
@@ -156,11 +161,52 @@ differs in the two methods [Your robot class](#your-robot-class) lists.
 | `long nanoTime()` | no, `System.nanoTime()` | every timer the runtime uses |
 | `void setStartPose(Pose2d pose)` | no, `follower().setPose(...)` | seeding the start pose at init |
 | `Pose2d currentPose()` | no, from the follower | paths that start at `"current"` |
-| `double defaultSpeedFraction()` | no, `1.0` | the speed a path uses when the file sets none |
-| `Path atSpeed(Path path, double fraction)` | no, unchanged | applying a path's speed |
+| `double defaultSpeedFraction()` | no, `kinematics.defaultPathSpeedFraction` from the deployed `robot.json`, or `1.0` with a warning | the speed a path uses when the file sets none |
+| `Path atSpeed(Path path, double fraction)` | no, unchanged, **but needed for path speeds** | applying a path's speed. The default leaves the path alone, so a speed below 1 changes the editor's times and not the robot |
 | `Command followPath(Path path, double fraction)` | no, the runtime's `FollowPath` | driving each path step |
 | `Command step(String id, Command body)` | no, unchanged | wrapping each step, for logging or tracing |
 | `void initLoop(AutoFromFile opMode)` | no, nothing | work during the init loop |
+| `void onStart(AutoFromFile opMode)` | no, nothing | once at start, before the routine is scheduled: start a match log here |
+| `void periodic(AutoFromFile opMode)` | no, nothing | every loop after start, before SolversLib's scheduler runs your subsystems and commands |
+| `void afterLoop(AutoFromFile opMode)` | no, nothing | every loop after start, after the scheduler: log what the loop did |
+| `void onStop(AutoFromFile opMode)` | no, nothing | once when the OpMode stops, however it stops, a failure at init or at start included, whenever your robot was created: close what `init` or `onStart` opened |
+
+### Your own code around the routine
+
+An auto file holds the routine and nothing else. Anything else your auto does, such as logging, a
+camera started at init or telemetry of your own, goes in your `ZenithRobot`, so every Zenith auto gets
+it without anyone editing a generated OpMode:
+
+```java
+@Override public void onStart(AutoFromFile opMode) { matchLog.open(opMode.spec().name); }
+@Override public void afterLoop(AutoFromFile opMode) { matchLog.record(follower.pose(), opMode.nanoTime()); }
+@Override public void onStop(AutoFromFile opMode) { matchLog.close(); }
+@Override public Command step(String id, Command body) { return matchLog.timed(id, body); }
+```
+
+`matchLog` stands for your own logging code. `onStop` runs even when init fails, as long as your robot
+was created, so a log opened in `init` is always closed, and the scheduler is still reset if `onStop`
+throws. The order on every loop is `periodic`, then the scheduler, then `afterLoop`. The Ivy runtime has
+the same four methods with the same names.
+
+When that is still not enough, two more ways exist, with costs. `deploy.opModeBase` makes every
+generated OpMode extend your own subclass of `AutoFromFile` ([Deploy autos](#deploy-autos)), and an
+[exported OpMode](#exported-opmode-not-recommended) is the whole auto as Java you own.
+
+!!! warning "Path speeds need `atSpeed`"
+    A path's `speedFraction`, and the robot's default path speed, set how long the editor says a path
+    takes. The robot drives at that speed only if your `ZenithRobot` implements `atSpeed`, because
+    `FollowPath` hands the follower whatever `atSpeed(path, fraction)` returns and the default returns the
+    path unchanged. Without it every path drives at full speed. When a path step is set below 1 and
+    `atSpeed` is still the default, init shows a `Zenith warning` line on the Driver Station naming
+    those steps. A robot that replaces `followPath` is taken to apply speeds itself and gets no warning.
+    The runtime cannot apply the speed for you yet: whether Pedro 3.0.0 offers a per-path speed is still
+    an open question.
+
+    `defaultSpeedFraction()` needs nothing from you. Leave it out and the runtime reads
+    `kinematics.defaultPathSpeedFraction` from the `robot.json` that `zenith deploy` copied beside your
+    autos, so the robot and the editor start from the same number. If the file is missing or has no valid
+    number, the answer is `1.0` and init says so.
 
 Two more extension points exist for teams that need them. `AutoFromFile` is an abstract SolversLib
 `CommandOpMode` whose `startPose()` and `buildRoutine()` hooks can be overridden, which is what
@@ -175,7 +221,7 @@ findings use.
 
 | step kind | built as |
 |---|---|
-| `path` | a `FollowPath` over a Pedro path, one Pedro path per file segment. Markers fire alongside it; `endCondition` interrupts it; `timeoutS` bounds it. |
+| `path` | a `FollowPath` over a Pedro path, one Pedro path per file segment. Markers fire alongside it; `endCondition` interrupts it; `timeoutS` bounds it. A path of 2 in or less is a `TurnInPlace` instead (below). |
 | `command` | the command registered under that name, built with the step's `args` |
 | `wait` | a wait on the robot clock, or a wait until a registered condition is true |
 | `sequence` | `SequentialCommandGroup` |
@@ -198,9 +244,23 @@ Details that affect how a routine behaves:
 - **Markers fire by distance along the path.** `PathMarkers` reads Pedro's segment index and
   arc-length completion each loop and fires a marker when the path passes the marker's position. A
   marker placed 60% along a path in the editor fires 60% along it on the robot. Markers at the very
-  end of a path still fire.
+  end of a path still fire. A path cut short by its `endCondition` or `timeoutS` ends its markers
+  with it, so a marker past the point where the robot stopped never fires.
+- **Two markers that need one subsystem take turns.** When a marker starts, any marker on the same
+  path that is still running and needs one of its subsystems is interrupted, as the scheduler would
+  interrupt it. A long `raiseLift` marker followed by a `lowerLift` marker leaves the lift lowering.
+- **A turn on the spot is held, not followed.** A path step of 2 in or less, measured on the path
+  as built, is never handed to Pedro: `TurnInPlace` calls `follower.hold` at the step's end point
+  with its end heading and is done once the heading is within two degrees of it and the robot within
+  0.5 in of the point. Both, so a short step that drives a little without turning still ends only
+  once the robot has got there. A hold that comes to rest a little further off, because its heading
+  or translational P cannot beat the friction, ends once the robot has stayed still for a quarter of
+  a second within ten degrees and 2 in of the pose (`PedroPaths.TurnSettle`). Outside those bounds,
+  stopping alone does not finish the step; set `timeoutS` to bound it. The robot turns from whichever way it arrives facing, the short way
+  round. Its markers start with it and end with it, and your `followPath` is not called for it.
 - **`"current"` starts are built late.** A path whose first segment starts at `"current"` is built
-  when it starts, from the robot's live pose.
+  when it starts, from the robot's live pose. Its markers' commands and its `endCondition` are still
+  looked up at init, so a name nobody registered fails on the tile.
 - **Everything else is built at init.** A missing file, an unknown format version, an unregistered
   command or condition, an unknown waypoint, or a duplicate step id throws during init, while the
   robot is still on the tile. The Driver Station shows the message, and the message names the step.
@@ -247,7 +307,7 @@ The command classes in this example (`ScoreCommand`) stand for your own robot's 
 - Argument values arrive from the JSON reader: a number is a `Double`, a string is a `String` and a
   flag is a `Boolean`. Use the `arg*` helpers (`argInt`, `argDouble`, `argString`, `argEnum`, each
   with an optional fallback where it makes sense). Their error messages name the command and the
-  argument.
+  argument. `argInt` refuses a fraction, and a whole number too big or too small for an `int`.
 - An auto that names an unregistered command fails at init and lists every name that *is*
   registered.
 
@@ -267,9 +327,9 @@ The command classes in this example (`ScoreCommand`) stand for your own robot's 
   },
   {
     "name": "score",
-    "summary": "Score whatever the robot is holding at the given level.",
-    "params": { "level": { "type": "integer", "min": 1, "max": 3 } },
-    "estimateS": "1.0",
+    "summary": "Score the requested number of held game pieces.",
+    "params": { "count": { "type": "integer", "min": 1, "max": 4 } },
+    "estimateS": "0.5 + count * 0.5",
     "requires": ["intake"],
     "stationary": true
   }
@@ -282,6 +342,47 @@ The command classes in this example (`ScoreCommand`) stand for your own robot's 
 `zenith validate` rejects an auto that names a command or condition `robot.json` does not declare
 (a `SCHEMA` finding). Keep `robot.json` and your `NamedCommands.register` calls in step: every name
 in one should be in the other. The [file format reference](file-format.md) lists every command key.
+This fragment matches the Java example's `count` argument. Its range and time estimate are example
+values; replace them with your command's limits and measured timing.
+
+### Commands from the robot's code
+
+You do not have to copy the names across by hand. Zenith can read your registrations straight
+from your Java or Kotlin and fill in `robot.json`, in two places:
+
+- **On the command line**, `zenith import-commands` scans the project (or the directories you name),
+  adds what `robot.json` lacks, and `zenith validate --java TeamCode` checks the two against each
+  other. Set `"javaDir": "TeamCode/src/main/java"` in `zenith.json` and every `zenith validate`
+  does that check by itself. Both need only Node: no Gradle, no Android Studio, no administrator rights. See
+  [`zenith import-commands`](cli-reference.md#zenith-import-commands).
+- **In the editor**, **Import commands from Java...** in the command palette reads the Java files
+  of the folder you pick, or of the GitHub repository you have open, shows the `robot.json` lines
+  that would change, and writes them when you apply. See [the editor](editor.md#import-commands-from-java).
+
+What the scanner reads, for each `NamedCommands.register` and `registerCondition` call:
+
+- the name, when it is a string literal, a `static final String` or Kotlin `const val` constant (in
+  the same class or named as `Names.SHOOT`), or a `+` of those; and through a small wrapper method
+  such as `void reg(String name, ...) { NamedCommands.register(name, ...); }`, at each call of it;
+- the factory, when it is a lambda (Java or Kotlin, a trailing lambda included), a method reference
+  such as `this::shoot`, an anonymous `Factory`, a field holding one of those, or a method that
+  returns one, following any method in your sources that the argument map is passed to;
+- each argument the factory reads with an `arg*` helper: its key and type, whether it is required,
+  the fallback as its default when that is a literal or a constant, and an enum's constants when
+  the enum is declared in your sources.
+
+What it cannot read, it lists with the file and line instead of guessing: a name that is only known
+when the code runs (a loop over a list of names, a string template, a name read from a file), an
+enum declared in a library, an argument read straight from the map with `args.get("key")`, and a
+factory that hands the argument map to code outside your sources. Estimates, `requires`,
+`stationary`, `movesRobot` and ledger hints cannot be read from code at all, so a new command gets
+`"estimateS": "unknown"` and a `provenance` that says the estimate needs measuring, and everything
+you have written in `robot.json` stays as you wrote it.
+
+Test sources (`src/test`, `src/androidTest`) and build output are skipped, since a robot's tests
+often register stand-in commands the real robot does not have. `NamedCommands.commandNames()` and
+`conditionNames()` list what is really registered at run time, if you want to check a registration
+the scanner could not read.
 
 ## Load an auto on the robot
 
@@ -335,7 +436,7 @@ You do not write these by hand. `zenith deploy` generates them.
 4. The whole routine is built. Any problem with the file — an unregistered command or condition, an
    unresolved waypoint, a duplicate step id — throws here, while the robot is still on the tile, and
    names the step.
-5. While waiting for start, the Driver Station shows the file, its title and its step count. At start
+5. While waiting for start, the Driver Station shows the file, its title, its step count and each `Zenith warning`. At start
    the routine is scheduled. With SolversLib, `AutoFromFile` is a `CommandOpMode`, and SolversLib's
    command scheduler runs the routine once per loop. With Ivy, `AutoFromFile` calls
    `Scheduler.schedule(routine)`, and then on every loop your robot's `periodic` and
@@ -358,7 +459,7 @@ Headings are mirrored by the same decision, through the same `mirror`. When a pa
 | `tangent`, `tangentReversed` | unchanged: they follow the mirrored path |
 | `constant` | the heading goes through `mirror` |
 | `linear` | the start goes through `mirror`; the sweep keeps its size, and turns the other way round if `mirror` is a reflection |
-| `facePoint` | the point goes through `mirror` |
+| `facePoint` | the point goes through `mirror`, even when `mirror` only moves the field and keeps every heading |
 | `piecewise` | each range's heading as above; the ranges stay where they are along the path |
 
 A RED file run as BLUE drives what the editor's **mirror to the other alliance** drives, saved as
@@ -410,7 +511,10 @@ usual afterwards.
 once `codegen` is set.
 `robotClass` is the dotted name of your `ZenithRobot` implementation; it is required once `codegen`
 is set, because it is written straight into the generated OpMode's source. `preselectTeleOp` is
-optional. Both `dir` values must be inside the project. Zenith refuses a path that resolves outside
+optional. So is `opModeBase`: the dotted name of your own abstract subclass of your library's
+`AutoFromFile`, which every generated OpMode then extends in place of `AutoFromFile`, for code that
+belongs in the OpMode rather than in your `ZenithRobot`. The stub still names the file and constructs
+`robotClass`, so your base class leaves `autoName()` and `createRobot()` to it. Both `dir` values must be inside the project. Zenith refuses a path that resolves outside
 it.
 
 This example deploys for SolversLib; a team on Ivy sets `"commandLibrary": "ivy"` (see
@@ -424,7 +528,11 @@ zenith.json does not say which command library your robot code uses, and Zenith 
 ```
 
 `zenith deploy` names the library it wrote for on the first line of its output. Without a `codegen`
-section it copies the files only, needs no `commandLibrary`, and says so on that line.
+section it copies the files only and needs no `commandLibrary`, but it writes no OpMode, so the
+Driver Station lists none of the autos unless your own OpModes load them. Its first line then says
+that no Java is written, its last line warns that no OpMode was written, and `--json` output has
+`"stubs": false`. The desktop app's Deploy says the same. `zenith init` writes the `codegen` section
+above, so a new project has one.
 
 ### From the desktop app
 
@@ -462,22 +570,56 @@ exits `1` so a script notices. `--dry-run` lists every action (`copy:`, `write:`
 
 ## Generated Java (optional)
 
-`zenith codegen <auto>` writes a readable Java class for one auto: the same routine as the command
-tree `AutoBuilder` builds, written out step by step. It is written for the runtime `deploy.commandLibrary` names, Ivy or SolversLib,
-and refuses when the key is not set. It is for reading an auto as code, for checking the runtime when you suspect it, and for teams that use
-the file format without the runtime. The file is derived. Never edit it; edit the auto and run
-`zenith codegen` again. The header records the source file's hash, so a stale class is easy to spot.
+What runs on the robot is the auto file. The OpMode `zenith deploy` writes names the file, and
+`AutoFromFile` reads it at init and has `AutoBuilder` build the routine. The generated class is not
+that code. It is a reference: the same routine `AutoBuilder` builds, written out as Java to read.
+
+`zenith codegen <auto>` writes that class for one auto, and the editor's
+[Code panel](editor.md#code-panel) shows it as you edit. It is written for the runtime
+`deploy.commandLibrary` names, Ivy or SolversLib, and refuses when the key is not set. It is for
+reading an auto as code and for checking the runtime when you suspect it. It extends the runtime's
+`AutoFromFile`, which still reads the auto file, so it needs both the runtime and the file. The
+conformance suite runs the starter's generated classes against the routine built from the file and
+fails if they differ. The file is derived. Never edit it; edit the auto and run `zenith codegen`
+again. The header records the source file's hash, so a stale class is easy to spot.
 
 A path that starts from `"current"` is written as `DeferredPath.of(...)`, the call the runtime makes,
-so it is built from the robot's live pose when the step starts. One thing stays planned: in such a
-step, a marker placed anywhere but the very start, or a heading shared out between segments by arc
-length, uses the planned path's length, and the generated method says so in a comment.
+so it is built from the robot's live pose when the step starts. Its `endCondition` is looked up when
+the class builds its routine, as `AutoBuilder` does, so a condition nobody registered fails on the
+tile. One thing stays planned: in such a step, a marker placed anywhere but the very start, or a
+heading shared out between segments by arc length, uses the planned path's length, and the generated
+method says so in a comment.
+
+A path step of 2 in or less is written as `new TurnInPlace(...)`, as `AutoBuilder` builds it, with its
+markers in a `Parallel.deadline` beside the turn. When such a step starts from `"current"`, the
+generated method measures the live path with `PedroPaths.lengthIn` and decides at run time, as
+`AutoBuilder` does: still 2 in or less, it turns on the spot; longer, it follows the path.
 
 The starter example's
 [`generated` folder](https://github.com/Horizon-36596/zenith/tree/main/examples/starter/generated)
-holds what `zenith codegen` and `zenith deploy` write for its `cycle-and-park` auto, once for each
-library. [Choosing a command library](command-libraries.md#what-zenith-generates) walks through the
-differences.
+holds what `zenith codegen`, `zenith codegen --export` and `zenith deploy` write for its
+`cycle-and-park` auto, once for each library. [Choosing a command library](command-libraries.md#what-zenith-generates)
+walks through the differences.
+
+### Exported OpMode (not recommended)
+
+`zenith codegen --export <auto>`, or **Export** in the Code panel, writes `<Name>Exported.java`: the
+whole auto as a concrete `@Autonomous` OpMode that you paste into TeamCode and own. It reads no auto
+file. Its `loadSpec()` returns `AutoSpec.inCode(...)` (`AutoFile.inCode(...)` on Ivy), which carries the
+alliance its poses are written for, the start pose and the default path speed from `robot.json`, and
+its `buildRoutine()` is the same routine as the generated class. It still needs the runtime library
+and your `ZenithRobot`, and it refuses without `deploy.robotClass`, because it constructs your robot.
+Edit it as you like: add logging, vision, or anything an auto file cannot hold.
+
+It is not the recommended path. Once you export, Zenith no longer tracks the routine: a change you
+make in the class is not in the auto file, so the editor, its checks and its sim never see it, and
+exporting again overwrites the class. It also gets no `Zenith warning` about path speeds `atSpeed`
+does not apply, because it has no file steps to name. Try your `ZenithRobot`'s
+[hooks](#your-own-code-around-the-routine) or `deploy.opModeBase` first. If you do export, delete
+the generated OpMode for the same auto, or the Driver Station lists both.
+
+The conformance suite runs the starter's exported classes against the routine built from the file,
+on both alliances, and fails if they differ.
 
 ## Ivy
 
@@ -520,6 +662,10 @@ Two methods differ:
 | `Object drive()` | no, the follower | the requirement every path step holds. Ivy takes any object as a requirement, so there is no subsystem class. |
 | `void periodic(AutoFromFile opMode)` | no, `follower().update()` | once per loop, before `Scheduler.execute()`. Ivy has no subsystem `periodic()`, so this is where the follower is updated. If you override it, update the follower yourself. |
 
+`onStart`, `afterLoop` and `onStop` are the same as the SolversLib ones
+([Your own code around the routine](#your-own-code-around-the-routine)); `afterLoop` runs after
+`Scheduler.execute()`.
+
 The required methods are `init`, `registerCommands`, `follower()`, `runningAlliance()` and
 `mirror(Pose)`.
 
@@ -527,6 +673,7 @@ The required methods are `init`, `registerCommands`, `follower()`, `runningAllia
 import com.pedropathing.follower.Follower;
 import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.math.Pose;
+import com.pedropathing.paths.Path;
 import org.horizon36596.zenith.ivy.AutoFromFile;
 import org.horizon36596.zenith.ivy.NamedCommands;
 import org.horizon36596.zenith.ivy.ZenithRobot;
@@ -548,10 +695,19 @@ public final class MyRobot implements ZenithRobot {
     @Override public Follower follower() { return follower; }
     @Override public String runningAlliance() { return "RED"; }
     @Override public Pose mirror(Pose pose) { return new Pose(-pose.x(), -pose.y(), pose.heading() + Math.PI); }
+
+    // Needed for path speeds: without it every path drives at full speed. Apply the cap the way your
+    // follower setup does; for a ForesightV3 follower built from a config you keep, this is the line.
+    @Override public Path atSpeed(Path path, double fraction) {
+        return path.with(foresightConfig.setPathSpeed(fraction));
+    }
 }
 ```
 
-`PedroSetup.createFollower` and `Intake` stand for your own robot's code.
+`PedroSetup.createFollower` and `Intake` stand for your own robot's code. This is an integration
+outline, not a standalone class: `foresightConfig` is the configuration retained by your own
+ForesightV3 follower setup. Supply that configuration or replace `atSpeed` with the speed-cap hook
+your follower uses. Removing the override leaves path speeds unapplied.
 
 ### Named commands
 
@@ -641,6 +797,8 @@ started. The runtime's groups run members in file order and end each one exactly
 
 ## Determinism
 
-The runtime reads no wall clock and no random source. Every timer reads the robot's `nanoTime()`. Run
-the same auto twice in the headless sim and you get the same result, which is what lets Zenith compare
-a plan against a recorded run. See [Simulation](simulation.md).
+The runtime's timers read the robot's `nanoTime()`; they do not read a random source. The default
+clock is `System.nanoTime()`, so a headless harness must supply its stepped clock. Repeating a run
+also needs the same model, initial state, inputs and deterministic robot commands. A command that
+reads wall time or an unseeded random source can still make the result differ. See
+[Simulation](simulation.md).

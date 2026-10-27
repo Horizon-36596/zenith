@@ -1,6 +1,6 @@
 {
   "name": "@horizon36596/zenith-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The zenith command: validate, estimate, render, codegen, deploy and simulate FTC autonomous routines.",
   "keywords": [
     "ftc",
@@ -65,6 +65,8 @@
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "@horizon36596/zenith-core": "workspace:*",
+    "@horizon36596/zenith-github": "workspace:*",
+    "@horizon36596/zenith-import": "workspace:*",
     "@horizon36596/zenith-schema": "workspace:*",
     "@horizon36596/zenith-season-biobuzz": "workspace:*",
     "@horizon36596/zenith-seasons": "workspace:*",

@@ -9,12 +9,24 @@
   padding-inline: var(--pad-row-x);
 }
 
-/* A label squeezed by a wide value and its chip wraps to a second line rather than being cut. */
+/* A stacked row: the label on its own line and the controls under it, right-aligned. */
+.row[data-stacked] {
+  grid-template-columns: 1fr;
+  row-gap: 0;
+  padding-block: var(--space-1);
+}
+
+.row[data-stacked] .label {
+  min-width: 0;
+}
+
+/* A label squeezed by a wide value and its chip wraps to a second line rather than being cut. It keeps
+   72 px whatever the value beside it needs (UI_GUIDE section 9.5), so a long readout wraps instead. */
 .label {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  min-width: 0;
+  min-width: 72px;
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
   color: var(--text-mid);
@@ -26,6 +38,65 @@
   display: flex;
   align-items: center;
   justify-self: end;
+  /* A long readout, such as the autos that follow a waypoint, wraps inside the column that is left
+     once the label has its 72 px, right-aligned like every other value. */
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* An inline row action after the value (UI_GUIDE section 9.5), such as a SourceSelect's crosshair
+   or a heading's Set: on the value's line, a small gap from it. */
+.rowAction {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: var(--space-1);
+}
+
+/* ---- Pose row (UI_GUIDE section 9.5) ------------------------------------- */
+
+/* A label, x and y, the unit once and a short chip, on one line. The label never shrinks below 72
+   px; a panel too narrow for the chip wraps it under the numbers, right-aligned. */
+.poseRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 2px;
+  row-gap: 2px;
+  min-height: var(--row-h);
+  padding-inline: var(--pad-row-x);
+}
+
+.poseLabel {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  flex: 1 1 72px;
+  min-width: 72px;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.poseValues {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.poseValues :global(.unit) {
+  margin-left: 2px;
+}
+
+.poseChip {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-left: auto;
 }
 
 .chip {
@@ -44,6 +115,57 @@
 .row[data-chip] .chip {
   grid-column: 2;
   justify-self: end;
+}
+
+/* A short chip beside a value that leaves it room (issue #242), such as an envelope's time: it
+   stays on the value's line, in a column of its own, and the label keeps its 72 px. */
+.row[data-chip="inline"] {
+  grid-template-columns: minmax(72px, 1fr) auto auto;
+  row-gap: 0;
+  padding-block: 0;
+}
+
+.row[data-chip="inline"] .chip {
+  grid-column: auto;
+}
+
+/* The unit a number is in, as a select (NumberUnitField): quiet, in the UI face, as wide as its
+   longest option needs. */
+.unitSelect {
+  appearance: none;
+  field-sizing: content;
+  height: var(--ctl-h-md);
+  padding-inline: var(--space-1);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--text-mid);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.unitSelect:hover {
+  border-color: var(--border-default);
+}
+
+.unitSelect:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-shadow);
+}
+
+/* A described row's brief, drawn only in With descriptions (issue #238, UI_GUIDE section 9.13): one
+   line under the label across the whole row, cut with an ellipsis rather than wrapped. */
+.brief {
+  grid-column: 1 / -1;
+  margin: calc(-1 * var(--space-1)) 0 var(--space-1);
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .stack {
@@ -93,9 +215,72 @@
   cursor: ew-resize;
 }
 
+/* With the focus, a drag selects text rather than scrubbing (issue #145), so the cursor says so. */
+.input:focus {
+  cursor: text;
+}
+
+/* A pose's two numbers share one line with a label and a chip, so each box is as wide as "-72.00"
+   needs. It is an `.input` in every other way: the hover and focus chrome, the scrub cursor. */
+.poseInput {
+  composes: input;
+  width: 54px;
+  padding-inline: 2px;
+}
+
+/* A list row's number, as the Waypoints list's x, y and heading (issue #245): narrower and lower
+   than a field's box, so a row of three stays 24 px tall. */
+.compactInput {
+  composes: input;
+  width: 38px;
+  height: var(--ctl-h-sm);
+  padding-inline: 2px;
+  font-size: var(--fs-xs);
+}
+
+/* Room for "-180.0": the angle is one decimal and wrapped, so a heading is never wider than that. */
+.compactAngle {
+  composes: compactInput;
+  width: 42px;
+}
+
 .inputProse {
   width: 160px;
   font-family: var(--font-mono);
+}
+
+/* A dialog's text field (TextField `wide`, issue #502): the dialog's full width, with an edge at
+   rest, since it is where a person writes rather than a value to read. */
+.inputWide {
+  composes: inputProse;
+  width: 100%;
+  background: var(--bg-inset);
+  border-color: var(--border-default);
+}
+
+.inputWide[aria-invalid="true"] {
+  border-color: var(--sev-error);
+}
+
+/* The lines under a wide field: what is wrong with it, then a quiet note on what is in it. */
+.fieldProblem,
+.fieldNote {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+.fieldProblem {
+  color: var(--sev-error);
+}
+
+.fieldNote {
+  color: var(--text-lo);
+}
+
+/* Words a person writes, such as a title, in the UI face; a name or an id stays mono. */
+.inputWords {
+  font-family: var(--font-ui);
 }
 
 .select {
@@ -126,6 +311,7 @@
   transition: opacity var(--dur-base) var(--ease-out);
 }
 
+.choice[data-chevron] .choiceChevron,
 .choice:hover:not(:disabled) .choiceChevron,
 .choice:focus-visible .choiceChevron,
 .choice[aria-expanded="true"] .choiceChevron {
@@ -229,49 +415,484 @@
   color: var(--text-hi);
 }
 
-/* ---- Sections ----------------------------------------------------------- */
+/* ---- Sections (UI_GUIDE section 9.3, issue #431) ------------------------- */
 
+/* A full-bleed hairline under every section: the one divider between them. */
 .section {
-  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-default);
 }
 
-.section:first-child {
-  border-top: 0;
+/* A group inside a section, such as one path of a chain, has no line of its own. */
+.section[data-variant="sub"] {
+  border-bottom: 0;
 }
 
 .sectionHeadRow {
   display: flex;
   align-items: center;
-  padding-right: var(--pad-row-x);
+  gap: var(--space-1);
+  min-height: var(--row-h-inspector);
+  padding-right: var(--space-1);
 }
 
+/* The whole header folds the section: a 28 px row with the triangle at 8 px, then the title. */
 .sectionHead {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 6px;
   width: 100%;
-  height: var(--row-h);
-  padding-inline: var(--pad-row-x);
-  font-family: var(--font-display);
-  font-size: var(--fs-md);
-  line-height: var(--lh-md);
-  font-weight: var(--fw-medium);
+  height: var(--row-h-inspector);
+  padding: 0 0 0 var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-section);
+  text-transform: uppercase;
   color: var(--text-mid);
+  text-align: left;
 }
 
 .sectionHead:hover {
   color: var(--text-hi);
 }
 
+/* The filled 8 px triangle, turned down while open. */
+.triangle {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  padding: 1px;
+  color: var(--text-lo);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.triangle[data-open] {
+  transform: rotate(90deg);
+}
+
+.sectionTitle {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* How many things a list section holds, `PATHS 2`: quiet mono, never uppercase tracking. */
+.sectionCount {
+  flex: none;
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  color: var(--text-lo);
+}
+
+/* Something is set inside a folded section (neutral), or needs a look (lemon, issue #431). */
+.sectionDot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--text-lo);
+}
+
+.sectionDot[data-tone="warn"] {
+  background: var(--sev-warn);
+}
+
+/* What a folded section holds, in text-lo after its title, cut to one line. */
+.sectionSummary {
+  flex: 1;
+  min-width: 0;
+  margin-left: var(--space-1);
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-lo);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The header's one ghost action, at its right edge, in the quiet colour until hovered. */
+.sectionActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.sectionActions button {
+  color: var(--text-lo);
+}
+
+/* A sub-group's bin shows on hover or keyboard focus only, and always on a touch screen. */
+.sectionActions[data-hover] {
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.sectionHeadRow:hover .sectionActions[data-hover],
+.sectionHeadRow:focus-within .sectionActions[data-hover] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .sectionActions[data-hover] {
+    opacity: 1;
+  }
+}
+
 .sectionBody {
   padding-bottom: var(--space-2);
 }
 
+.sectionBody[data-tight] {
+  padding-bottom: var(--space-1);
+}
+
+/* A sub-group: its triangle at 22 px and a sentence-case title; its rows move 16 px in, so their
+   labels start at 40 px and their values keep the 120 px column. */
+.section[data-variant="sub"] > .sectionHeadRow > .sectionHead {
+  padding-left: calc(var(--inspector-gutter) - 2px);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-mid);
+}
+
+.section[data-variant="sub"][data-open] > .sectionHeadRow > .sectionHead {
+  color: var(--text-hi);
+}
+
+.section[data-variant="sub"] > .sectionBody {
+  --inspector-gutter: 40px;
+  --inspector-label-w: 72px;
+  padding-bottom: 0;
+}
+
+/* A disclosure drawn as a row of the grid, such as a curve's Controls: the triangle in the gutter,
+   the title in the label column, and the folded summary in the value column, quiet and in mono. */
+.section[data-variant="row"] {
+  border-bottom: 0;
+}
+
+.section[data-variant="row"] > .sectionHeadRow > .sectionHead {
+  display: grid;
+  grid-template-columns: 14px calc(var(--inspector-label-w) + var(--space-2)) minmax(0, 1fr);
+  gap: 0;
+  padding-left: calc(var(--inspector-gutter) - 14px);
+  font-size: var(--fs-label);
+  line-height: 16px;
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-lo);
+}
+
+.section[data-variant="row"] > .sectionHeadRow > .sectionHead > .sectionTitle {
+  grid-column: 2;
+}
+
+.section[data-variant="row"] > .sectionHeadRow > .sectionHead > .sectionSummary {
+  grid-column: 3;
+  margin-left: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: 12.5px;
+  color: var(--text-mid);
+}
+
+.section[data-variant="row"] > .sectionHeadRow > .sectionHead:hover {
+  color: var(--text-hi);
+}
+
+.section[data-variant="row"] > .sectionBody {
+  padding-bottom: 0;
+}
+
+/* A step's notes, in a quiet well under the Notes header (issue #431): the well is the box. */
+.well {
+  padding: 0 var(--space-3) 0 var(--inspector-gutter);
+}
+
+.wellText {
+  display: block;
+  width: 100%;
+  field-sizing: content;
+  min-height: calc(2 * var(--lh-sm) + 12px);
+  max-height: calc(8 * var(--lh-sm) + 12px);
+  padding: 6px var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--text-mid);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  resize: none;
+}
+
+.wellText:hover {
+  border-color: var(--border-default);
+}
+
+.wellText:focus-visible,
+.wellText:focus {
+  outline: none;
+  border-color: var(--border-strong);
+  color: var(--text-hi);
+  box-shadow: var(--ring-shadow);
+}
+
+.wellText::placeholder {
+  color: var(--text-lo);
+}
 /* After the select rules on purpose: a button must never take the native look on hover. */
 .choice,
 .choice:hover:not(:disabled),
 .choice:focus-visible {
   appearance: none;
+}
+
+.input::placeholder,
+.inputProse::placeholder {
+  color: var(--text-lo);
+}
+
+/* A number box's placeholder is words, such as "none" or "default 0.80", so it is set in the UI
+   face, which also fits the longer one whole in the 86 px box (issue #144). */
+.input::placeholder {
+  font-family: var(--font-ui);
+}
+
+/* A section's ? is quiet until its header is hovered or holds focus, so six identical circles in one
+   column do not compete with the values (issue #410). It is only transparent, never hidden, so it
+   stays in the tab order, and keyboard focus on it shows it through :focus-within. The region
+   title's ? is a different component and stays visible. */
+.sectionHelp {
+  display: inline-flex;
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.sectionHeadRow:hover .sectionHelp,
+.sectionHeadRow:focus-within .sectionHelp,
+.sectionHelp:focus-within {
+  opacity: 1;
+}
+
+/* An angle's degree sign sits directly after the number: it pulls back over the input's own padding
+   and border, which a unit in inches or seconds keeps as a gap. */
+.degreeUnit {
+  margin-left: -4px;
+}
+
+.compactAngle + .degreeUnit {
+  margin-left: -2px;
+}
+
+/* ---- The Inspector's grid (issue #431, UI_GUIDE section 9.5) ------------------------------------
+   Every row of every Inspector section sits on one grid: the label at 24 px (`--inspector-gutter`)
+   in a 88 px column, the value left-aligned at 120 px, an inline chip after it, and one 24 px action
+   at the far right. The columns have no gap of their own, so an empty one costs nothing: the label
+   column carries the 8 px before the value, and the chip its own margin. A sub-group moves the
+   gutter to 40 px and narrows the label column to 72 px, so values still start at 120 px. */
+
+.grid .row {
+  grid-template-columns: calc(var(--inspector-label-w) + var(--space-2)) minmax(0, auto) auto minmax(0, 1fr) auto;
+  column-gap: 0;
+  row-gap: 0;
+  min-height: var(--row-h-inspector);
+  padding: 0 var(--space-1) 0 var(--inspector-gutter);
+}
+
+.grid .row > .label {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  padding-right: var(--space-2);
+  font-size: var(--fs-label);
+  line-height: 16px;
+  color: var(--text-lo);
+}
+
+.grid .row > .value {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: start;
+  max-width: 100%;
+  text-align: left;
+}
+
+/* A chip on the value's own line, such as an envelope's provenance. */
+.grid .row[data-chip="inline"] {
+  grid-template-columns: calc(var(--inspector-label-w) + var(--space-2)) minmax(0, auto) auto minmax(0, 1fr) auto;
+  padding-block: 0;
+}
+
+.grid .row[data-chip="inline"] > .chip {
+  grid-column: 3;
+  grid-row: 1;
+  margin-left: var(--space-2);
+}
+
+/* A chip under the value, such as a pose's provenance or a brief, starts at the value's column. */
+.grid .row[data-chip=""] {
+  grid-template-columns: calc(var(--inspector-label-w) + var(--space-2)) minmax(0, auto) auto minmax(0, 1fr) auto;
+  padding-block: 0;
+}
+
+.grid .row[data-chip=""] > .chip {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  justify-self: start;
+  padding-bottom: var(--space-1);
+}
+
+/* A long chip here, such as No time limit at the Inspector's 240 px, wraps inside the row instead of
+   running past the panel's edge (W2-16). */
+.grid .row[data-chip=""] > .chip > * {
+  height: auto;
+  min-height: var(--ctl-h-sm);
+  white-space: normal;
+}
+
+.grid .row > .rowEnd {
+  grid-column: 5;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  margin-left: var(--space-1);
+}
+
+.grid .row > .rowEnd button {
+  color: var(--text-lo);
+}
+
+.grid .row > .brief {
+  grid-column: 1 / -1;
+  margin: -6px 0 var(--space-1);
+  font-size: var(--fs-xs);
+}
+
+.grid .row[data-stacked] {
+  grid-template-columns: 1fr;
+  padding-block: var(--space-1);
+}
+
+.grid .row[data-stacked] > .value {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+/* A value still at its default, or read only, is a step quieter so set values stand out. */
+.grid .row[data-quiet] > .value,
+.grid .row[data-quiet] > .value :is(input, select, button) {
+  color: var(--text-mid);
+}
+
+/* Boxed controls pull back over their own padding and border, so their text starts at the column. */
+.grid .value > :is(.input, .select, .inputProse, .unitSelect):first-child {
+  margin-left: calc(-1 * (var(--space-1) + 1px));
+}
+
+/* A compact number, such as Speed, has 2 px of padding, so it pulls back less. */
+.grid .value > .compactInput:first-child {
+  margin-left: -3px;
+}
+
+/* A select is as wide as its chosen option, and may use the room its pulled-back margin gives. */
+.grid .select {
+  min-width: 0;
+  max-width: calc(100% + var(--space-1) + 1px);
+  field-sizing: content;
+  text-align: left;
+  text-align-last: left;
+}
+
+.grid .choice {
+  justify-content: flex-start;
+}
+
+/* A number is as wide as what it shows, so its unit sits right after it. */
+.grid .row .input {
+  width: auto;
+  min-width: calc(1ch + 2 * var(--space-1) + 2px);
+  max-width: 120px;
+  field-sizing: content;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.grid .row .input::placeholder {
+  font-family: var(--font-mono);
+  color: var(--text-mid);
+}
+
+/* A number's unit select, `0% along`, sits against the number, over the two boxes' own padding. */
+.grid .input + .unitSelect {
+  margin-left: -8px;
+}
+
+/* A pose row: the label column, then x and y in two 54 px boxes, the unit once, and the short
+   provenance chip on a line under the numbers, at the value column. */
+.grid .poseRow {
+  display: grid;
+  grid-template-columns: calc(var(--inspector-label-w) + var(--space-2)) minmax(0, 1fr);
+  column-gap: 0;
+  row-gap: 0;
+  min-height: var(--row-h-inspector);
+  padding: 0 var(--space-1) 0 var(--inspector-gutter);
+}
+
+.grid .poseLabel {
+  min-width: 0;
+  padding-right: var(--space-2);
+  font-size: var(--fs-label);
+  line-height: 16px;
+  color: var(--text-lo);
+}
+
+.grid .poseValues {
+  justify-self: start;
+  gap: 4px;
+  margin-left: -3px;
+}
+
+.grid .poseChip {
+  grid-column: 2;
+  justify-self: start;
+  margin-left: -2px;
+  padding-bottom: var(--space-1);
+}
+
+.grid .poseInput {
+  width: 54px;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+/* A text button in the value column, such as Draw box or Add, sits on the column's edge. */
+.grid .value > button:first-child {
+  margin-left: calc(-1 * var(--space-1));
+}
+
+/* A list's small choice, such as the Waypoints list's Pins on its column heads' line (issue #431). */
+.choiceCompact {
+  min-width: 0;
+  height: var(--ctl-h-sm);
+  gap: 2px;
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
 }

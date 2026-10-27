@@ -1,0 +1,51 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 4,
+  "name": "long-diagonal",
+  "title": "Long diagonal",
+  "description": "Issue #448: one long straight drive up RED's half of the BIOBUZZ field, west of the hive, starting with the heading 90 degrees off the direction of travel and ending on a field axis. A Linear heading strafes the whole way; turning onto the path, driving nose first and turning back is the plan the issue asks Optimize path to find.",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "alliance": "RED",
+  "authors": [
+    "Horizon (FTC 36596)"
+  ],
+  "created": "2026-10-12",
+  "start": {
+    "pose": {
+      "xIn": -60,
+      "yIn": -58,
+      "headingRad": -0.2075,
+      "provenance": "SET BY HAND: issue #448 fixture, in RED's south-west corner, the tilted frame 1.3 in clear of the west wall, facing 90 degrees right of the drive to (-36, 56)"
+    }
+  },
+  "steps": [
+    {
+      "id": "drive",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -60,
+            "yIn": -58,
+            "headingRad": -0.2075,
+            "provenance": "SET BY HAND: issue #448 fixture, the start pose"
+          },
+          "to": {
+            "xIn": -36,
+            "yIn": 56,
+            "headingRad": 0,
+            "provenance": "SET BY HAND: issue #448 fixture, in RED's half north-west of the hive, 116.5 in from the start, facing east along the field's x axis"
+          }
+        }
+      ],
+      "heading": {
+        "mode": "linear",
+        "fromRad": -0.2075,
+        "toRad": 0
+      },
+      "notes": "The drive is 78.1 degrees from the x axis, so the robot starts 90 degrees off it and strafes nearly all the way."
+    }
+  ]
+}

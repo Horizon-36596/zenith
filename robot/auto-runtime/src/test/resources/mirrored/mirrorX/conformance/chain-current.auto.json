@@ -1,0 +1,112 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 4,
+  "name": "chain-current",
+  "title": "Later paths of a path chain that start from current, the end of the path before them",
+  "alliance": "BLUE",
+  "start": {
+    "pose": {
+      "xIn": -48,
+      "yIn": 48,
+      "headingRad": 0
+    }
+  },
+  "steps": [
+    {
+      "id": "chain",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": -48,
+            "yIn": 48,
+            "headingRad": 0
+          },
+          "to": {
+            "xIn": -24,
+            "yIn": 48,
+            "headingRad": 0
+          }
+        },
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -24,
+            "yIn": 24,
+            "headingRad": -1.5708
+          }
+        },
+        {
+          "kind": "bezier",
+          "from": "current",
+          "control": [
+            {
+              "xIn": -12,
+              "yIn": 12
+            }
+          ],
+          "to": {
+            "xIn": 0,
+            "yIn": 24,
+            "headingRad": 0
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "headingRad": 0
+      },
+      "markers": [
+        {
+          "at": {
+            "t": 0.5
+          },
+          "command": {
+            "name": "instant",
+            "args": {
+              "at": "secondPath"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "back",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -24,
+            "yIn": 24,
+            "headingRad": -1.5708
+          }
+        },
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -24,
+            "yIn": 48,
+            "headingRad": 0
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "headingRad": 0
+      }
+    },
+    {
+      "id": "after",
+      "kind": "command",
+      "name": "instant",
+      "args": {
+        "tag": "after"
+      }
+    }
+  ]
+}

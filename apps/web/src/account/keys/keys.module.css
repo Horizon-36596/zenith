@@ -1,0 +1,266 @@
+/* The key screens: codes to compare, the recovery code and its printed page, and the two notices.
+   They sit inside the account sheets and use account.module.css for everything the sheets share;
+   this file holds only what is new, on the tokens of apps/web/UI_GUIDE.md. */
+
+/* A verification or safety code: large mono digits on the inset surface, with its caption under it. */
+.codeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--bg-inset);
+  border-radius: var(--radius-xs);
+}
+
+.code {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-4);
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-xl);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-hi);
+}
+
+.caption {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+}
+
+/* The recovery code on screen: one selectable run of mono text that wraps only at its dashes. */
+.recoveryCode {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-hi);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+/* The recovery code input: mono, so each character can be checked against the paper. */
+.codeInput {
+  width: 100%;
+  font-family: var(--font-mono);
+  letter-spacing: var(--tracking-wide);
+}
+
+/* The two-way choice at sign-in: native radios, each with a line under it saying what it means. */
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--space-2);
+  row-gap: var(--space-0_5);
+  align-items: start;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+.choice > input {
+  margin: var(--space-0_5) 0 0;
+  accent-color: var(--accent);
+}
+
+.choiceDetail {
+  grid-column: 2;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+}
+
+/* A partner team's key changed: a real warning, so the warning hue on its edge and its title, with the words saying it. */
+.warning {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-inset);
+  border-left: 3px solid var(--sev-warn);
+  border-radius: var(--radius-xs);
+}
+
+.warningTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+.warningIcon {
+  flex: none;
+  color: var(--sev-warn);
+}
+
+/* The first share with a team: a check to make, not a warning, so the accent on its edge and no severity hue. */
+.check {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-inset);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-xs);
+}
+
+.checkIcon {
+  flex: none;
+  color: var(--accent);
+}
+
+/* Something an owner or admin should do, not a finding: no severity hue, the inset surface and the words. */
+.banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-inset);
+  border-radius: var(--radius-xs);
+}
+
+.bannerText {
+  flex: 1 1 calc(var(--space-16) * 3);
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+/* Who can do what, on the team page: flat bordered rows like the ledger (UI_GUIDE 8.6), no stripes. */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+}
+
+.tableCaption {
+  padding-bottom: var(--space-1);
+  text-align: left;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+.table th,
+.table td {
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  width: 30%;
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+/* The rarely needed codes, one click away: a native disclosure with the section heading's look. */
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.moreSummary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-mid);
+}
+
+.moreSummary:hover {
+  color: var(--text-hi);
+}
+
+/* ---- The printed recovery page ----------------------------------------------------------------- */
+
+/* Not on screen at all. */
+.printPage {
+  display: none;
+}
+
+/*
+ * When the page is printed while a recovery code sheet is open, only the printed page shows: the rest
+ * of the app is hidden, and the page is laid over the whole sheet of paper. Paper ignores the app's
+ * themes, so the page is plain black on white; those are the only colours not taken from tokens.
+ */
+@media print {
+  :global(body):has(.printPage) * {
+    visibility: hidden;
+  }
+
+  /* As specific as the rule above, and later, so the printed page is the one thing left visible. */
+  :global(body):has(.printPage) .printPage,
+  :global(body):has(.printPage) .printPage * {
+    visibility: visible;
+  }
+
+  .printPage {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    position: fixed;
+    inset: 0;
+    padding: var(--space-16) var(--space-12);
+    background: white;
+    color: black;
+    font-family: var(--font-ui);
+  }
+
+  .printTeam {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-2xl);
+    line-height: var(--lh-2xl);
+    font-weight: var(--fw-medium);
+  }
+
+  .printCode {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: calc(var(--fs-2xl) * 1.25);
+    line-height: 1.4;
+    letter-spacing: var(--tracking-wide);
+    overflow-wrap: anywhere;
+  }
+
+  .printLine {
+    margin: 0;
+    font-size: var(--fs-lg);
+    line-height: var(--lh-lg);
+  }
+}

@@ -1,7 +1,7 @@
 /**
  * The Deploy button: `zenith deploy`, in process. Copies every valid auto, the waypoints, the robot
- * and the field file into `zenith.json`'s `deploy.dir` and writes or refreshes the generated
- * `@Autonomous` stubs, using the CLI's own `planDeploy` and `applyDeploy`
+ * and the field file into `zenith.json`'s `deploy.dir` and, when there is a `codegen` section, writes
+ * or refreshes the generated `@Autonomous` stubs, using the CLI's own `planDeploy` and `applyDeploy`
  * (packages/cli/src/commands/deploy.ts), so the button and the command can never disagree about
  * what a deploy is. Nothing is built or installed on the robot; that stays out of scope
  * (site/docs/editor.md).
@@ -51,6 +51,7 @@ export function runDeploy(root: string, dryRun: boolean): DesktopDeployResult {
     path: action.path,
     ...(action.from === undefined ? {} : { from: action.from }),
     ...(action.reason === undefined ? {} : { reason: action.reason }),
+    ...(action.autoName === undefined ? {} : { autoName: action.autoName }),
     changed: changes(project, action),
   }));
   if (!dryRun) applyDeploy(project, plan);
@@ -61,5 +62,6 @@ export function runDeploy(root: string, dryRun: boolean): DesktopDeployResult {
     changed: actions.filter((action) => action.changed).length,
     deployDir: project.link.deploy.dir,
     commandLibrary: plan.commandLibrary ?? null,
+    stubs: plan.stubs,
   };
 }

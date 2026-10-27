@@ -18,6 +18,8 @@ export const emitTourSignal = (signal: TourSignal): void => {
 /**
  * The event the tour dispatches on `window`, with a stop's anchor id as its detail, just before it
  * points at that anchor: whatever holds the anchor shows it, so a collapsed inspector section opens
- * (`Section` in `components/fields.tsx` listens). A plain DOM event keeps components free of the tour.
+ * (`Section` in `components/fields.tsx` listens). A `null` detail says the tour points at nothing
+ * now, at a stop's end or the tour's, so a section it opened goes back to how the person left it.
+ * A plain DOM event keeps components free of the tour.
  */
 export const TOUR_REVEAL_EVENT = "zenith:tour-reveal";

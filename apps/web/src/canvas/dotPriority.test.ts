@@ -113,6 +113,20 @@ describe("projectHitScene lists every path's dots", () => {
     expect(rankOf(aSelected, "a")).toBeGreaterThan(rankOf(aSelected, "b"));
   });
 
+  it("ranks every step's line and markers the same way as its dots (issue #149)", () => {
+    const withMarker: Scene = {
+      ...scene,
+      steps: scene.steps.map((entry) => ({ ...entry, markers: [{ markerIndex: 0, t: 0.5, pointIn: { xIn: 20, yIn: 0 }, label: "intake" }] })),
+    };
+    const aSelected = projectHitScene(withMarker, view, "none", { stepId: "a" });
+    const lineRank = (stepId: string): number => aSelected.polylines.find((entry) => entry.stepId === stepId)?.rank ?? Number.NaN;
+    const markerRank = (stepId: string): number => aSelected.markers.find((entry) => entry.stepId === stepId)?.rank ?? Number.NaN;
+    expect(lineRank("a")).toBe(handleRank(0, true));
+    expect(lineRank("b")).toBe(handleRank(1, false));
+    expect(markerRank("a")).toBe(handleRank(0, true));
+    expect(markerRank("b")).toBe(handleRank(1, false));
+  });
+
   it("grabs the joint as the earlier step's end, and a dot on the later step's end directly", () => {
     const hit = projectHitScene(scene, view, "none", {});
     expect(hitTest(hit, 10, 0)).toEqual({ stepId: "a", point: to });

@@ -48,7 +48,7 @@ describe("format version 2: the sequence step", () => {
   it("parses in a file that says it is v1, because v1 migrates to the current version unchanged", () => {
     // The loader is lenient about the version a file declares, never about its structure: a v1
     // file is a v2 file once it says so.
-    expect(parseAuto(autoWith([sequence("grp", [wait("a")])], 1)).formatVersion).toBe(3);
+    expect(parseAuto(autoWith([sequence("grp", [wait("a")])], 1)).formatVersion).toBe(4);
   });
 
   it("walks through childLists and withChildLists for every group kind", () => {

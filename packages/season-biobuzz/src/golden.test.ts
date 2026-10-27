@@ -67,9 +67,16 @@ describe.skipIf(!present)("the collect-and-score golden render", () => {
     ).toBe(onDisk);
   });
 
-  it("estimates the routine well inside the autonomous period", () => {
+  it("draws no scoring reticle on the field, only each element's own mark (issue #227)", () => {
+    const { svg } = build();
+    expect(svg).not.toContain('id="target-');
+    expect(svg).not.toContain("#ddb961");
+  });
+
+  it("estimates the routine inside the autonomous period", () => {
     const { totals } = build();
-    expect(totals).toBe("13.483 (10.786-16.179)");
+    // 0.2 s more than the route under the hive, which crossed the centre line (issues #365 and #367).
+    expect(totals).toBe("24.759 (19.807-29.711)");
   });
 
   it("is byte-identical on a second render", () => {

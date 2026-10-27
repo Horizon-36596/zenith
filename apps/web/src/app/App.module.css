@@ -22,6 +22,75 @@
   background: var(--bg-panel);
 }
 
+/* In a narrow window the side panels give way before the field does: each keeps its resizable
+   width up to about a quarter of the window, but the steps panel never below the 260 px its step
+   names and playback switch need, nor the inspector below its 240 px minimum. From about 1150 px
+   up nothing changes. */
+.left {
+  max-width: max(260px, 26vw);
+}
+
+.right {
+  max-width: max(240px, 28vw);
+}
+
+/* With no auto open the inspector and Problems have nothing to show, so they and their dividers go
+   at every width and the start screen has the room (0.1.2 UX sweep, W1-2; UX review, S4). The
+   inspector's divider is the resizer just before it; Problems' is the one just before it. */
+.body[data-empty="true"] > .right,
+.body[data-empty="true"] > .resizerX:nth-last-child(2),
+.body[data-empty="true"] .findings,
+.body[data-empty="true"] .centre > .resizerY:nth-last-child(2) {
+  display: none;
+}
+
+/* UI_GUIDE layout rule 9: below 820 px the Inspector, and below 640 px the steps column too, leave
+   the row and open one at a time as a sheet over the field, from the panel bar (PanelSheets.tsx). The
+   field takes the width they gave up. Only the editor's body has data-sheets: the review views share
+   these panel classes and keep their columns. */
+@media (max-width: 819.98px) {
+  .body[data-sheets] {
+    position: relative;
+  }
+
+  .body[data-sheets] > .right {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-panel);
+    /* Over the saved width the row would give it: a sheet leaves a strip of field to see. */
+    width: min(320px, calc(100% - var(--space-8))) !important;
+    max-width: none;
+    border-left: 1px solid var(--border-default);
+    box-shadow: var(--shadow-popover);
+  }
+
+  .body[data-sheets]:not([data-sheet="inspector"]) > .right,
+  .body[data-sheets] > .centre + .resizerX {
+    display: none;
+  }
+}
+
+@media (max-width: 639.98px) {
+  .body[data-sheets] > .left {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: var(--z-panel);
+    width: min(320px, calc(100% - var(--space-8))) !important;
+    max-width: none;
+    border-right: 1px solid var(--border-default);
+    box-shadow: var(--shadow-popover);
+  }
+
+  .body[data-sheets]:not([data-sheet="steps"]) > .left,
+  .body[data-sheets] > .left + .resizerX {
+    display: none;
+  }
+}
+
 .left:focus-visible,
 .right:focus-visible,
 .canvas:focus-visible,
@@ -43,6 +112,17 @@
 
 .leftLedger[data-folded="true"] {
   flex: none;
+}
+
+/* A Ledger the divider has sized keeps its height, and shrinks only when the window is too short
+   for it and the step list's minimum. */
+.leftLedger[data-sized="true"] {
+  flex: 0 1 auto;
+}
+
+/* The divider above an open Ledger is its top rule. */
+.resizerY + .leftLedger {
+  border-top: none;
 }
 
 .centre {
@@ -79,6 +159,8 @@
   --border-default: var(--chrome-border);
   --border-strong: var(--chrome-border-strong);
   --ring: var(--chrome-ring);
+  --accent: var(--brand-orange);
+  --accent-hover: var(--brand-400);
   --ring-shadow: 0 0 0 var(--ring-offset) var(--bg-canvas),
                  0 0 0 calc(var(--ring-offset) + var(--ring-width)) var(--chrome-ring);
 }
@@ -105,32 +187,49 @@
   color: var(--text-mid);
 }
 
-.welcomeHint {
-  margin: 0;
-  font-size: var(--fs-sm);
-  line-height: var(--lh-sm);
-  color: var(--text-lo);
-}
-
-.welcomeHint code {
-  font-family: var(--font-mono);
-  color: var(--text-mid);
-}
-
+/* A text button (UI_GUIDE 9.9), so it reads as something to press: --accent, which the well sets to
+   the dark theme's orange in both themes. */
 .welcomeMore {
   display: inline-flex;
   align-items: baseline;
   margin-top: var(--space-2);
   font-size: var(--fs-sm);
-  color: var(--text-mid);
+  color: var(--accent);
 }
 
 .welcomeMore:hover {
+  color: var(--accent-hover);
+}
+
+/* The anchor a tooltip hangs on when the control inside it does not take the tooltip's props itself. */
+.tipAnchor {
+  display: inline-flex;
+}
+
+/* The autos of a project with none open, one per row. */
+.welcomeAutos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.welcomeAuto {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
+}
+
+.welcomeAuto:hover {
   color: var(--text-hi);
 }
 
 .welcomeButtons {
   display: flex;
+  /* A narrow well puts the second button under the first rather than squeezing both labels. */
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-3);
 }
@@ -151,7 +250,9 @@
   overflow: hidden;
 }
 
-.findings > :global(div) {
+/* Every block but the collapse chrome takes the width; the chrome is its own flex: none column,
+   which a bare div selector would otherwise override and grow. */
+.findings > :global(div):not(.findingsChrome) {
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -215,7 +316,7 @@
 }
 
 /* ---- Status -------------------------------------------------------------
- * UI_GUIDE section 9.14: a transient message overlays the window and never reflows it. The layer
+ * UI_GUIDE section 9.15: a transient message overlays the window and never reflows it. The layer
  * is fixed to the bottom of the viewport, out of the layout flow, and lets the pointer through to
  * the panels under it everywhere but the dismiss button.
  */
@@ -225,7 +326,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: var(--z-popover);
+  /* Over the Settings window too, so what a preset or a key change did is read where it happened (issue #414). */
+  z-index: calc(var(--z-settings) + 1);
   pointer-events: none;
 }
 
@@ -270,6 +372,15 @@
   color: var(--text-mid);
 }
 
+/* It went through, but left something to look at (issue #158); the words say what, the hue backs them. */
+.status[data-kind="warn"] {
+  color: var(--sev-warn);
+}
+
+.status[data-kind="warn"]::before {
+  background: var(--sev-warn-bg);
+}
+
 .status[data-leaving="true"] {
   animation: statusOut var(--dur-slow) var(--ease-in) forwards;
 }
@@ -279,7 +390,16 @@
   min-width: 0;
 }
 
+/* The reason after a status message (issue #247): quieter than the message, and dropped to its own line when the bar is narrow. */
+.statusHint {
+  /* With the space before it, the same gap as before. */
+  margin-left: var(--space-2);
+  opacity: 0.75;
+}
+
 .statusClose {
+  display: inline-flex;
+  align-items: center;
   position: relative;
   margin-left: auto;
   pointer-events: auto;

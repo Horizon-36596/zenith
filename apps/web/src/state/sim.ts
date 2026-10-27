@@ -10,6 +10,7 @@
 import { resimulate, simulateRun, type Plan, type SimRun, type SimTrace } from "@horizon36596/zenith-core";
 import type { Field, Robot } from "@horizon36596/zenith-schema";
 import { useEffect, useSyncExternalStore } from "react";
+import { previewSimOptions } from "./ledgerRun";
 
 export interface SimView {
   trace: SimTrace | null;
@@ -50,10 +51,12 @@ export function runSim(plan: Plan, robot: Robot, field: Field): Entry {
   let reason: string | null = null;
   try {
     const previous = last?.run ?? null;
+    // The ledger rides along, so a branch the ledger can read takes the side it picks.
+    const options = previewSimOptions(plan, field);
     run =
       previous !== null && last?.robot === robot && last.field === field
-        ? resimulate(previous, plan, robot, field)
-        : simulateRun(plan, robot, field);
+        ? resimulate(previous, plan, robot, field, options)
+        : simulateRun(plan, robot, field, options);
   } catch (error) {
     reason = error instanceof Error ? error.message : String(error);
   }
@@ -80,6 +83,11 @@ export function useSim(plan: Plan | null, robot: Robot | null, field: Field | nu
     };
   }, [plan, robot, field]);
 
+  return currentSimView(plan);
+}
+
+/** What `useSim` returns, read once outside React (an action runs from a menu or the palette). */
+export function currentSimView(plan: Plan | null): SimView {
   if (plan === null || last === null) return { trace: null, stale: false, reason: null };
   return {
     trace: last.run?.trace ?? null,

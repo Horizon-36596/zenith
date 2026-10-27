@@ -5,7 +5,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { SHORTCUTS } from "../../src/app/shortcuts";
-import { clearStatus, loadExample, selectStep, shot, skipTour } from "./helpers";
+import { clearStatus, editor, loadExample, selectStep, shot, skipTour } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   await skipTour(page);
@@ -59,8 +59,14 @@ async function tooltipFor(page: Page, index: number): Promise<string | null> {
 test("every icon-only control has an accessible name and a tooltip", async ({ page }) => {
   await loadExample(page);
   await selectStep(page, "driveOut");
+  // The status line goes by itself after a few seconds, and its Dismiss with it, which would shift
+  // every later index mid-sweep. Clear it first so the sweep sees only controls that stay.
+  await clearStatus(page);
   const buttons = await iconButtons(page);
   expect(buttons.length).toBeGreaterThan(15);
+  // Each hover waits out the tooltip's open delay, so the sweep grows with the toolbar: about 0.8 s a
+  // button on an idle machine, more under a parallel run. Give it room per button, not one fixed cap.
+  test.setTimeout(30_000 + buttons.length * 2_000);
   const missingName: string[] = [];
   const missingTip: string[] = [];
   for (const button of buttons) {
@@ -73,10 +79,13 @@ test("every icon-only control has an accessible name and a tooltip", async ({ pa
   expect(missingTip, "icon-only buttons with no tooltip").toEqual([]);
 });
 
-test("the canvas Play button uses the shared tooltip, not a native title", async ({ page }) => {
+test("the field has no Play of its own, and the toolbar's Play uses the shared tooltip, not a native title", async ({ page }) => {
   await loadExample(page);
-  const play = page.getByTestId("canvas-play");
+  // The field's overlay Play went in issue #412; the toolbar's stays.
+  await expect(page.getByTestId("canvas-play")).toHaveCount(0);
+  const play = page.getByTestId("toolbar-view.play");
   await expect(play).toBeVisible();
+  expect(await play.getAttribute("title")).toBeNull();
   await play.hover();
   await expect(page.getByRole("tooltip")).toContainText("Play", { timeout: 1_500 });
 });
@@ -92,7 +101,8 @@ const TOOLBAR: Array<[string, string, keyof typeof SHORTCUTS | null]> = [
   ["toolbar-view.play", "Play", "playPause"],
   ["toolbar-run.simulate", "Simulate", "simulate"],
   ["toolbar-run.save", "Save", "save"],
-  ["toolbar-run.propose", "Propose", "propose"],
+  // Propose is drawn only for a project opened from GitHub (issue #412), so the example has none.
+  ["toolbar-path.optimize", "Optimize path", null],
   ["toolbar-view.alliance", "Mirror", "alliance"],
 ];
 
@@ -115,12 +125,14 @@ test("each toolbar tooltip names the action, says what it does, and shows its sh
 
 test("disabled controls keep a tooltip that says why", async ({ page }) => {
   await loadExample(page);
-  // Propose needs GitHub mode; undo has nothing to take back on a fresh load.
-  const propose = page.getByTestId("toolbar-run.propose");
-  await expect(propose).toBeDisabled();
-  await propose.hover();
-  await expect(page.getByRole("tooltip")).toContainText(/Unavailable|GitHub|open.*from GitHub/i);
-  await shot(page, "02-tooltip-disabled-propose");
+  // Undo has nothing to take back on a fresh load. Propose, which needs GitHub mode, is not drawn for
+  // the example at all (issue #412).
+  await expect(page.getByTestId("toolbar-run.propose")).toHaveCount(0);
+  const undo = page.getByTestId("toolbar-edit.undo");
+  await expect(undo).toBeDisabled();
+  await undo.hover();
+  await expect(page.getByRole("tooltip")).toContainText(/Unavailable: There is nothing to undo/i);
+  await shot(page, "02-tooltip-disabled-undo");
 
   // Every disabled icon button on screen explains itself.
   const buttons = (await iconButtons(page)).filter((button) => button.disabled);
@@ -174,12 +186,19 @@ test("every panel and every inspector section has a ? with plain text", async ({
     }
   }
   expect(empty, "help affordances with no plain text").toEqual([]);
-  // Every region named by UI_GUIDE 9.3, and the inspector's sections for a path.
-  for (const want of ["help-steps", "help-inspector", "help-findings", "help-timeline", "help-ledger"]) {
+  // Every region named by UI_GUIDE 9.3, and the inspector's sections for a path. With a step selected
+  // the Inspector's own ? is its selection header's, for the kind (issue #431).
+  const regions = ["help-steps", "help-section.step", "help-findings", "help-timeline", "help-ledger"];
+  for (const want of regions) {
     expect(ids, want).toContain(want);
   }
-  const sections = ids.filter((id) => !["help-steps", "help-inspector", "help-findings", "help-timeline", "help-ledger"].includes(id));
+  const sections = ids.filter((id) => !regions.includes(id));
   expect(sections.length, `inspector sections with a ?: ${sections.join(", ")}`).toBeGreaterThanOrEqual(4);
+  // With nothing selected, the header's ? is the Inspector's own, and says how to leave the Routine view.
+  await editor(page, "m.setSelection({})");
+  await page.mouse.move(0, 0);
+  await page.getByTestId("help-inspector").hover();
+  await expect(page.getByTestId("help-bubble")).toContainText("Select a step or a point to edit it.");
 });
 
 test("a ? pins open on click and closes on Escape", async ({ page }) => {

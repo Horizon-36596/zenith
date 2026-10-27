@@ -48,6 +48,21 @@ export function assertValidAutoName(name: string): void {
   }
 }
 
+const AUTO_FILE_SUFFIX = ".auto.json";
+
+/**
+ * Why `fileName` cannot be deployed for an auto called `autoName`, or null when it can. The robot
+ * loads an auto by its name (`<name>.auto.json`, AutoFile.java), so a file renamed without its
+ * "name" would deploy cleanly and fail at init on the robot. A file not ending in `.auto.json` is
+ * not checked: it is not deployed by name.
+ */
+export function autoFileNameMismatch(fileName: string, autoName: string): string | null {
+  if (!fileName.endsWith(AUTO_FILE_SUFFIX)) return null;
+  const stem = fileName.slice(0, -AUTO_FILE_SUFFIX.length);
+  if (stem === autoName) return null;
+  return `name "${autoName}" does not match the file name ${fileName}; the robot loads an auto by its name, so rename the file to ${autoName}${AUTO_FILE_SUFFIX} or set "name" to "${stem}".`;
+}
+
 /**
  * An auto may name its own robot or field file; when it does, that file wins over the link file's,
  * and a broken override is a finding rather than a crash. Mirrors `commands/validate.ts`'s
@@ -142,7 +157,7 @@ export function loadAutoAndPlan(path: string, project: Project): LoadAutoResult 
     const findings: Finding[] = [];
     const robot: Robot = override(project, auto.robot, loadRobot, project.robot, findings);
     const field: Field = override(project, auto.field, loadField, project.field, findings);
-    const planned = plan(resolve(auto, project.waypoints), robot, field);
+    const planned = plan(resolve(auto, project.waypoints, robot), robot, field);
     const season = resolveSeason(field);
     findings.push(...check(planned, estimate(planned, robot), robot, field, season.rules));
     return {

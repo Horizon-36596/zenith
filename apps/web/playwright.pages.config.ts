@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { betaNoticeSeen } from "./e2e/betaNotice";
 import { VIEWPORT } from "./e2e/viewports";
 
 /**
@@ -18,6 +19,8 @@ export default defineConfig({
   reporter: process.env["CI"] === undefined ? "list" : "github",
   use: {
     baseURL: "http://127.0.0.1:4178",
+    // The beta notice, dismissed for this version, as in playwright.config.ts (e2e/betaNotice.ts).
+    storageState: betaNoticeSeen("http://127.0.0.1:4178"),
     headless: true,
     trace: "retain-on-failure",
   },

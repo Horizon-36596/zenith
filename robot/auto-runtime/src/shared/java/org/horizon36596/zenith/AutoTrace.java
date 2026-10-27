@@ -27,9 +27,11 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -62,11 +64,28 @@ import java.util.Set;
  * <p>A test that already has its own step wrapper calls {@link #stepStarted} and {@link #stepEnded}
  * from it instead.
  *
+ * <h2>Contacts, the ledger and events</h2>
+ * A sim that models more than the drive records it too, each at the time of the last {@link #tick}:
+ *
+ * <pre>{@code
+ * trace.capability(AutoTrace.STRUCTURE_CONTACTS);   // once, before the run: this sim checks contacts
+ * trace.capability(AutoTrace.LEDGER);               // and counts game pieces
+ * ...each tick...
+ * trace.structureContact("hiveRedPivotBar", 1.3);   // the chassis overlaps a structure by 1.3 in
+ * trace.ledger().held(1).launches(3).tips("RED", 0); // the robot's game state changed
+ * trace.event("tipStarted", "RED");                 // something worth a mark on the timeline
+ * }</pre>
+ *
  * <h2>capabilities</h2>
  * The {@code capabilities} list names what this trace actually carries, so a report can say "no
  * structure contacts were checked" rather than "no structure contacts happened". Those are different
  * sentences, and until a sim measures contacts, spills or retrievals, the corresponding sections of a
  * trace are empty because nothing measures them.
+ *
+ * <p>Recording a contact, a ledger row or an event adds its capability, but a clean run records no
+ * contacts at all, so a sim that checks them declares {@link #STRUCTURE_CONTACTS} with
+ * {@link #capability} before the run; otherwise a run with no contacts reads as one where nothing
+ * looked. The same goes for {@link #LEDGER}.
  *
  * <h2>Determinism</h2>
  * Numbers are formatted with {@link Locale#ROOT} to three decimals, so two runs of the same scenario
@@ -77,14 +96,27 @@ public class AutoTrace {
     /** The trace format this writer emits. */
     public static final int FORMAT_VERSION = 1;
 
+    /** The capability that says this sim checks the chassis against the field's structures. */
+    public static final String STRUCTURE_CONTACTS = "structureContacts";
+
+    /** The capability that says this sim counts the game pieces the robot holds, launches and tips. */
+    public static final String LEDGER = "ledger";
+
+    /** The capability that says this sim records game events, such as a tip starting. */
+    public static final String EVENTS = "events";
+
     private final String autoName;
     private final double tickS;
 
     private final List<double[]> poses = new ArrayList<double[]>();
     private final List<double[]> truthPoses = new ArrayList<double[]>();
     private final List<StepRecord> steps = new ArrayList<StepRecord>();
+    private final List<ContactRecord> contacts = new ArrayList<ContactRecord>();
+    private final List<LedgerRow> ledger = new ArrayList<LedgerRow>();
+    private final List<EventRecord> events = new ArrayList<EventRecord>();
     private final Set<String> capabilities = new LinkedHashSet<String>();
 
+    private String sha;
     private double nowS;
     private double lastS;
 
@@ -142,6 +174,61 @@ public class AutoTrace {
     }
 
     /**
+     * The commit the sim ran, written into the trace as {@code sha}. Left unset, the trace has no
+     * {@code sha} and Zenith reads it as unknown.
+     *
+     * @param commit the commit, as the test knows it, such as {@code git rev-parse HEAD}
+     */
+    public void sha(String commit) {
+        sha = commit;
+    }
+
+    /**
+     * Record that the chassis touched a field structure, at the time of the last {@link #tick}. Record
+     * one per tick of overlap, or one per touch; a report counts the entries.
+     *
+     * @param obstacle      the structure's name, as the sim's field model calls it
+     * @param penetrationIn how far the chassis overlaps it, inches
+     */
+    public void structureContact(String obstacle, double penetrationIn) {
+        capabilities.add(STRUCTURE_CONTACTS);
+        contacts.add(new ContactRecord(nowS, obstacle, penetrationIn));
+    }
+
+    /**
+     * Start a ledger row at the time of the last {@link #tick}: the robot's game state when it changed.
+     * Fill in what changed on the row this returns; a value left unset is left out of the row.
+     *
+     * @return the new row
+     */
+    public LedgerRow ledger() {
+        capabilities.add(LEDGER);
+        LedgerRow row = new LedgerRow(nowS);
+        ledger.add(row);
+        return row;
+    }
+
+    /**
+     * Record a game event, at the time of the last {@link #tick}.
+     *
+     * @param kind what happened, such as {@code tipStarted}
+     */
+    public void event(String kind) {
+        event(kind, null);
+    }
+
+    /**
+     * Record a game event that belongs to one alliance, at the time of the last {@link #tick}.
+     *
+     * @param kind     what happened, such as {@code tipStarted}
+     * @param alliance the alliance it happened to, such as {@code RED}, or null for none
+     */
+    public void event(String kind, String alliance) {
+        capabilities.add(EVENTS);
+        events.add(new EventRecord(nowS, kind, alliance));
+    }
+
+    /**
      * Record that a step started, at the time of the last {@link #tick}.
      *
      * @param id the step's id
@@ -193,6 +280,9 @@ public class AutoTrace {
         json.append("{\n");
         json.append("  \"formatVersion\": ").append(FORMAT_VERSION).append(",\n");
         json.append("  \"auto\": \"").append(autoName).append("\",\n");
+        if (sha != null) {
+            json.append("  \"sha\": \"").append(escape(sha)).append("\",\n");
+        }
         json.append("  \"simTimeS\": ").append(number(lastS)).append(",\n");
         json.append("  \"tickS\": ").append(number(tickS)).append(",\n");
 
@@ -221,12 +311,47 @@ public class AutoTrace {
         appendPoses(json, "poses", poses, true);
         appendPoses(json, "truthPoses", truthPoses, true);
 
-        // Nothing in this sim build measures these yet; the capabilities list above is what says so.
-        json.append("  \"structureContacts\": [],\n");
-        json.append("  \"ledger\": [],\n");
-        json.append("  \"events\": []\n");
+        // Empty when the sim measures none of these; the capabilities list above is what tells an empty
+        // section that was checked from one nobody measured.
+        json.append("  \"structureContacts\": [");
+        for (int i = 0; i < contacts.size(); i++) {
+            ContactRecord contact = contacts.get(i);
+            json.append(i == 0 ? "\n" : ",\n");
+            json.append("    { \"timeS\": ").append(number(contact.timeS))
+                    .append(", \"obstacle\": \"").append(escape(contact.obstacle))
+                    .append("\", \"penetrationIn\": ").append(number(contact.penetrationIn)).append(" }");
+        }
+        closeList(json, !contacts.isEmpty(), true);
+
+        json.append("  \"ledger\": [");
+        for (int i = 0; i < ledger.size(); i++) {
+            json.append(i == 0 ? "\n" : ",\n");
+            ledger.get(i).appendTo(json);
+        }
+        closeList(json, !ledger.isEmpty(), true);
+
+        json.append("  \"events\": [");
+        for (int i = 0; i < events.size(); i++) {
+            EventRecord event = events.get(i);
+            json.append(i == 0 ? "\n" : ",\n");
+            json.append("    { \"timeS\": ").append(number(event.timeS))
+                    .append(", \"kind\": \"").append(escape(event.kind)).append('"');
+            if (event.alliance != null) {
+                json.append(", \"alliance\": \"").append(escape(event.alliance)).append('"');
+            }
+            json.append(" }");
+        }
+        closeList(json, !events.isEmpty(), false);
+
         json.append("}\n");
         return json.toString();
+    }
+
+    private static void closeList(StringBuilder json, boolean hasRows, boolean comma) {
+        if (hasRows) {
+            json.append("\n  ");
+        }
+        json.append(']').append(comma ? ",\n" : "\n");
     }
 
     private void appendPoses(StringBuilder json, String key, List<double[]> rows, boolean comma) {
@@ -238,10 +363,7 @@ public class AutoTrace {
                     .append(", ").append(number(row[2])).append(", ").append(number(row[3]))
                     .append(']');
         }
-        if (!rows.isEmpty()) {
-            json.append("\n  ");
-        }
-        json.append(']').append(comma ? ",\n" : "\n");
+        closeList(json, !rows.isEmpty(), comma);
     }
 
     /** Three decimals, always a dot, never an exponent, never a locale's comma. */
@@ -250,7 +372,108 @@ public class AutoTrace {
     }
 
     private static String escape(String text) {
-        return text.replace("\\", "\\\\").replace("\"", "\\\"");
+        StringBuilder out = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '\\' || c == '"') {
+                out.append('\\').append(c);
+            } else if (c < 0x20) {
+                out.append(String.format(Locale.ROOT, "\\u%04x", (int) c));
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    /**
+     * One row of the ledger: the robot's game state at one moment. Every value is optional; one left
+     * unset is left out of the row, and Zenith reads it as not reported rather than zero.
+     */
+    public static final class LedgerRow {
+        final double timeS;
+        private Integer held;
+        private Integer launches;
+        private final Map<String, Integer> tips = new LinkedHashMap<String, Integer>();
+
+        LedgerRow(double timeS) {
+            this.timeS = timeS;
+        }
+
+        /**
+         * @param count how many game pieces the robot holds now
+         * @return this row
+         */
+        public LedgerRow held(int count) {
+            held = count;
+            return this;
+        }
+
+        /**
+         * @param count how many game pieces the robot launched since the previous row; a report adds
+         *              these up over the run
+         * @return this row
+         */
+        public LedgerRow launches(int count) {
+            launches = count;
+            return this;
+        }
+
+        /**
+         * @param alliance the alliance, such as {@code RED}
+         * @param count    how many tips that alliance has achieved so far in the run; a report reads
+         *                 the latest row that names the alliance
+         * @return this row
+         */
+        public LedgerRow tips(String alliance, int count) {
+            tips.put(alliance, count);
+            return this;
+        }
+
+        void appendTo(StringBuilder json) {
+            json.append("    { \"timeS\": ").append(number(timeS));
+            if (held != null) {
+                json.append(", \"held\": ").append(held.intValue());
+            }
+            if (launches != null) {
+                json.append(", \"launches\": ").append(launches.intValue());
+            }
+            if (!tips.isEmpty()) {
+                json.append(", \"tips\": {");
+                boolean first = true;
+                for (Map.Entry<String, Integer> tip : tips.entrySet()) {
+                    json.append(first ? " \"" : ", \"").append(escape(tip.getKey())).append("\": ")
+                            .append(tip.getValue().intValue());
+                    first = false;
+                }
+                json.append(" }");
+            }
+            json.append(" }");
+        }
+    }
+
+    private static final class ContactRecord {
+        final double timeS;
+        final String obstacle;
+        final double penetrationIn;
+
+        ContactRecord(double timeS, String obstacle, double penetrationIn) {
+            this.timeS = timeS;
+            this.obstacle = obstacle;
+            this.penetrationIn = penetrationIn;
+        }
+    }
+
+    private static final class EventRecord {
+        final double timeS;
+        final String kind;
+        final String alliance;
+
+        EventRecord(double timeS, String kind, String alliance) {
+            this.timeS = timeS;
+            this.kind = kind;
+            this.alliance = alliance;
+        }
     }
 
     private static final class StepRecord {

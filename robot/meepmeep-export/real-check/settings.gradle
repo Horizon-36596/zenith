@@ -1,0 +1,4 @@
+// A throwaway MeepMeep module that compiles ZenithTrajectoryExport against the real MeepMeep 0.1.7 and
+// RoadRunner 1.0.1 classes, runs a bot with a line, a wait, a spline and a turn, and writes what the
+// exporter wrote beside what MeepMeep itself shows. See ../README.md, "Status". Not part of the robot build.
+rootProject.name = 'MeepMeepExportCheck'

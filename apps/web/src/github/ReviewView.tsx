@@ -12,6 +12,8 @@ import { FieldCanvas } from "../canvas/FieldCanvas";
 import { Panel } from "../components/primitives";
 import { FindingsPanel } from "../panels/FindingsPanel";
 import { LedgerPanel } from "../panels/LedgerPanel";
+import { TextAction } from "../proposals/parts";
+import { markerCount } from "../state/features";
 import { selectStep, setPrefs, useDerived, useEditor } from "../state/store";
 import { closeReview } from "./actions";
 import type { ReviewStepRow } from "./reviewModel";
@@ -46,7 +48,7 @@ export function ReviewView() {
   return (
     <>
       <div className={styles.banner} data-testid="review-banner">
-        <GitPullRequest size={16} strokeWidth={1.5} aria-hidden />
+        <GitPullRequest size={16} strokeWidth={1.75} aria-hidden />
         <span className={styles.bannerTitle}>{review.title}</span>
         <span className={styles.bannerMono}>
           {review.owner}/{review.repo}#{review.number} · {review.headRef} → {review.baseRef}
@@ -66,9 +68,15 @@ export function ReviewView() {
         >
           Open the pull request
         </a>
-        <button type="button" className={styles.link} data-testid="review-leave" onClick={closeReview}>
-          Leave review
-        </button>
+        {/* Every review mode is left the same way: a Leave text action naming what it leaves (UX review, X16). */}
+        <TextAction
+          label="Leave the review"
+          hint="Back to the editor. Nothing is written to the pull request."
+          onClick={closeReview}
+          testId="review-leave"
+        >
+          Leave
+        </TextAction>
       </div>
 
       <div className={appStyles.body}>
@@ -118,7 +126,7 @@ export function ReviewView() {
                           openAnchor(row);
                         }}
                       >
-                        <ExternalLink size={12} strokeWidth={1.5} aria-hidden />
+                        <ExternalLink size={12} strokeWidth={1.75} aria-hidden />
                       </button>
                     </span>
                     <span
@@ -151,11 +159,13 @@ export function ReviewView() {
               )}
             </Panel>
           </div>
-          <div className={appStyles.leftLedger}>
-            <Panel label="Ledger" title="Ledger" help="ledger" testId="ledger-panel">
-              <LedgerPanel />
-            </Panel>
-          </div>
+          {state.prefs.features.ledger ? (
+            <div className={appStyles.leftLedger}>
+              <Panel label="Ledger" title="Ledger" help="ledger" testId="ledger-panel">
+                <LedgerPanel />
+              </Panel>
+            </div>
+          ) : null}
         </aside>
 
         <main className={appStyles.centre}>
@@ -179,10 +189,12 @@ export function ReviewView() {
                 alliance={state.alliance}
                 waypoints={state.project.waypoints ?? null}
                 snap={false}
+                fieldGrid={state.prefs.fieldGrid}
                 showGhosts={false}
                 playbackS={state.playbackS ?? undefined}
                 trace={state.trace}
-                staticSvg={derived.staticSvg}
+                staticSvg={state.prefs.features.commands || markerCount(state.auto) === 0 ? derived.staticSvg : null}
+                showMarkers={state.prefs.features.commands}
                 onSelect={(selection) => {
                   selectStep(selection.stepId);
                 }}
@@ -236,12 +248,7 @@ export function ReviewView() {
                 Read only: this is someone&apos;s proposal, not your working copy.
               </p>
               <p>
-                The dashed ghost is {review.baseRef}; the solid path is {review.headRef}. Comments
-                and approval happen on GitHub, and merging is a human&apos;s.
-              </p>
-              <p>
-                To edit this routine, leave review mode and open{" "}
-                <code className="mono">{review.path}</code> on {review.headRef}.
+                Dashed ghost: {review.baseRef}. Solid path: {review.headRef}.
               </p>
             </div>
           </Panel>

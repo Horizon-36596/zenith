@@ -1,0 +1,2207 @@
+rules_version = '2';
+
+// Zenith's Firestore security rules (spec 13 sections 4, 5, 8, 13 and 14).
+//
+// The project is on Firebase's Spark plan, which has no Cloud Functions, so every rule the product
+// relies on is enforced here and nowhere else. The data model is documented in cloud/README.md and as
+// TypeScript types in packages/cloud/src/types.ts. The facts these rules rely on are recorded in
+// ADR 0009, most of them measured against the Firestore emulator.
+//
+// Every change to this file goes through a pull request with the rules tests green:
+//   pnpm test:rules
+//
+// Two engine facts shape the style (ADR 0009 section 4):
+// - get() of a missing document returns null, and repeated get() calls on one document count once
+//   towards the limit of 10 document reads per request, while exists() and get() on the same document
+//   count twice. So membership is always tested as get(...) != null, never with exists().
+// - A list query is allowed only when the rule can be proven for every document the query could
+//   return, so every list rule below names the equality filter its query must carry.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- who is asking
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return request.auth.uid;
+    }
+
+    /** A document path from a relative path such as 'teams/abc'. */
+    function docAt(relative) {
+      return path('/databases/' + database + '/documents/' + relative);
+    }
+
+    /**
+     * A Horizon admin: a person listed in admins/{uid}, the first from the Firebase console and the
+     * rest by another Horizon admin on the review page.
+     */
+    function isHorizonAdmin() {
+      return signedIn() && get(/databases/$(database)/documents/admins/$(request.auth.uid)) != null;
+    }
+
+    // ---------------------------------------------------------------- the private beta
+
+    /**
+     * The console's switch that opens Zenith to everyone: config/access with `betaOpen` set to true.
+     * A missing document, a missing field or any value but true keeps the beta closed. Its own
+     * function, so the read is made only when the cheaper checks before it have failed.
+     */
+    function betaIsOpen() {
+      let access = get(/databases/$(database)/documents/config/access);
+      return access != null && access.data.get('betaOpen', false) == true;
+    }
+
+    /**
+     * The caller may join Zenith during the private beta: a Horizon admin has named them in
+     * betaTesters/{uid}, they are a Horizon admin, or the beta is open to everyone.
+     * It gates creating a profile, redeeming an invite, founding a team and sending a bug report, so a
+     * tester taken off the list, or a profile made before the gate, does none of them again; what the
+     * person already has stays theirs. It reads at most three documents (the tester's entry, the admin
+     * entry and config/access), in that order, stopping at the first that grants access; with them a
+     * team's founding write reads nine documents, within the limit of 10.
+     */
+    function hasBetaAccess() {
+      return signedIn()
+        && (get(/databases/$(database)/documents/betaTesters/$(request.auth.uid)) != null
+            || isHorizonAdmin()
+            || betaIsOpen());
+    }
+
+    // ---------------------------------------------------------------- team roles (spec 13 section 4.3)
+
+    function memberPath(teamId, uid) {
+      return /databases/$(database)/documents/teams/$(teamId)/members/$(uid);
+    }
+
+    /** The caller's role in a team before this write, or null. A removed member has no document. */
+    function roleIn(teamId) {
+      let member = get(memberPath(teamId, request.auth.uid));
+      return member == null ? null : member.data.role;
+    }
+
+    /** The caller's role in a team as it will be after this write, or null. */
+    function roleAfter(teamId) {
+      let member = getAfter(memberPath(teamId, request.auth.uid));
+      return member == null ? null : member.data.role;
+    }
+
+    function hasRole(teamId, roles) {
+      return signedIn() && roleIn(teamId) in roles;
+    }
+
+    /** Owners, admins, editors and viewers. A pending member is not active and reads nothing. */
+    function isActive(teamId) {
+      return hasRole(teamId, ['owner', 'admin', 'editor', 'viewer']);
+    }
+
+    function isEditor(teamId) {
+      return hasRole(teamId, ['owner', 'admin', 'editor']);
+    }
+
+    function isTeamAdmin(teamId) {
+      return hasRole(teamId, ['owner', 'admin']);
+    }
+
+    function isOwner(teamId) {
+      return hasRole(teamId, ['owner']);
+    }
+
+    // ---------------------------------------------------------------- deleted teams
+
+    /** The team's document exists. */
+    function teamExists(teamId) {
+      return get(docAt('teams/' + teamId)) != null;
+    }
+
+    /**
+     * An active member of a team that still exists. Every read that membership grants asks this, not
+     * isActive alone: deleting a team deletes its members too, so this is a second lock, for a
+     * membership left behind by a deletion that stopped half way. It costs one read of the team, which
+     * the one read by membership that must stay within 10 documents, a recipient of a share to 8 teams,
+     * does not pay (see isRecipient).
+     */
+    function readsAsMember(teamId) {
+      return isActive(teamId) && teamExists(teamId);
+    }
+
+    function tombstonePath(teamId) {
+      return /databases/$(database)/documents/deletedTeams/$(teamId);
+    }
+
+    /**
+     * The team is being deleted, or was: its tombstone exists after this write. Deleting a team writes
+     * the tombstone in its first write, so every later write of the deletion (and the first) finds it.
+     */
+    function beingDeleted(teamId) {
+      return getAfter(tombstonePath(teamId)) != null;
+    }
+
+    /** The team's owner, deleting it: the only person who may delete what the team holds. */
+    function purges(teamId) {
+      return isOwner(teamId) && beingDeleted(teamId);
+    }
+
+    // ---------------------------------------------------------------- data helpers
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function hasExactly(required, optional) {
+      return incoming().keys().hasAll(required) && incoming().keys().hasOnly(required.concat(optional));
+    }
+
+    function onlyChanged(keys) {
+      return incoming().diff(existing()).affectedKeys().hasOnly(keys);
+    }
+
+    function unchanged(keys) {
+      return !incoming().diff(existing()).affectedKeys().hasAny(keys);
+    }
+
+    /**
+     * A string of 1 to max characters. The maxima are guards against abuse, set by hand. size()
+     * counts UTF-16 code units, as JavaScript's length does (measured on the emulator: 40 emoji
+     * outside the Basic Multilingual Plane fill a limit of 80), so the app's own checks with
+     * `.length` agree with it exactly.
+     */
+    function text(value, max) {
+      return value is string && value.size() > 0 && value.size() <= max;
+    }
+
+    /** A client-made id of at least 128 random bits: 22 or more base64url characters. */
+    function isRandomId(id) {
+      return id.matches('^[A-Za-z0-9_-]{22,64}$');
+    }
+
+    // ---------------------------------------------------------------- ciphertext (spec 14 section 4)
+
+    // Team libraries, auto titles, shares and proposals are encrypted on the device, so the rules
+    // check the shape of ciphertext and never its content. Every piece of it is stored as Bytes.
+    // Measured on the emulator (ADR 0013 section 5): `x is bytes` tells Bytes from a string,
+    // `size()` on Bytes counts bytes, Bytes compare with `==`, and `hashing.sha256(bytes)` gives
+    // Bytes. Bytes can be neither sliced nor joined, so the rules cannot tie a device id to its keys;
+    // every client checks that itself before it trusts a device record.
+
+    /** A key version: a whole number from 1 to 2^31 - 1. */
+    function isKeyVersion(value) {
+      return value is int && value >= 1 && value <= 2147483647;
+    }
+
+    /** Bytes of exactly `n` bytes. */
+    function bytesOf(value, n) {
+      return value is bytes && value.size() == n;
+    }
+
+    /** A device id: the first 128 bits of the device's fingerprint, as 22 base64url characters. */
+    function isDeviceId(id) {
+      return id is string && id.matches('^[A-Za-z0-9_-]{22}$');
+    }
+
+    // The shapes that shares check are written for the engine's limit of 1,000 expressions evaluated
+    // for one document, where every name, literal, operator and call counts one: a re-key of a share
+    // to 8 teams checks 8 wraps and three sealed values in one write. So they compare a value's sizes
+    // and fixed fields as one list, in two ways that each do the work of two tests:
+    // - `value.size() == n`, with each of the n fields read, is exactly that set of keys, as
+    //   keys().hasAll and keys().hasOnly would say: reading a missing field, or a field of something
+    //   that is not a map, is an error, and so a refusal.
+    // - `b.toHexString().size() == 2 * n` is Bytes of exactly n bytes, as `b is bytes && b.size() == n`
+    //   would say: only Bytes have toHexString, and on anything else it is an error (measured on the
+    //   emulator). It is used only for the short fixed fields, never for a ciphertext of any length.
+
+    /**
+     * A sealed value, `{ v: 1, alg: 'A256GCM', kv, iv, ct }`: AES-256-GCM under key version kv, a
+     * 12-byte IV, and a ciphertext of at least its 16-byte tag and at most `maxCt` bytes.
+     */
+    function isEnvelope(value, maxCt) {
+      return [value.size(), value.v, value.alg, value.iv.toHexString().size()] == [5, 1, 'A256GCM', 24]
+        && isKeyVersion(value.kv)
+        && value.ct is bytes && value.ct.size() >= 16 && value.ct.size() <= maxCt;
+    }
+
+    /** A sealed value under key version `kv`, as isEnvelope says with its kv given. The caller has checked `kv`. */
+    function isEnvelopeUnder(value, kv, maxCt) {
+      return [value.size(), value.v, value.alg, value.kv, value.iv.toHexString().size()] == [5, 1, 'A256GCM', kv, 24]
+        && value.ct is bytes && value.ct.size() >= 16 && value.ct.size() <= maxCt;
+    }
+
+    /** A 256-bit key or a SHA-256 sealed in an envelope: 32 bytes and the tag, 48 bytes of ciphertext. */
+    function isSealedKey(value) {
+      return isEnvelope(value, 48) && value.ct.size() == 48;
+    }
+
+    /** A 256-bit key sealed under key version `kv`, as isSealedKey says with its kv given. The caller has checked `kv`. */
+    function isSealedKeyUnder(value, kv) {
+      return [value.size(), value.v, value.alg, value.kv, value.iv.toHexString().size(), value.ct.toHexString().size()]
+        == [5, 1, 'A256GCM', kv, 24, 96];
+    }
+
+    /** A 256-bit key wrapped to a P-256 public key: `{ v: 1, epk, iv, ct }`, 65, 12 and 48 bytes. */
+    function isKeyWrap(value) {
+      return value is map
+        && value.keys().hasAll(['v', 'epk', 'iv', 'ct'])
+        && value.keys().hasOnly(['v', 'epk', 'iv', 'ct'])
+        && value.v == 1
+        && bytesOf(value.epk, 65)
+        && bytesOf(value.iv, 12)
+        && bytesOf(value.ct, 48);
+    }
+
+    /** A share key wrapped to a team's public key of version `ekv`: a key wrap with `ekv` added. */
+    function isShareKeyWrap(value) {
+      return [value.size(), value.v, value.epk.toHexString().size(), value.iv.toHexString().size(), value.ct.toHexString().size()]
+          == [5, 1, 130, 24, 96]
+        && isKeyVersion(value.ekv);
+    }
+
+    /**
+     * A team's public keys, `encKey` on teams/{teamId}: `{ v, spki, fingerprint, signSpki, sig }`, the
+     * fingerprint the SHA-256 of the 91-byte ECDH key, a 91-byte ECDSA signing key, and the previous
+     * version's 64-byte signature over them (none at version 1). The rules cannot verify a signature;
+     * every partner checks the chain of them before it takes a new version as a rotation.
+     */
+    function validEncKey(key) {
+      return key is map
+        && key.keys().hasAll(['v', 'spki', 'fingerprint', 'signSpki', 'sig'])
+        && key.keys().hasOnly(['v', 'spki', 'fingerprint', 'signSpki', 'sig'])
+        && isKeyVersion(key.v)
+        && bytesOf(key.spki, 91)
+        && bytesOf(key.fingerprint, 32)
+        && hashing.sha256(key.spki) == key.fingerprint
+        && bytesOf(key.signSpki, 91)
+        && (key.v == 1 ? key.sig == null : bytesOf(key.sig, 64));
+    }
+
+    /**
+     * The team's newest key version, from its `encKey` as it will be after this write. Everything new
+     * is sealed under it, so nothing is sealed under the old key in the write that rotates it.
+     */
+    function teamKeyVersionAfter(teamId) {
+      return getAfter(/databases/$(database)/documents/teams/$(teamId)).data.encKey.v;
+    }
+
+    /** This write founds the team: it did not exist before, and the caller owns it after. */
+    function foundsInThisWrite(teamId) {
+      return get(docAt('teams/' + teamId)) == null
+        && getAfter(docAt('teams/' + teamId)).data.createdBy == request.auth.uid
+        && roleAfter(teamId) == 'owner';
+    }
+
+    // ---------------------------------------------------------------- size caps (spec 13 section 13)
+
+    // A share's projection and a proposal's diff are the only fields another team writes that can
+    // grow large, and another team reads them. Each is capped at 1,000,000 bytes of ciphertext: the
+    // gzip-compressed text plus the 16-byte tag. The app also refuses text over 1,000,000 bytes of
+    // UTF-8 before it compresses it, so the cap on what a team can send is the same as before
+    // encryption, and real text, which compresses three to four times, is always well under it.
+    //
+    // How the number was chosen:
+    // - Firestore keeps at most 1 MiB (1,048,576 bytes) in one document, counting field names,
+    //   values and the document's name. Every other field of a share or a proposal together is under
+    //   15 KB (at most 8 team ids of up to 64 characters, 8 wrapped keys, at most 100 older share
+    //   keys of about 100 bytes stored, a few ids and timestamps: 14,077 bytes at their longest,
+    //   measured by packages/cloud/test/sizeCaps.test.ts), so 1,000,000 bytes is the largest round
+    //   number that always leaves room for them.
+    // - Measured on the example autos (spec 13 section 8.2), a view projection is about 3 KB and a
+    //   propose projection up to about 13 KB, so real files sit about 75 times below it.
+    // - An upper bound built with every flat list at the schema's own cap (3,000 trajectory rows,
+    //   which is 300 s at 10 Hz, ten times an FTC autonomous period; 200 phases; 200 claims; 50
+    //   envelopes of 32 corners; a 200-step structure; 200 named commands) is about 886 KB in
+    //   canonical form. The largest proposal built the same way (200 new paths with comments) is
+    //   about 466 KB. packages/cloud/test/sizeCaps.test.ts builds both and checks them against the
+    //   cap. The schema has no depth limit on nested groups, so no cap under Firestore's limit can
+    //   hold every file the schema accepts; this one holds every one a real auto produces.
+    // - It is also the web app's own limit on a proposal file it opens, so a proposal the owner's
+    //   app can open is exactly one the cloud takes.
+
+    /** The most bytes of ciphertext a share's projection holds. SET BY HAND from the limits above. */
+    function maxProjectionBytes() {
+      return 1000000;
+    }
+
+    /**
+     * The most bytes of ciphertext a share's sealed `ownerChoice` holds: the sharer's choices for its
+     * projection, with an auto's title of 200 UTF-16 code units, are under 700 bytes of text before
+     * they are compressed and sealed. SET BY HAND; the same number is MAX_OWNER_CHOICE_BYTES in
+     * packages/cloud/src/types.ts.
+     */
+    function maxOwnerChoiceBytes() {
+      return 1024;
+    }
+
+    /** The most bytes of ciphertext a proposal's diff holds. SET BY HAND from the limits above. */
+    function maxProposalBytes() {
+      return 1000000;
+    }
+
+    /**
+     * The most bytes of ciphertext one field of a revision holds. SET BY HAND: Firestore's own limit
+     * on a whole document, 1 MiB; the four fields of a revision share it, and Firestore refuses a
+     * document over it.
+     */
+    function maxRevisionBytes() {
+      return 1048576;
+    }
+
+    /**
+     * The most bytes of ciphertext an auto's title holds, and the auto.create activity entry's copy of
+     * it. SET BY HAND: a title of 200 UTF-16 code units is at most 600 bytes of UTF-8, which gzip
+     * turns into at most about 625, and the tag adds 16, so 1,024 holds every title the app takes.
+     */
+    function maxTitleBytes() {
+      return 1024;
+    }
+
+    /**
+     * The most bytes of ciphertext a sealed private key holds (a team key pair's, or the recovery key
+     * pair's). SET BY HAND: WebCrypto's PKCS#8 for a P-256 key is 138 bytes, 154 with the tag.
+     */
+    function maxPrivateKeyBytes() {
+      return 256;
+    }
+
+    /**
+     * The most bytes of ciphertext a team key version's sealed device roster holds. SET BY HAND: a
+     * roster lists at most 500 members, 500 devices and 50 links, which with the longest uids is about
+     * 342 KB, and half of Firestore's 1 MiB document limit holds that with the rest of the record.
+     * The same number is MAX_ROSTER_BYTES in packages/cloud/src/types.ts.
+     */
+    function maxRosterBytes() {
+      return 524288;
+    }
+
+    /**
+     * The most older share keys a share keeps in `prevKeys`, one each time a team is taken off it.
+     * SET BY HAND: a guard; 100 of them are about 10 KB stored, which the room left beside the projection holds.
+     */
+    function maxPreviousShareKeys() {
+      return 100;
+    }
+
+    /**
+     * `after` is `before` with exactly one entry added at the end. The empty case is separate because
+     * the slice [0:0] is an evaluation error in the engine (ADR 0009 section 4).
+     */
+    function appendsOne(before, after) {
+      return after.size() == before.size() + 1
+        && (before.size() == 0 || after[0:before.size()] == before);
+    }
+
+    // What the app writes in an activity entry's target and detail (types.ts in the cloud package
+    // holds the same two numbers as MAX_ACTIVITY_TARGET and MAX_ACTIVITY_DETAIL):
+    // - target is an id: a team, share, auto, proposal or verification id, an invite code (all 22
+    //   characters as the app makes them, at most 64 as isRandomId takes them), a revision id (at most
+    //   71), a member's sign-in uid, a team number, or 'sharing'. 128 holds every one of them.
+    // - detail is a role, a status, a team number, a reason code, a revision id, a team's name (at
+    //   most 100 characters), the settings changed as JSON (under 100), or the teams a share names
+    //   joined by commas: at most 8 ids of up to 64 characters and 7 commas, 519 characters, the
+    //   longest. 600 holds every one of them. The one detail that is not text is an auto.create
+    //   entry's, the new auto's title, which is sealed under the team key like the title itself.
+
+    /** The longest target of an activity entry. SET BY HAND from what the app writes, above. */
+    function maxActivityTarget() {
+      return 128;
+    }
+
+    /** The longest detail of an activity entry. SET BY HAND from what the app writes, above. */
+    function maxActivityDetail() {
+      return 600;
+    }
+
+    /** A team setting from teams/{teamId}/settings/sharing; a missing document means every default. */
+    function teamAllows(teamId, key) {
+      let settings = get(/databases/$(database)/documents/teams/$(teamId)/settings/sharing);
+      return settings != null && settings.data.get(key, false) == true;
+    }
+
+    // ---------------------------------------------------------------- users/{uid}
+
+    // A profile holds a display name, nothing else the user types (spec 13 section 4.1). Only its
+    // owner reads or writes it. There is no age screen (owner ruling 2026-10-02): the Terms ask for
+    // 13 or older, or a school account the school approved. A profile made before that ruling may
+    // still carry `over13: true`; nothing reads it, and the name still changes, because the update
+    // rule looks only at what changed. During the private beta only someone with beta access
+    // creates one (hasBetaAccess); changing the name and deleting the profile are never gated, so a
+    // tester taken off the list can still delete their account and data.
+    match /users/{uid} {
+      allow get: if signedIn() && me() == uid;
+      allow list: if false;
+      allow create: if signedIn() && me() == uid
+        && hasExactly(['displayName', 'createdAt'], [])
+        && text(incoming().displayName, 80)
+        && incoming().createdAt == request.time
+        && hasBetaAccess();
+      allow update: if signedIn() && me() == uid
+        && onlyChanged(['displayName'])
+        && text(incoming().displayName, 80);
+      allow delete: if signedIn() && me() == uid;
+
+      // ------------------------------------------------------------ users/{uid}/devices/{deviceId}
+
+      // A device's public keys (spec 14 section 4.1): the P-256 key other devices wrap team keys to
+      // and the P-256 key it signs grants with, each a 91-byte SPKI, and the SHA-256 of the two. Anyone
+      // signed in reads one by id, to wrap to it or check its signature; only its user lists theirs,
+      // adds one or deletes one. A record never changes: new keys make a new device. Its id is the
+      // first 128 bits of the fingerprint, which the rules cannot check because they cannot slice
+      // bytes, so every client checks it before trusting the record.
+      match /devices/{deviceId} {
+        allow get: if signedIn();
+        allow list: if signedIn() && me() == uid;
+        allow create: if signedIn() && me() == uid
+          && isDeviceId(deviceId)
+          && hasExactly(['v', 'encSpki', 'signSpki', 'fingerprint', 'createdAt'], [])
+          && incoming().v == 1
+          && bytesOf(incoming().encSpki, 91)
+          && bytesOf(incoming().signSpki, 91)
+          && bytesOf(incoming().fingerprint, 32)
+          && incoming().createdAt == request.time;
+        allow update: if false;
+        allow delete: if signedIn() && me() == uid;
+      }
+    }
+
+    // ---------------------------------------------------------------- admins/{uid}
+
+    // `{ name }`. The very first admin is named from the Firebase console, which the rules do not
+    // govern; after that any Horizon admin adds and removes admins from the review page (owner
+    // ruling 2026-10-02). Nobody removes themselves, so no admin locks themselves out; whether the
+    // last admin is being removed cannot be checked here, and removing yourself is what would do it.
+    // The app writes an adminLog entry in the same write.
+    match /admins/{uid} {
+      allow get: if signedIn() && (me() == uid || isHorizonAdmin());
+      allow list: if isHorizonAdmin();
+      allow create: if isHorizonAdmin()
+        && hasExactly(['name'], [])
+        && text(incoming().name, 80);
+      allow update: if false;
+      allow delete: if isHorizonAdmin() && uid != me();
+    }
+
+    // ---------------------------------------------------------------- betaTesters/{uid}
+
+    // The private beta's list of testers, `{ name }`. Any Horizon admin adds and removes testers from
+    // the review page (owner ruling 2026-10-02), or the owner from the console. A tester reads their
+    // own entry, and Horizon admins read and list them all. The app writes an adminLog entry in the
+    // same write.
+    match /betaTesters/{uid} {
+      allow get: if signedIn() && (me() == uid || isHorizonAdmin());
+      allow list: if isHorizonAdmin();
+      allow create: if isHorizonAdmin()
+        && hasExactly(['name'], [])
+        && text(incoming().name, 80);
+      allow update: if false;
+      allow delete: if isHorizonAdmin();
+    }
+
+    // ---------------------------------------------------------------- betaRequests/{uid}
+
+    // Requests for beta access that people sent from the private-beta screen until 2026-10-03.
+    // Nobody can ask for access any more (owner ruling 2026-10-03, issue #99): a person sends their
+    // user code to a Horizon admin, who adds them by it. So nobody creates or changes a request. The
+    // ones left over stay readable and deletable by their sender, for Export my data and Delete my
+    // account, and by Horizon admins, so adding that person by user code deletes theirs and an admin
+    // can clear the rest. The daily clean-up deletes each after 30 days and with the account.
+    match /betaRequests/{uid} {
+      allow get: if signedIn() && (me() == uid || isHorizonAdmin());
+      allow list: if isHorizonAdmin();
+      allow create, update: if false;
+      allow delete: if signedIn() && (me() == uid || isHorizonAdmin());
+    }
+
+    // ---------------------------------------------------------------- config/access
+
+    // `{ betaOpen }`, written only from the Firebase console. Anyone signed in reads it, so the app
+    // can tell an open beta from a closed one; a missing document means the beta is closed.
+    match /config/access {
+      allow get: if signedIn();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ---------------------------------------------------------------- adminLog/{entryId}
+
+    // Spec 13 section 13: a Horizon admin's access is "used only for reviews and support, and
+    // logged". A Horizon admin's app appends an entry each time the admin page reads or decides
+    // something: who, when, what, and the id it was about, never what was read. The decisions write
+    // theirs in the same write as the decision. Only Horizon admins write, as themselves, at the
+    // request's time. Nobody changes or deletes an entry through the app, and only Horizon admins
+    // read the log.
+    match /adminLog/{entryId} {
+      allow get, list: if isHorizonAdmin();
+      allow create: if isHorizonAdmin()
+        && isRandomId(entryId)
+        && hasExactly(['by', 'at', 'action'], ['target'])
+        && incoming().by == me()
+        && incoming().at == request.time
+        && incoming().action in ['queue.list', 'queue.open', 'shares.list',
+                                 'verification.decide', 'dispute.decide', 'appeal.decide',
+                                 'reports.list', 'report.status',
+                                 'beta.list', 'beta.approve', 'beta.decline', 'beta.add', 'beta.remove',
+                                 'admin.add', 'admin.remove']
+        && (!('target' in incoming()) || text(incoming().target, maxActivityTarget()));
+      allow update, delete: if false;
+    }
+
+    // ---------------------------------------------------------------- bugReports/{reportId}
+
+    // A bug report a signed-in user sends from the app's Report a bug dialog. It is private: only
+    // Horizon admins read, list, mark and delete reports, and nobody else reads one, not even its
+    // reporter. The reporter needs a profile and beta access. A report holds the person's own words,
+    // a setup block the app collects and shows before sending (version, surface, browser and system by name and major
+    // version, window size, theme, cloud mode, the open file's findings and the last action ids),
+    // and the open auto only if they ticked "Include a snapshot of my auto file", the owner's one
+    // exception, ruled on 2026-09-30, to "Horizon admins never see a team's paths".
+    // The rules check every field's type and size, and that nothing else is in it. The maxima are MAX_BUG_* in
+    // packages/cloud/src/types.ts. The daily clean-up deletes a report 30 days after it is closed or
+    // 90 days after it was sent, and when its reporter's account is deleted (site/docs/retention.md).
+
+    function optionalText(key, max) {
+      return !(key in incoming()) || text(incoming()[key], max);
+    }
+
+    function wholeWithin(value, max) {
+      return value is int && value >= 0 && value <= max;
+    }
+
+    function validBugSetup(setup) {
+      return setup is map
+        && setup.keys().hasAll(['appVersion', 'surface', 'hostMode', 'browser', 'os', 'windowWidthPx',
+                                'windowHeightPx', 'theme', 'cloudMode', 'problems', 'recentActions'])
+        && setup.keys().hasOnly(['appVersion', 'surface', 'hostMode', 'browser', 'os', 'windowWidthPx',
+                                 'windowHeightPx', 'theme', 'cloudMode', 'problems', 'recentActions'])
+        && text(setup.appVersion, 80)
+        && setup.surface in ['web', 'desktop']
+        && setup.hostMode is bool
+        && text(setup.browser, 80)
+        && text(setup.os, 80)
+        && wholeWithin(setup.windowWidthPx, 100000)
+        && wholeWithin(setup.windowHeightPx, 100000)
+        && setup.theme in ['dark', 'light']
+        && setup.cloudMode in ['off', 'fake', 'firebase']
+        && setup.problems is string && setup.problems.size() <= 8000
+        && setup.recentActions is string && setup.recentActions.size() <= 1500;
+    }
+
+    match /bugReports/{reportId} {
+      allow get, list: if isHorizonAdmin();
+      allow create: if signedIn()
+        && isRandomId(reportId)
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)) != null
+        && hasBetaAccess()
+        && hasExactly(['reporter', 'createdAt', 'status', 'whatHappened', 'setup'], ['expected', 'steps', 'autoFile'])
+        && incoming().reporter == me()
+        && incoming().createdAt == request.time
+        && incoming().status == 'new'
+        && text(incoming().whatHappened, 4000)
+        && optionalText('expected', 2000)
+        && optionalText('steps', 4000)
+        && optionalText('autoFile', 200000)
+        && validBugSetup(incoming().setup);
+      // Triage: a Horizon admin changes the status, and says who and when; nothing the reporter
+      // wrote changes.
+      allow update: if isHorizonAdmin()
+        && onlyChanged(['status', 'updatedBy', 'updatedAt'])
+        && incoming().status in ['new', 'triaged', 'closed']
+        && incoming().updatedBy == me()
+        && incoming().updatedAt == request.time;
+      allow delete: if isHorizonAdmin();
+    }
+
+    // ---------------------------------------------------------------- teams/{teamId}
+
+    function claimPath(teamNumber) {
+      return /databases/$(database)/documents/claims/$(string(teamNumber));
+    }
+
+    /** This write also creates the claim on `teamNumber` for this team. */
+    function claimsInSameWrite(teamId, teamNumber) {
+      let claim = getAfter(claimPath(teamNumber));
+      return teamNumber is int && teamNumber > 0 && claim != null && claim.data.teamId == teamId;
+    }
+
+    // Team documents hold only the number, the name and the verification status, and are readable by
+    // any signed-in user by id (a share names its teams). Nobody can list them.
+    match /teams/{teamId} {
+      allow get: if signedIn();
+      allow list: if false;
+
+      // Creating a team writes, in one batch, the team, the creator's owner membership and, when the
+      // team has a number, the claim on that number. The creator must have a profile and be let into
+      // the private beta, so a tester taken off the list founds no team and claims no number.
+      // The same batch sets up the team's keys (spec 14 section 4.2): `encKey`, the public half of
+      // team key pair 1, on the team; teamKeys/1; the recovery record; and the creator's own grant.
+      allow create: if signedIn()
+        && isRandomId(teamId)
+        && get(tombstonePath(teamId)) == null
+        && getAfter(docAt('users/' + request.auth.uid)) != null
+        && hasExactly(['number', 'name', 'status', 'createdBy', 'createdAt', 'encKey'], [])
+        && text(incoming().name, 100)
+        && incoming().status == 'unverified'
+        && incoming().createdBy == me()
+        && incoming().createdAt == request.time
+        && (incoming().number == null || claimsInSameWrite(teamId, incoming().number))
+        && validEncKey(incoming().encKey)
+        && incoming().encKey.v == 1
+        && getAfter(docAt('teams/' + teamId + '/teamKeys/1')) != null
+        && getAfter(docAt('teams/' + teamId + '/recovery/current')) != null
+        && roleAfter(teamId) == 'owner'
+        && hasBetaAccess();
+
+      // Only a Horizon admin may set the status or change a number once set (spec 13 section 4.4, owner
+      // ruling 2026-09-27: verification is by admin review only), including on a team they are a
+      // member of (owner ruling 2026-10-01: no Horizon-admin action needs two people; the claim's
+      // history records who decided). A team admin may rename the team, and
+      // may give a team without a number one, together with its claim. The one status anybody else
+      // writes is 'contested': on the holder of an unverified number, in the same write that contests
+      // its claim, and on the challenging team, a team with no number, by its own owners and admins, in
+      // the same write that opens its review, which `disputeId` then names. "On an unverified one both
+      // become contested." A reviewer's decision clears `disputeId`.
+      allow update: if (isHorizonAdmin() && onlyChanged(['status', 'number', 'disputeId'])
+            && incoming().status in ['unverified', 'verified', 'contested']
+            && (incoming().number == null || incoming().number is int)
+            && (unchanged(['disputeId']) || incoming().get('disputeId', null) == null))
+        || (isTeamAdmin(teamId) && onlyChanged(['name']) && text(incoming().name, 100))
+        || (isTeamAdmin(teamId) && onlyChanged(['number']) && existing().number == null
+            && claimsInSameWrite(teamId, incoming().number))
+        || (signedIn() && onlyChanged(['status']) && incoming().status == 'contested'
+            && existing().status == 'unverified' && existing().number is int
+            && contestedInSameWrite(teamId, existing().number))
+        || (isTeamAdmin(teamId) && onlyChanged(['status', 'disputeId']) && incoming().status == 'contested'
+            && existing().status == 'unverified' && existing().number == null
+            && opensReviewInSameWrite(teamId, incoming().get('disputeId', null)))
+        || (isTeamAdmin(teamId) && rotatesTeamKey(teamId))
+        || (isActive(teamId) && onlyChanged(['rotationPending']) && incoming().rotationPending == true
+            && existing().encKey is map);
+
+      // Rotating the team key (spec 14 section 4.5): an owner or admin publishes team key pair n+1,
+      // in the batch that writes teamKeys/{n+1} and moves the recovery record on to key n+1, and
+      // clears any "rotation pending" mark. The version goes up by exactly one.
+      function rotatesTeamKey(teamId) {
+        let next = incoming().encKey;
+        return onlyChanged(['encKey', 'rotationPending'])
+          && validEncKey(next)
+          && next.v == existing().encKey.v + 1
+          && getAfter(docAt('teams/' + teamId + '/teamKeys/' + string(next.v))) != null
+          && getAfter(docAt('teams/' + teamId + '/recovery/current')).data.kv == next.v
+          && incoming().get('rotationPending', false) == false;
+      }
+
+      // This write opens the review `disputeId`, with this team as the challenger, on a number whose
+      // claim it makes contested (a review of a verified number labels neither team).
+      function opensReviewInSameWrite(teamId, disputeId) {
+        return disputeId is string
+          && get(docAt('disputes/' + disputeId)) == null
+          && getAfter(docAt('disputes/' + disputeId)).data.challengerTeamId == teamId
+          && getAfter(claimPath(getAfter(docAt('disputes/' + disputeId)).data.teamNumber)).data.status == 'contested';
+      }
+
+      // The claim on this team's number goes from undisputed to contested in this write.
+      function contestedInSameWrite(teamId, teamNumber) {
+        let before = get(claimPath(teamNumber));
+        let after = getAfter(claimPath(teamNumber));
+        return before.data.teamId == teamId
+          && before.data.get('disputeId', null) == null
+          && after.data.status == 'contested'
+          && after.data.get('disputeId', null) != null;
+      }
+
+      // Only under the team's tombstone, so a deleted team's id can never be founded again.
+      allow delete: if (isOwner(teamId) || isHorizonAdmin()) && beingDeleted(teamId);
+
+      // The team's own rule above lets any active member set `rotationPending`: a member who leaves,
+      // or revokes a device of their own without being an owner or admin, cannot rotate the key, so
+      // they mark it, and the next owner or admin whose app opens the team rotates it.
+
+      // ------------------------------------------------------------ teams/{teamId}/members/{uid}
+
+      match /members/{uid} {
+        allow get: if signedIn() && (me() == uid || readsAsMember(teamId));
+        // A Horizon admin deleting a team lists its members under its tombstone, to delete them.
+        allow list: if readsAsMember(teamId) || (isHorizonAdmin() && get(tombstonePath(teamId)) != null);
+
+        allow create: if signedIn() && me() == uid
+          && hasExactly(['uid', 'teamId', 'role', 'displayName', 'joinedAt'], ['invite', 'requestedRole'])
+          && incoming().uid == uid
+          && incoming().teamId == teamId
+          && text(incoming().displayName, 80)
+          && incoming().joinedAt == request.time
+          && (foundsTeam(teamId) || (redeemsInvite(teamId) && hasBetaAccess()));
+
+        // A member may change their own display name. Owners and admins change other members' roles,
+        // which is also how a pending member is approved. An owner's role can only be changed by
+        // another owner and nobody can change their own role, so a team always keeps an owner.
+        allow update: if signedIn() && (
+          (me() == uid && onlyChanged(['displayName']) && text(incoming().displayName, 80))
+          || (me() != uid && onlyChanged(['role']) && assignsRole(teamId))
+        );
+
+        // Leaving, or being removed. An owner cannot leave while the team exists; the last step of
+        // deleting a team is the owner removing their own membership. A Horizon admin deleting a team
+        // removes every member under its tombstone: a share made to the team is read by membership
+        // alone (isRecipient), so a member left behind would go on reading it.
+        allow delete: if signedIn() && (
+          (me() == uid && (existing().role != 'owner' || getAfter(docAt('teams/' + teamId)) == null))
+          || (me() != uid && roleIn(teamId) == 'owner')
+          || (me() != uid && roleIn(teamId) == 'admin' && existing().role != 'owner')
+          || (me() != uid && isHorizonAdmin() && beingDeleted(teamId))
+        );
+
+        function foundsTeam(teamId) {
+          let team = getAfter(docAt('teams/' + teamId));
+          return incoming().role == 'owner'
+            && !incoming().keys().hasAny(['invite', 'requestedRole'])
+            && get(docAt('teams/' + teamId)) == null
+            && get(tombstonePath(teamId)) == null
+            && team != null && team.data.createdBy == request.auth.uid;
+        }
+
+        // Joining by invite: the invite must be for this team, unrevoked, unexpired and not used up,
+        // and the same write must add exactly one to its uses (the invite rule checks the other half).
+        // The team must still exist and not be being deleted. The member is pending unless the invite
+        // approves automatically; an admin invite never does (owner ruling 2026-10-25), so one leaked
+        // admin link is not enough to get in. The member create rule above also asks hasBetaAccess() of the
+        // person redeeming; a founder's own membership needs no such check, since founding a team
+        // needs a profile, and creating a profile is gated.
+        function redeemsInvite(teamId) {
+          let code = incoming().invite;
+          let before = get(docAt('invites/' + code));
+          let after = getAfter(docAt('invites/' + code));
+          return code is string
+            && before != null
+            && before.data.teamId == teamId
+            && teamExists(teamId)
+            && get(tombstonePath(teamId)) == null
+            && before.data.revoked == false
+            && request.time < before.data.expiresAt
+            && before.data.uses < before.data.maxUses
+            && after.data.uses == before.data.uses + 1
+            && incoming().requestedRole == before.data.role
+            && incoming().role == (before.data.autoApprove && before.data.role != 'admin' ? before.data.role : 'pending');
+        }
+
+        function assignsRole(teamId) {
+          let caller = roleIn(teamId);
+          return (caller == 'owner' && incoming().role in ['owner', 'admin', 'editor', 'viewer'])
+            || (caller == 'admin' && existing().role != 'owner'
+                && incoming().role in ['admin', 'editor', 'viewer']);
+        }
+      }
+
+      // ------------------------------------------------------------ teams/{teamId}/settings/sharing
+
+      // Spec 13 section 4.3: by default editors may not share at the propose level and may not make
+      // an anyone-with-the-link share. Spec 14 section 4.4: by default only owners, admins and a
+      // member's own devices approve a member's new device; membersMayApproveDevices lets any active
+      // member do it. A missing document means those defaults.
+      match /settings/{settingId} {
+        allow read: if readsAsMember(teamId);
+        allow create, update: if isTeamAdmin(teamId)
+          && settingId == 'sharing'
+          && incoming().keys().hasOnly(['editorsMayProposeShare', 'editorsMayLinkShare', 'publishOnSave',
+                                        'membersMayApproveDevices'])
+          && incoming().get('editorsMayProposeShare', false) is bool
+          && incoming().get('editorsMayLinkShare', false) is bool
+          && incoming().get('publishOnSave', false) is bool
+          && incoming().get('membersMayApproveDevices', false) is bool;
+        allow delete: if isTeamAdmin(teamId);
+      }
+
+      // ------------------------------------------------------------ teams/{teamId}/teamKeys/{kv}
+
+      // Team key n and team key pairs n (spec 14 section 4.1): key n-1 sealed under key n (`prev`, null
+      // for n = 1), so the newest key opens every older one, and the private halves of the ECDH pair
+      // and the ECDSA signing pair sealed under key n, with their public halves in the clear, and pair
+      // n-1's signature over them (`sig`, null for n = 1). The public halves and the signature are the
+      // team's `encKey` of the same version, which this batch sets: the founder writes n = 1 when
+      // creating the team, an owner or admin writes n + 1 when rotating. It also holds version n's
+      // device roster (`roster`, sealed under key n: which devices hold key n, whose they are, and
+      // each member's role), and the signature of the device that made version n over it
+      // (`rosterSig`); every member's app checks them, and the rules check only their shape. Never
+      // changed. Any signed-in user may get one by id, because it holds only public keys and
+      // ciphertext, and a partner team walks the signatures from the version it pinned to the newest;
+      // only active members list them. So it names nobody and no time in the clear: who rotated, and
+      // when, is in the `key.rotate` activity entry, which only owners and admins read.
+      match /teamKeys/{kv} {
+        allow get: if signedIn();
+        allow list: if readsAsMember(teamId);
+        allow create: if signedIn()
+          && hasExactly(['v', 'kv', 'prev', 'pairSpki', 'pairPrivate', 'signSpki', 'signPrivate', 'sig',
+                         'roster', 'rosterSig'], [])
+          && incoming().v == 1
+          && isKeyVersion(incoming().kv)
+          && kv == string(incoming().kv)
+          && bytesOf(incoming().pairSpki, 91)
+          && isEnvelope(incoming().pairPrivate, maxPrivateKeyBytes())
+          && incoming().pairPrivate.kv == incoming().kv
+          && bytesOf(incoming().signSpki, 91)
+          && isEnvelope(incoming().signPrivate, maxPrivateKeyBytes())
+          && incoming().signPrivate.kv == incoming().kv
+          && isEnvelope(incoming().roster, maxRosterBytes())
+          && incoming().roster.kv == incoming().kv
+          && bytesOf(incoming().rosterSig, 64)
+          && teamKeyVersionAfter(teamId) == incoming().kv
+          && getAfter(docAt('teams/' + teamId)).data.encKey.spki == incoming().pairSpki
+          && getAfter(docAt('teams/' + teamId)).data.encKey.signSpki == incoming().signSpki
+          && getAfter(docAt('teams/' + teamId)).data.encKey.sig == incoming().sig
+          && ((incoming().kv == 1 && incoming().prev == null && foundsInThisWrite(teamId))
+              || (incoming().kv > 1 && isSealedKey(incoming().prev) && incoming().prev.kv == incoming().kv
+                  && isTeamAdmin(teamId)));
+        allow update: if false;
+        allow delete: if purges(teamId);
+      }
+
+      // ------------------------------------------------------------ teams/{teamId}/recovery/current
+
+      // The team recovery code's record (spec 14 section 5.3): the recovery key pair's public half, its
+      // private half sealed under a key derived from the printed code, a recovery signing pair sealed
+      // the same way (a device that used the code signs with it, which lets it make the next device
+      // roster), the newest team key wrapped to the public half, and the SHA-256 of the public half
+      // sealed under that team key. A rotating device wraps the next key to it only when the newest
+      // device roster names both public halves. It always holds the newest team key.
+      // The founder writes it when creating the team. At each rotation an owner or admin wraps the
+      // new key to the same recovery key; only an owner makes a new recovery key (a new code), which
+      // rotates the key too. So every update raises the key version: nobody, owner or admin, can put a
+      // wrap or check of the same version in place of the real one, which would leave the printed
+      // code opening nothing (security review M3).
+      match /recovery/{docId} {
+        allow read: if readsAsMember(teamId);
+        allow create: if docId == 'current' && validRecovery(teamId)
+          && (foundsInThisWrite(teamId) || isOwner(teamId));
+        allow update: if docId == 'current' && validRecovery(teamId)
+          && incoming().kv > existing().kv
+          && ((isTeamAdmin(teamId) && incoming().spki == existing().spki
+               && incoming().privateKey == existing().privateKey
+               && incoming().signSpki == existing().signSpki
+               && incoming().signPrivate == existing().signPrivate)
+              || isOwner(teamId));
+        allow delete: if purges(teamId);
+
+        function validRecovery(teamId) {
+          return hasExactly(['v', 'kv', 'spki', 'privateKey', 'signSpki', 'signPrivate', 'teamKey', 'check',
+                             'updatedBy', 'updatedAt'], [])
+            && incoming().v == 1
+            && incoming().kv == teamKeyVersionAfter(teamId)
+            && bytesOf(incoming().spki, 91)
+            && isEnvelope(incoming().privateKey, maxPrivateKeyBytes())
+            && incoming().privateKey.kv == 1
+            && bytesOf(incoming().signSpki, 91)
+            && isEnvelope(incoming().signPrivate, maxPrivateKeyBytes())
+            && incoming().signPrivate.kv == 1
+            && isKeyWrap(incoming().teamKey)
+            && isSealedKey(incoming().check)
+            && incoming().check.kv == incoming().kv
+            && incoming().updatedBy == me()
+            && incoming().updatedAt == request.time;
+        }
+      }
+
+      // ------------------------------------------------------------ teams/{teamId}/keyGrants/{deviceId}
+
+      // The team key for one device (spec 14 sections 4.2 to 4.5): the newest team key wrapped to the
+      // device's encryption key, a proof that a key holder made it (the device's fingerprint sealed
+      // under that key), and the approving device's signature over it. The rules cannot open any of
+      // it; every client checks the device record, the signature and the proof before it trusts a
+      // grant. What the rules hold to is who writes one:
+      // - the founder, for their own device, in the batch that creates the team;
+      // - an active member, for a device of their own, from that device itself (after using the
+      //   recovery code) or from another of their devices that holds the newest key;
+      // - an owner or admin, from a device of theirs that holds the newest key, for the device of any
+      //   member who is active after the write: this is how Approve grants a new member;
+      // - with membersMayApproveDevices, any active member, from a device that holds the newest key,
+      //   for another member who is already active.
+      // A grant names the newest key version and the caller as its approver, and the recipient's
+      // device record must exist. A grant a device makes for itself with the recovery code carries
+      // `recoverySig`, the recovery signing key's endorsement of it; the rules check its shape and that
+      // the grant is the device's own. The approving device must hold its grant before the write (or, in
+      // the write that rotates the key, after it), so two grants made together never approve each
+      // other. While the team is marked "rotation pending" (a member left, or a
+      // device was taken off, without a rotation), no device grants itself the key unless the same
+      // write rotates it: the device taken off may still hold the key it had. A grant made by
+      // approving a request carries `approval`, the MAC from the code the approver typed, which the
+      // new device checks; the rules check its shape and that it is over the key the grant gives.
+      // Rotating the key updates every kept grant to the new version, and removes its approval and any
+      // recovery endorsement, in
+      // the same batch; an update reads only documents every grant in the batch shares (the team,
+      // the caller's membership, the caller's own grant and device), because one batch may read at
+      // most 20 documents in all (ADR 0013). Read by its own member while active, and by owners and
+      // admins; deleted by its own member, with the team, or by an owner or admin only in a write that
+      // rotates the key, takes the member out of the team, or marks the key "rotation pending" (taking
+      // one device off without a rotation), and in that last case never an owner's grant unless the
+      // caller is an owner: an admin cannot lock the owners out of the library (security review M3).
+      match /keyGrants/{deviceId} {
+        allow get: if (signedIn() && existing().uid == me() && isActive(teamId)) || isTeamAdmin(teamId);
+        allow list: if (signedIn() && resource.data.uid == me() && isActive(teamId)) || isTeamAdmin(teamId);
+        allow create: if signedIn()
+          && validGrant(teamId, deviceId)
+          && incoming().createdAt == request.time
+          && getAfter(docAt('users/' + incoming().uid + '/devices/' + deviceId)) != null
+          && getAfter(memberPath(teamId, incoming().uid)).data.role in ['owner', 'admin', 'editor', 'viewer']
+          && selfGrantAllowed(teamId, deviceId)
+          && noRequestOfAnother(teamId, deviceId)
+          && (foundersGrant(teamId, deviceId)
+              || ownGrant(teamId, deviceId)
+              || (isTeamAdmin(teamId) && holdsGrant(teamId))
+              || membersGrant(teamId));
+        allow update: if signedIn()
+          && validGrant(teamId, deviceId)
+          && onlyChanged(['kv', 'wrap', 'proof', 'approverDeviceId', 'approverUid', 'signature', 'updatedAt', 'approval',
+                          'recoverySig'])
+          && incoming().kv >= existing().kv
+          && selfGrantAllowed(teamId, deviceId)
+          && ((isTeamAdmin(teamId) && holdsGrant(teamId))
+              || (existing().uid == me() && ownGrant(teamId, deviceId)));
+        allow delete: if (signedIn() && existing().uid == me())
+          || (isTeamAdmin(teamId) && adminMayDeleteGrant(teamId))
+          || purges(teamId);
+
+        /**
+         * An owner or admin deletes another member's grant: in the write that rotates the key, when
+         * the member is not active after the write, or when the write leaves the key marked "rotation
+         * pending", then an owner's grant only by an owner.
+         */
+        function adminMayDeleteGrant(teamId) {
+          let member = getAfter(memberPath(teamId, existing().uid));
+          return rotatesInThisWrite(teamId)
+            || member == null
+            || !(member.data.role in ['owner', 'admin', 'editor', 'viewer'])
+            || (getAfter(docAt('teams/' + teamId)).data.get('rotationPending', false) == true
+                && (member.data.role != 'owner' || isOwner(teamId)));
+        }
+
+        function validGrant(teamId, deviceId) {
+          return hasExactly(['v', 'teamId', 'deviceId', 'uid', 'kv', 'wrap', 'proof', 'approverDeviceId',
+                             'approverUid', 'signature', 'createdAt', 'updatedAt'], ['approval', 'recoverySig'])
+            && (!('approval' in incoming()) || validApproval(incoming().approval, incoming().kv))
+            && (!('recoverySig' in incoming())
+                || (bytesOf(incoming().recoverySig, 64) && incoming().approverDeviceId == deviceId))
+            && incoming().v == 1
+            && incoming().teamId == teamId
+            && incoming().deviceId == deviceId
+            && isDeviceId(deviceId)
+            && incoming().uid is string && incoming().uid.matches('^[^/]{1,128}$')
+            && incoming().kv == teamKeyVersionAfter(teamId)
+            && isKeyWrap(incoming().wrap)
+            && isSealedKey(incoming().proof)
+            && incoming().proof.kv == incoming().kv
+            && isDeviceId(incoming().approverDeviceId)
+            && incoming().approverUid == me()
+            && getAfter(docAt('users/' + me() + '/devices/' + incoming().approverDeviceId)) != null
+            && bytesOf(incoming().signature, 64)
+            && incoming().updatedAt == request.time;
+        }
+
+        /**
+         * `approval`: `{ v: 1, kv, mac }`, a 32-byte MAC over the key version the grant gives. A
+         * rotation removes it, since a MAC over the old key would approve the new one for nobody.
+         */
+        function validApproval(approval, grantKv) {
+          return approval is map
+            && approval.keys().hasAll(['v', 'kv', 'mac'])
+            && approval.keys().hasOnly(['v', 'kv', 'mac'])
+            && approval.v == 1
+            && isKeyVersion(approval.kv)
+            && approval.kv == grantKv
+            && bytesOf(approval.mac, 32);
+        }
+
+        /**
+         * A device granting itself the key (after the recovery code, or as part of a rotation) is
+         * refused while a rotation is pending, unless this write rotates the key.
+         */
+        function selfGrantAllowed(teamId, deviceId) {
+          let before = get(docAt('teams/' + teamId));
+          return incoming().approverDeviceId != deviceId
+            || before == null
+            || before.data.get('rotationPending', false) != true
+            || teamKeyVersionAfter(teamId) > before.data.encKey.v;
+        }
+
+        /**
+         * No other member has asked for the key for this device id, after this write. Device ids come
+         * from the keys, which the rules cannot check, so another member could put a device record of
+         * their own at a waiting device's id; this keeps them from taking the grant, and the request,
+         * from it. It is read after the write so that an owner or admin can delete such a request and
+         * grant the real device in one write; nobody else may delete another member's request.
+         */
+        function noRequestOfAnother(teamId, deviceId) {
+          let request = getAfter(docAt('teams/' + teamId + '/keyRequests/' + deviceId));
+          return request == null || request.data.uid == incoming().uid;
+        }
+
+        /** The founder's own device, signed by itself, in the batch that creates the team. */
+        function foundersGrant(teamId, deviceId) {
+          return incoming().uid == me()
+            && incoming().approverDeviceId == deviceId
+            && foundsInThisWrite(teamId);
+        }
+
+        /** An active member's own device, from itself or from another of their devices that holds the key. */
+        function ownGrant(teamId, deviceId) {
+          return incoming().uid == me()
+            && isActive(teamId)
+            && (incoming().approverDeviceId == deviceId || holdsGrant(teamId));
+        }
+
+        /**
+         * The approving device holds the caller's grant of the newest key. It must have held it before
+         * this write, so two grants made in one write cannot approve each other; only in the write
+         * that rotates the key is it read as it is after the write, since that write moves every kept
+         * grant, the approver's own included, on to the new version.
+         */
+        function holdsGrant(teamId) {
+          let path = docAt('teams/' + teamId + '/keyGrants/' + incoming().approverDeviceId);
+          let held = rotatesInThisWrite(teamId) ? getAfter(path) : get(path);
+          return held != null && held.data.uid == me() && held.data.kv == incoming().kv;
+        }
+
+        /** This write moves the team's key on to a newer version. */
+        function rotatesInThisWrite(teamId) {
+          let before = get(docAt('teams/' + teamId));
+          return before != null && teamKeyVersionAfter(teamId) > before.data.encKey.v;
+        }
+
+        /** With membersMayApproveDevices, an active member for another member who was already active. */
+        function membersGrant(teamId) {
+          return teamAllows(teamId, 'membersMayApproveDevices')
+            && isActive(teamId)
+            && get(memberPath(teamId, incoming().uid)).data.role in ['owner', 'admin', 'editor', 'viewer']
+            && holdsGrant(teamId);
+        }
+      }
+
+      // ------------------------------------------------------------ teams/{teamId}/keyRequests/{deviceId}
+
+      // A device asking for the team key (spec 14 sections 4.3 and 4.4): written by a member, pending
+      // or active, for a device of their own whose record exists, and read by whoever may grant it.
+      // It holds no key, only who asks and for which device; the granter shows the device's
+      // verification code from its record. Deleted by its member, by owners and admins, by the member
+      // who grants it in the same write (the grant after the write is for the member who asked, and
+      // names the caller as its approver, made at this write's time), or with the team.
+      match /keyRequests/{deviceId} {
+        allow get: if (signedIn() && existing().uid == me()) || isTeamAdmin(teamId)
+          || (isActive(teamId) && teamAllows(teamId, 'membersMayApproveDevices'));
+        allow list: if (signedIn() && resource.data.uid == me()) || isTeamAdmin(teamId)
+          || (isActive(teamId) && teamAllows(teamId, 'membersMayApproveDevices'));
+        allow create, update: if signedIn()
+          && hasExactly(['uid', 'deviceId', 'createdAt'], [])
+          && incoming().uid == me()
+          && incoming().deviceId == deviceId
+          && isDeviceId(deviceId)
+          && incoming().createdAt == request.time
+          && (resource == null || existing().uid == me())
+          && getAfter(memberPath(teamId, me())) != null
+          && getAfter(docAt('users/' + me() + '/devices/' + deviceId)) != null;
+        allow delete: if (signedIn() && existing().uid == me()) || isTeamAdmin(teamId)
+          || (isActive(teamId) && grantedInThisWrite(teamId, deviceId))
+          || purges(teamId);
+
+        function grantedInThisWrite(teamId, deviceId) {
+          let grant = getAfter(docAt('teams/' + teamId + '/keyGrants/' + deviceId));
+          return grant != null && grant.data.uid == existing().uid
+            && grant.data.approverUid == me() && grant.data.updatedAt == request.time;
+        }
+      }
+
+      // ------------------------------------------------------------ teams/{teamId}/autos/{autoId}
+
+      // An auto's title is sealed under the team's newest key (spec 14 section 4.9: a title like
+      // "far-side 7-ball" is strategy), so a key the team has rotated away from is never used again.
+      // `titleGen` is 1 when the auto is made and goes up by one each time the title is written; it is
+      // sealed into the title too, so a device that read a newer title refuses an older one put back.
+      match /autos/{autoId} {
+        allow read: if readsAsMember(teamId);
+        allow create: if isEditor(teamId)
+          && hasExactly(['title', 'titleGen', 'createdBy', 'createdAt', 'updatedAt'], [])
+          && isEnvelope(incoming().title, maxTitleBytes())
+          && incoming().title.kv == teamKeyVersionAfter(teamId)
+          && incoming().titleGen == 1
+          && incoming().createdBy == me()
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isEditor(teamId)
+          && onlyChanged(['title', 'titleGen', 'updatedAt'])
+          && isEnvelope(incoming().title, maxTitleBytes())
+          && incoming().title.kv == teamKeyVersionAfter(teamId)
+          && incoming().titleGen == existing().titleGen + 1
+          && incoming().updatedAt == request.time;
+        // Only with the whole team, so no auto's revisions are ever left behind without it.
+        allow delete: if purges(teamId);
+
+        // Revisions are immutable and never overwritten (spec 13 section 5.3). The id is the revision
+        // number, zero-padded to six digits, then a random suffix, so two offline publishes of the same
+        // number are two documents rather than one write that the second would lose. The auto, the
+        // robot, the field, the waypoints and the git commit id are each sealed under the team's newest
+        // key, all under the same version (spec 14 section 4.5: old revisions stay under the key they
+        // were made with). A commit id is sealed because it can be looked up in a public repository.
+        match /revisions/{revisionId} {
+          allow read: if readsAsMember(teamId);
+          allow create: if isEditor(teamId)
+            && getAfter(docAt('teams/' + teamId + '/autos/' + autoId)) != null
+            && revisionId.matches('^[0-9]{6}-[A-Za-z0-9_-]{8,64}$')
+            && hasExactly(['n', 'baseRevision', 'author', 'createdAt', 'content', 'diverged'],
+                          ['gitSha', 'robot', 'field', 'waypoints'])
+            && incoming().n is int
+            && int(revisionId.split('-')[0]) == incoming().n
+            && incoming().author == me()
+            && incoming().createdAt == request.time
+            && isEnvelope(incoming().content, maxRevisionBytes())
+            && incoming().content.kv == teamKeyVersionAfter(teamId)
+            && incoming().diverged is bool
+            && sealedWithContent('robot')
+            && sealedWithContent('field')
+            && sealedWithContent('waypoints')
+            && (!('gitSha' in incoming())
+                || (isEnvelope(incoming().gitSha, maxTitleBytes()) && incoming().gitSha.kv == incoming().content.kv))
+            && followsBase(teamId, autoId);
+          allow update: if false;
+          // Never deleted, but by the owner deleting the whole team.
+          allow delete: if purges(teamId);
+
+          /** The optional field `key` is absent, or sealed under the same key version as `content`. */
+          function sealedWithContent(key) {
+            return !(key in incoming())
+              || (isEnvelope(incoming()[key], maxRevisionBytes()) && incoming()[key].kv == incoming().content.kv);
+          }
+
+          function followsBase(teamId, autoId) {
+            let base = incoming().baseRevision;
+            return (base == null && incoming().n == 1)
+              || (base is string
+                  && get(docAt('teams/' + teamId + '/autos/' + autoId + '/revisions/' + base)).data.n + 1
+                     == incoming().n);
+          }
+        }
+      }
+
+      // ------------------------------------------------------------ teams/{teamId}/inbox/{shareId}
+
+      // A pointer to a share made to this team, so its members can list what they received without
+      // being able to list the shares collection. Written by the sharing team, with the share. A team
+      // taken off a share keeps its pointer, so putting the team back rewrites it, with the same checks.
+      match /inbox/{shareId} {
+        allow read: if readsAsMember(teamId);
+        allow create, update: if signedIn()
+          && hasExactly(['shareId', 'ownerTeamId', 'createdBy', 'createdAt'], [])
+          && incoming().shareId == shareId
+          && incoming().createdBy == me()
+          && incoming().createdAt == request.time
+          && grantsTeam(shareId, teamId);
+        allow delete: if isTeamAdmin(teamId);
+
+        function grantsTeam(shareId, teamId) {
+          let share = getAfter(docAt('shares/' + shareId));
+          return share != null
+            && share.data.audience == 'teams'
+            && teamId in share.data.teamIds
+            && share.data.ownerTeamId == incoming().ownerTeamId
+            && isEditor(share.data.ownerTeamId);
+        }
+      }
+
+      // ------------------------------------------------------------ teams/{teamId}/activity/{entryId}
+
+      // Append-only. Active members write their own entries. Owners and admins read it (spec 13 section
+      // 8.4). Every field has a cap, so the log cannot be used to store anything large. An `auto.create`
+      // entry's detail is the auto's title, so it must be sealed, under the team's newest key.
+      match /activity/{entryId} {
+        allow read: if isTeamAdmin(teamId) && teamExists(teamId);
+        allow create: if signedIn()
+          && writesActivity(teamId)
+          && hasExactly(['at', 'by', 'kind'], ['target', 'detail'])
+          && incoming().at == request.time
+          && incoming().by == me()
+          && text(incoming().kind, 64)
+          && incoming().get('target', '') is string
+          && incoming().get('target', '').size() <= maxActivityTarget()
+          && (incoming().kind == 'auto.create'
+              ? isEnvelope(incoming().get('detail', null), maxTitleBytes())
+                && incoming().detail.kv == teamKeyVersionAfter(teamId)
+              : incoming().get('detail', '') is string
+                && incoming().get('detail', '').size() <= maxActivityDetail());
+        allow update: if false;
+        // Never deleted, but by the owner deleting the whole team.
+        allow delete: if purges(teamId);
+
+        // An active member, or a member made active by this write (founding the team, or joining by
+        // an invite that approves at once). A member who is not active writes exactly two entries,
+        // in their own name: asking to join, in the write that adds them as pending, and leaving, in
+        // the write that removes their own membership.
+        function writesActivity(teamId) {
+          let before = roleIn(teamId);
+          let after = roleAfter(teamId);
+          let active = ['owner', 'admin', 'editor', 'viewer'];
+          return before in active
+            || (before == null && after in active)
+            || (before == null && after == 'pending' && incoming().kind == 'member.join'
+                && incoming().get('target', null) == request.auth.uid)
+            || (before == 'pending' && after == null && incoming().kind == 'member.leave'
+                && incoming().get('target', null) == request.auth.uid);
+        }
+      }
+    }
+
+    // ---------------------------------------------------------------- deletedTeams/{teamId}
+
+    // A deleted team's tombstone. Deleting a team writes it first, in the same write as the first of
+    // the documents the deletion removes, by the team's owner while the team and their membership
+    // still stand. From then on the team's id can never be founded again (the team rule above), no
+    // invite of it adds anyone, and the owner may delete what the team held. Never changed or deleted,
+    // so an id that was used is used for good. The team's owner and Horizon admins read it.
+    match /deletedTeams/{teamId} {
+      allow get: if isHorizonAdmin() || isOwner(teamId);
+      allow list: if isHorizonAdmin();
+      allow create: if (isOwner(teamId) || isHorizonAdmin())
+        && teamExists(teamId)
+        && hasExactly(['deletedBy', 'deletedAt'], [])
+        && incoming().deletedBy == me()
+        && incoming().deletedAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // A signed-in user may list their own memberships across teams:
+    //   collectionGroup('members') where uid == <their uid>
+    match /{path=**}/members/{uid} {
+      allow list: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // ---------------------------------------------------------------- invites/{code}
+
+    // The document id is the invite code, 128 random bits. Anyone signed in who has the code may read
+    // it, to see what they are joining. Nobody can list invites; a team finds its own through the
+    // invite.create entries in its activity log.
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if isRandomId(code)
+        && hasExactly(['teamId', 'role', 'expiresAt', 'maxUses', 'uses', 'autoApprove', 'createdBy',
+                       'createdAt', 'revoked'], [])
+        && isTeamAdmin(incoming().teamId)
+        && incoming().role in ['admin', 'editor', 'viewer']
+        && incoming().expiresAt is timestamp && incoming().expiresAt > request.time
+        && incoming().maxUses is int && incoming().maxUses >= 1
+        && incoming().uses == 0
+        && incoming().autoApprove is bool
+        && !(incoming().autoApprove && incoming().role == 'admin')
+        && incoming().createdBy == me()
+        && incoming().createdAt == request.time
+        && incoming().revoked == false;
+
+      // An admin invite never approves automatically: whoever opens it waits for an owner or admin.
+      // A team admin extends, revokes or changes an invite until it is revoked; revoking is final.
+      // Redeeming adds one to uses, and only in the same write as the new member's document.
+      allow update: if (
+          isTeamAdmin(existing().teamId)
+          && existing().revoked == false
+          && onlyChanged(['expiresAt', 'maxUses', 'autoApprove', 'revoked'])
+          && incoming().expiresAt is timestamp
+          && incoming().maxUses is int && incoming().maxUses >= 1
+          && incoming().autoApprove is bool
+          && !(incoming().autoApprove && existing().role == 'admin')
+          && incoming().revoked is bool
+        ) || redeems(code);
+
+      // Only by the owner deleting the team the invite is for.
+      allow delete: if purges(existing().teamId);
+
+      function redeems(code) {
+        let joined = getAfter(memberPath(resource.data.teamId, request.auth.uid));
+        return signedIn()
+          && onlyChanged(['uses'])
+          && incoming().uses == existing().uses + 1
+          && existing().revoked == false
+          && request.time < existing().expiresAt
+          && existing().uses < existing().maxUses
+          && get(memberPath(existing().teamId, request.auth.uid)) == null
+          && joined != null && joined.data.get('invite', null) == code;
+      }
+    }
+
+    // ---------------------------------------------------------------- shares/{shareId}
+
+    function isLive(share) {
+      return share.revokedAt == null && request.time < share.expiresAt;
+    }
+
+    // A share to specific teams names at most 8 of them. The rules test membership of each named team
+    // one by one, and a read may touch at most 10 documents, one of which is the owner team's (ADR 0009
+    // section 4). So 8 is what the engine allows with one read to spare, not a product choice. For the
+    // same reason it asks isActive, not readsAsMember: a second read per team would pass the limit.
+    function isRecipient(teamIds) {
+      return (teamIds.size() > 0 && isActive(teamIds[0]))
+        || (teamIds.size() > 1 && isActive(teamIds[1]))
+        || (teamIds.size() > 2 && isActive(teamIds[2]))
+        || (teamIds.size() > 3 && isActive(teamIds[3]))
+        || (teamIds.size() > 4 && isActive(teamIds[4]))
+        || (teamIds.size() > 5 && isActive(teamIds[5]))
+        || (teamIds.size() > 6 && isActive(teamIds[6]))
+        || (teamIds.size() > 7 && isActive(teamIds[7]));
+    }
+
+    function validShare(share) {
+      return share.audience in ['teams', 'link']
+        && share.level in ['view', 'propose']
+        && share.mode in ['pinned', 'follow']
+        && share.teamIds is list
+        && (share.audience == 'link'
+            ? share.teamIds.size() == 0 && share.level == 'view'
+            : share.teamIds.size() >= 1 && share.teamIds.size() <= 8 && !(share.ownerTeamId in share.teamIds))
+        && share.expiresAt is timestamp
+        && (share.revokedAt == null || share.revokedAt == request.time)
+        && share.revision is string
+        && isEnvelope(share.projection, maxProjectionBytes())
+        && (share.audience == 'link' ? validLinkKeys(share) : validTeamKeys(share));
+    }
+
+    // How a share holds its key (spec 14 sections 4.6 and 4.7). A share to teams has a share key,
+    // wrapped to each recipient team's encKey in keyWraps, one entry for exactly each of teamIds, and
+    // sealed under the owner team's key in ownerWrap; prevKeys keeps the keys a re-key replaced. A
+    // link share's key comes from the secret in the link, which is always version 1, and linkWrap
+    // holds that secret sealed under the owner team's key, 16 bytes and the tag. The rules cannot
+    // check a recipient's wrap against its team's key: that would read one team per recipient, past
+    // the 10 documents a rule may read, so the sharer's app checks it and pins the key it used.
+    // Every share, a link share too, carries a manifest the owner team signs, which says its terms
+    // and its key; the rules check its shape, and every device checks what it says.
+
+    function validLinkKeys(share) {
+      return share.projection.kv == 1
+        && isEnvelope(share.linkWrap, 32)
+        && share.linkWrap.ct.size() == 32
+        && isShareManifest(share.manifest)
+        && !share.keys().hasAny(['keyWraps', 'ownerWrap', 'prevKeys']);
+    }
+
+    // Only a new share is checked whole; an update checks what it changes (see updatesShare). A new
+    // share has no prevKeys: its fields are exactly those the create rule lists.
+    function validTeamKeys(share) {
+      return share.keyWraps.keys().hasAll(share.teamIds)
+        && share.keyWraps.keys().hasOnly(share.teamIds)
+        && areShareKeyWraps(share.keyWraps.values())
+        && isSealedKey(share.ownerWrap)
+        && isShareManifest(share.manifest)
+        && !('linkWrap' in share);
+    }
+
+    /**
+     * A share manifest, `{ v: 5, body, sig, dsig, dkeys, tsig, tkeys }`: the owner team's signature
+     * over the share's auto and revision, audience, teams and the key each was wrapped to, level,
+     * mode, end and revocation, a sequence number, which share key it made, the device that signed,
+     * and the devices that signed the terms with a count of those signatures; the signing device's
+     * own signature (64 bytes) and its two public keys (182 bytes); and the last terms signer's
+     * signature over the terms (64 bytes) and its two public keys (182 bytes). The rules check its
+     * shape; every device checks the signatures and what they say. The body holds at most 2,560
+     * bytes, SET BY HAND: eight teams with their key digests and the share, owner, auto and revision
+     * ids, each of the longest 128 characters, with the largest versions, counts and end, the signing
+     * device and eight terms signers, come to 2,472 (MAX_SHARE_MANIFEST_BYTES in
+     * packages/cloud/src/crypto/manifest.ts). Seven fields, each read, are exactly `v`, `body`,
+     * `sig`, `dsig`, `dkeys`, `tsig` and `tkeys`; `toHexString` errors on anything but bytes.
+     */
+    function isShareManifest(value) {
+      return [value.size(), value.v, value.sig.toHexString().size(), value.dsig.toHexString().size(), value.dkeys.toHexString().size(),
+              value.tsig.toHexString().size(), value.tkeys.toHexString().size()]
+          == [7, 5, 128, 128, 364, 128, 364]
+        && value.body is bytes && value.body.size() <= 2560;
+    }
+
+    /**
+     * Each of `wraps`, one to 8 of them, is a share key wrap. The rules have no loops, so it is
+     * unrolled, and split at four and at eight wraps so that a share to 8 teams tests how many there
+     * are twice rather than seven times.
+     */
+    function areShareKeyWraps(wraps) {
+      let n = wraps.size();
+      return n > 4
+        ? isShareKeyWrap(wraps[0]) && isShareKeyWrap(wraps[1]) && isShareKeyWrap(wraps[2]) && isShareKeyWrap(wraps[3])
+          && (n == 8
+              ? isShareKeyWrap(wraps[4]) && isShareKeyWrap(wraps[5]) && isShareKeyWrap(wraps[6]) && isShareKeyWrap(wraps[7])
+              : isShareKeyWrap(wraps[4]) && (n < 6 || isShareKeyWrap(wraps[5])) && (n < 7 || isShareKeyWrap(wraps[6])))
+        : isShareKeyWrap(wraps[0]) && (n < 2 || isShareKeyWrap(wraps[1])) && (n < 3 || isShareKeyWrap(wraps[2]))
+          && (n < 4 || isShareKeyWrap(wraps[3]));
+    }
+
+    /** Spec 13 section 4.3, with the two team settings. */
+    function mayMakeShare(share) {
+      let role = roleIn(share.ownerTeamId);
+      return role in ['owner', 'admin'] || (role == 'editor' && editorMayMake(share));
+    }
+
+    /** What an editor may make without an owner or admin: a view-level share to teams, unless the team settings allow more. */
+    function editorMayMake(share) {
+      return (share.audience == 'teams' || teamAllows(share.ownerTeamId, 'editorsMayLinkShare'))
+        && (share.level == 'view' || teamAllows(share.ownerTeamId, 'editorsMayProposeShare'));
+    }
+
+    // An update checks only what it changes. A share was valid when it was written, and a field an
+    // update leaves alone is still valid, so checking the whole share again on every write only
+    // spends the engine's 1,000 expressions for one document: when every update did, a re-key of a
+    // share to 2 teams went over them. Each check below first tests whether its fields changed, so
+    // an extension skips every key check and a publish under the same key checks the projection.
+
+    /**
+     * The update `changed` (the fields it affects) makes from `before` to `after` is allowed. Owners
+     * and admins change any share, and the editor who made one changes it within what they may make.
+     * On a following share any editor may move the version, which is what publishing does: under
+     * the same key, or under a new key one version up for the same teams, when a team key it was
+     * wrapped under changed. That test comes before the maker's, which may read the team settings,
+     * because publishing is the update that also checks a new key. The fields left out of the list
+     * never change, `ownerChoice` among them. A caller with no membership in the sharing team has no
+     * role, and reading it is an error, which refuses. Every update signs a new manifest in the same
+     * write: the manifest names the revision and the end as well as the teams, level, mode, revocation
+     * and key, so no update leaves what it says alone.
+     */
+    function updatesShare(before, after, changed) {
+      let role = get(memberPath(before.ownerTeamId, request.auth.uid)).data.role;
+      return changed.hasOnly(['teamIds', 'level', 'mode', 'revision', 'expiresAt', 'revokedAt', 'updatedAt',
+                              'projection', 'keyWraps', 'ownerWrap', 'prevKeys', 'manifest'])
+        && 'manifest' in changed
+        && (role in ['owner', 'admin']
+            || (role == 'editor'
+                && ((before.mode == 'follow' && publishes(before, after, changed))
+                    || (before.createdBy == me() && editorMayMake(after)))))
+        && (!('revision' in changed) || (after.revision is string && revisionExists(after)))
+        && (!changed.hasAny(['expiresAt', 'revokedAt', 'level', 'mode']) || shareTermsFit(before, after, changed))
+        && (!changed.hasAny(['projection', 'teamIds', 'keyWraps', 'ownerWrap', 'prevKeys', 'manifest'])
+            || shareKeyMoves(before, after, changed));
+    }
+
+    /** A publish to a following share: the version, projection and manifest only, or a re-key for the same teams with them. */
+    function publishes(before, after, changed) {
+      return changed.hasOnly(['revision', 'projection', 'updatedAt', 'keyWraps', 'ownerWrap', 'prevKeys', 'manifest'])
+        && (after.projection.kv == before.projection.kv + 1 || changed.hasOnly(['revision', 'projection', 'updatedAt', 'manifest']));
+    }
+
+    /** The share's terms that changed are valid. A revoked share is final, and a link share is view only. */
+    function shareTermsFit(before, after, changed) {
+      return (!('expiresAt' in changed) || after.expiresAt is timestamp)
+        && (!('revokedAt' in changed) || after.revokedAt == request.time)
+        && (!('level' in changed) || (before.audience == 'teams' && after.level in ['view', 'propose']))
+        && (!('mode' in changed) || after.mode in ['pinned', 'follow']);
+    }
+
+    /**
+     * How a share's key may change from `before` to `after`, and the key fields that changed are
+     * valid. Its version never goes down and the old keys it keeps never change. Taking a team off
+     * the share needs a new share key one version up, with the key it replaces sealed under it in
+     * prevKeys: the teams still on it then read the older proposals, and the team taken off gets
+     * nothing sealed under the new key (spec 14 section 4.6). A link share's key never changes.
+     */
+    function shareKeyMoves(before, after, changed) {
+      let was = before.projection.kv;
+      return (after.projection.kv == was
+          ? (!('projection' in changed) || isEnvelopeUnder(after.projection, was, maxProjectionBytes()))
+            && !('prevKeys' in changed)
+            && (!('teamIds' in changed) || after.teamIds.hasAll(before.teamIds))
+          : isEnvelopeUnder(after.projection, was + 1, maxProjectionBytes())
+            && replacesShareKey(before, after, string(was)))
+        && (!changed.hasAny(['teamIds', 'keyWraps']) || shareWrapsFit(before, after, changed))
+        && (!('ownerWrap' in changed) || ownerWrapFits(after))
+        && (!('manifest' in changed) || isShareManifest(after.manifest));
+    }
+
+    /** A re-key: `old`, the version it replaces, is added to prevKeys sealed under the new key, and nothing else there changes. */
+    function replacesShareKey(before, after, old) {
+      let prevBefore = before.get('prevKeys', {});
+      let prevAfter = after.prevKeys;
+      return before.audience == 'teams'
+        && prevAfter.size() <= maxPreviousShareKeys()
+        && !(old in prevBefore)
+        && prevAfter.diff(prevBefore).affectedKeys().hasOnly([old])
+        && isSealedKeyUnder(prevAfter[old], before.projection.kv + 1);
+    }
+
+    /**
+     * A share to teams names 1 to 8 teams, never its own, with a wrap for exactly each of them. Every
+     * wrap is checked, as a re-key changes each one; a share that only gains teams checks the ones it
+     * kept as well, which fits because it checks no new key besides.
+     */
+    function shareWrapsFit(before, after, changed) {
+      let ids = after.teamIds;
+      let wraps = after.keyWraps;
+      return before.audience == 'teams'
+        && (!('teamIds' in changed)
+            || (ids is list && ids.size() >= 1 && ids.size() <= 8 && !(before.ownerTeamId in ids)))
+        && wraps.keys().toSet() == ids.toSet()
+        && areShareKeyWraps(wraps.values());
+    }
+
+    /** A new owner wrap is sealed under the owner team's newest key. */
+    function ownerWrapFits(share) {
+      return share.audience == 'teams'
+        && isSealedKeyUnder(share.ownerWrap, teamKeyVersionAfter(share.ownerTeamId));
+    }
+
+    // getAfter, so that publishing a revision and moving a following share to it is one write.
+    function revisionExists(share) {
+      return getAfter(/databases/$(database)/documents/teams/$(share.ownerTeamId)/autos/$(share.autoId)/revisions/$(share.revision)) != null;
+    }
+
+    /** The team that made the share still exists. Deleting a team revokes its shares as well. */
+    function ownerTeamExists(share) {
+      return get(docAt('teams/' + share.ownerTeamId)) != null;
+    }
+
+    match /shares/{shareId} {
+      // An anyone-with-the-link share is readable by any caller, signed in or not, but only by its id.
+      // A share to specific teams is readable by active members of those teams. Either kind only while
+      // it is live and its team still exists. The sharing team's members can always read their own
+      // shares, revoked and expired ones included, for their Sharing page. Horizon admins can read
+      // every share, to keep the service safe and to answer reports (spec 13 section 13).
+      //
+      // The order keeps a read within the engine's 10 documents: a recipient of a share to 8 teams
+      // reads the owner membership, the 8 recipient memberships and then the owner team, and a Horizon
+      // admin in none of those teams reads the owner membership, the 8 memberships and the admin list.
+      allow get: if (existing().audience == 'link' && isLive(existing()) && ownerTeamExists(existing()))
+        || (isActive(existing().ownerTeamId) && ownerTeamExists(existing()))
+        || (existing().audience == 'teams' && isLive(existing()) && isRecipient(existing().teamIds)
+            && ownerTeamExists(existing()))
+        || isHorizonAdmin();
+
+      // The sharing team lists its own shares, where ownerTeamId == <team>. A Horizon admin lists every
+      // share, for the admin dashboard; nobody else lists any.
+      allow list: if isHorizonAdmin() || readsAsMember(resource.data.ownerTeamId);
+
+      // A link share's id is derived from the secret in its link (spec 14 section 4.7), 128 bits
+      // like any other id. A new share's key is version 1, and its owner wrap is under the owner
+      // team's newest key.
+      allow create: if signedIn()
+        && isRandomId(shareId)
+        && hasExactly(['ownerTeamId', 'autoId', 'audience', 'teamIds', 'level', 'mode', 'revision',
+                       'expiresAt', 'revokedAt', 'createdBy', 'createdAt', 'updatedAt', 'projection', 'manifest'],
+                      ['keyWraps', 'ownerWrap', 'linkWrap', 'ownerChoice'])
+        && validShare(incoming())
+        && incoming().projection.kv == 1
+        && (incoming().audience == 'link'
+            ? incoming().linkWrap.kv == teamKeyVersionAfter(incoming().ownerTeamId)
+            : incoming().ownerWrap.kv == teamKeyVersionAfter(incoming().ownerTeamId))
+        // The sharer's choices, sealed under the owner team's newest key, are written once, here.
+        && (!('ownerChoice' in incoming())
+            || isEnvelopeUnder(incoming().ownerChoice, teamKeyVersionAfter(incoming().ownerTeamId), maxOwnerChoiceBytes()))
+        && incoming().revokedAt == null
+        && incoming().expiresAt > request.time
+        && incoming().createdBy == me()
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && mayMakeShare(incoming())
+        && revisionExists(incoming());
+
+      // Extend, change level or teams, switch pinned or following, update the version, or revoke, as
+      // updatesShare says. Its list of the fields an update may change leaves out the owner team,
+      // the audience, the auto, the creator, the time it was made, a link share's secret and the
+      // sharer's choices, so those never change. A revoked share is final.
+      allow update: if signedIn()
+        && existing().revokedAt == null
+        && incoming().updatedAt == request.time
+        && updatesShare(existing(), incoming(), incoming().diff(existing()).affectedKeys());
+
+      allow delete: if false;
+
+      // ------------------------------------------------------------ shares/{shareId}/timeRequests/{teamId}
+
+      // "Request more time" (spec 13 section 8.4): a team a share was made to asks the sharing team
+      // to extend it, before or after it ends. The document id is the asking team's id, so a team
+      // has at most one request on a share. It holds no free text (FIRST's Youth Protection Program,
+      // spec 13 section 12.2): only an optional reason from a fixed list and an optional wished-for
+      // end. Both teams' active members read it, and nobody else. Lists go through the collection
+      // group rule below, filtered on teamId or ownerTeamId.
+      match /timeRequests/{teamId} {
+        allow get: if readsAsMember(teamId) || readsAsMember(existing().ownerTeamId);
+
+        // Any active member of an asking team asks for that team, while the share is not revoked
+        // and its team exists. A request that was decided may be asked again, which replaces it.
+        allow create: if asksForMoreTime(shareId, teamId);
+        allow update: if (existing().status in ['granted', 'declined'] && asksForMoreTime(shareId, teamId))
+          || decidesTimeRequest(shareId);
+        allow delete: if false;
+
+        function asksForMoreTime(shareId, teamId) {
+          let share = get(docAt('shares/' + shareId));
+          return isActive(teamId)
+            && share != null
+            && share.data.audience == 'teams'
+            && teamId in share.data.teamIds
+            && share.data.revokedAt == null
+            && ownerTeamExists(share.data)
+            && hasExactly(['shareId', 'teamId', 'ownerTeamId', 'requestedBy', 'requestedAt', 'status'],
+                          ['reason', 'wantedUntil'])
+            && incoming().shareId == shareId
+            && incoming().teamId == teamId
+            && incoming().ownerTeamId == share.data.ownerTeamId
+            && incoming().requestedBy == me()
+            && incoming().requestedAt == request.time
+            && incoming().status == 'open'
+            && (!('reason' in incoming()) || incoming().reason in ['next-event', 'still-testing', 'still-planning'])
+            && (!('wantedUntil' in incoming())
+                || (incoming().wantedUntil is timestamp && incoming().wantedUntil > request.time));
+        }
+
+        // The sharing team's owners and admins, or the editor who made the share, decide an open
+        // request. Granting it extends the share in the same write: the share must end later after
+        // the write than before it, in the future, and the request records that new end.
+        function decidesTimeRequest(shareId) {
+          let before = get(docAt('shares/' + shareId)).data;
+          let after = getAfter(docAt('shares/' + shareId)).data;
+          return existing().status == 'open'
+            && onlyChanged(['status', 'decidedBy', 'decidedAt', 'grantedUntil'])
+            && incoming().decidedBy == me()
+            && incoming().decidedAt == request.time
+            && (isTeamAdmin(existing().ownerTeamId)
+                || (before.createdBy == me() && isEditor(existing().ownerTeamId)))
+            && ((incoming().status == 'declined' && !('grantedUntil' in incoming()))
+                || (incoming().status == 'granted'
+                    && after.revokedAt == null
+                    && after.updatedAt == request.time
+                    && after.expiresAt > before.expiresAt
+                    && after.expiresAt > request.time
+                    && incoming().grantedUntil == after.expiresAt));
+        }
+      }
+    }
+
+    // Both teams list the requests for more time: the sharing team with ownerTeamId == <team>, the
+    // asking team with teamId == <team>.
+    match /{path=**}/timeRequests/{teamId} {
+      allow list: if readsAsMember(resource.data.teamId) || readsAsMember(resource.data.ownerTeamId);
+    }
+
+    // ---------------------------------------------------------------- proposals/{proposalId}
+
+    function grantsPropose(proposal) {
+      let share = get(docAt('shares/' + proposal.shareId));
+      return share != null
+        && share.data.audience == 'teams'
+        && share.data.level == 'propose'
+        && isLive(share.data)
+        && proposal.fromTeamId in share.data.teamIds
+        && proposal.ownerTeamId == share.data.ownerTeamId
+        && proposal.autoId == share.data.autoId
+        && ownerTeamExists(share.data)
+        && proposal.ownerWrap.ekv == get(docAt('teams/' + share.data.ownerTeamId)).data.encKey.v
+        && baseRevisionFits(proposal, share.data);
+    }
+
+    // The revision a proposal was made against (spec 13 section 14). A pinned share shows one
+    // revision, so a proposal must be made against exactly that one: after Update share, a proposal
+    // drafted on the old version is refused, and the proposer reloads. A following share moves on
+    // every publish, often while the partner is drafting, so any revision of that auto in the
+    // library is taken; the owner's review rebuilds that revision, a step changed since then is a
+    // conflict to reject (PROPOSAL_CONFLICT), and a structure that no longer matches refuses the
+    // whole proposal (PROPOSAL_STALE).
+    function baseRevisionFits(proposal, share) {
+      return proposal.baseRevision is string
+        && proposal.baseRevision.matches('^[0-9]{6}-[A-Za-z0-9_-]{8,64}$')
+        && (proposal.baseRevision == share.revision
+            || (share.mode == 'follow'
+                && get(docAt('teams/' + share.ownerTeamId + '/autos/' + share.autoId + '/revisions/'
+                             + proposal.baseRevision)) != null));
+    }
+
+    // A proposal is readable by both teams and nobody else (spec 13 sections 12.2 and 14). Lists must
+    // filter on ownerTeamId or fromTeamId. Like a share, a proposal has a client-made id of 128 random
+    // bits, and is made only while the team it goes to still exists. Its diff is sealed under a key
+    // of its own, never the share key, which every team on the share holds. ownerWrap holds that key
+    // wrapped to the owning team's public key, at the version that team shows now, and fromWrap holds
+    // it sealed under the proposing team's key, so the proposing team still reads what it sent after
+    // the share ends or it is taken off the share. sig is the proposing team's 64-byte signature over
+    // the proposal, which only the owning team's devices can check, with the signing key they trust
+    // for the proposing team; the rules take it at its size alone.
+    match /proposals/{proposalId} {
+      allow get: if readsAsMember(existing().ownerTeamId) || readsAsMember(existing().fromTeamId);
+      allow list: if readsAsMember(resource.data.ownerTeamId) || readsAsMember(resource.data.fromTeamId);
+
+      allow create: if signedIn()
+        && isRandomId(proposalId)
+        && hasExactly(['shareId', 'ownerTeamId', 'autoId', 'fromTeamId', 'baseRevision', 'diff', 'ownerWrap',
+                       'fromWrap', 'sig', 'status', 'createdBy', 'createdAt'], [])
+        && incoming().status == 'open'
+        && incoming().createdBy == me()
+        && incoming().createdAt == request.time
+        && incoming().baseRevision is string
+        && isEnvelopeUnder(incoming().diff, 1, maxProposalBytes())
+        && isShareKeyWrap(incoming().ownerWrap)
+        && isSealedKey(incoming().fromWrap)
+        && incoming().sig.toHexString().size() == 128
+        && isEditor(incoming().fromTeamId)
+        && grantsPropose(incoming());
+
+      // The owning team's editors accept or reject an open proposal; its author may withdraw it.
+      allow update: if signedIn()
+        && existing().status == 'open'
+        && onlyChanged(['status', 'decidedBy', 'decidedAt'])
+        && incoming().decidedBy == me()
+        && incoming().decidedAt == request.time
+        && ((incoming().status in ['accepted', 'rejected'] && isEditor(existing().ownerTeamId))
+            || (incoming().status == 'withdrawn' && existing().createdBy == me()));
+
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------- evidence and reasons
+
+    // Evidence is a summary and, for a photo or an event result, an https address the team pastes: the
+    // Spark plan's Cloud Storage was not verified as free (ADR 0009), so Zenith stores no files.
+    function evidenceUrl(value) {
+      return value is string && value.size() <= 500 && value.matches('^https://[^ ]+$');
+    }
+
+    /** The fields every piece of evidence has, entered by the caller. */
+    function evidenceBody(entry) {
+      return entry.keys().hasAll(['kind', 'summary', 'by', 'at'])
+        && entry.kind in ['photo', 'event', 'statement']
+        && text(entry.summary, 500)
+        && entry.by == me()
+        && entry.at is timestamp
+        && (('url' in entry) ? evidenceUrl(entry.url) : entry.kind == 'statement');
+    }
+
+    function requestEvidence(entry) {
+      return entry.keys().hasOnly(['kind', 'summary', 'url', 'by', 'at']) && evidenceBody(entry);
+    }
+
+    /** One to six pieces of evidence. The rules language has no loops, so the check is unrolled. */
+    function requestEvidenceList(list) {
+      return list is list && list.size() >= 1 && list.size() <= 6
+        && requestEvidence(list[0])
+        && (list.size() < 2 || requestEvidence(list[1]))
+        && (list.size() < 3 || requestEvidence(list[2]))
+        && (list.size() < 4 || requestEvidence(list[3]))
+        && (list.size() < 5 || requestEvidence(list[4]))
+        && (list.size() < 6 || requestEvidence(list[5]));
+    }
+
+    /** A reviewer's reason: one line of at most 300 characters ending as a sentence ends. */
+    function oneSentence(reason) {
+      return text(reason, 300) && reason.matches('^.*[.!?]$');
+    }
+
+    // ---------------------------------------------------------------- claims/{teamNumber}
+
+    // One claim per FTC team number (spec 13 section 4.4). A team claims its number when it is made, or
+    // later from its Verification section; a second team cannot, because the claim already exists and
+    // only the rules below may change it. Verification is review by a Horizon admin only (owner ruling
+    // 2026-09-27). Every status change is tied to a decision record a Horizon admin wrote in the same
+    // write.
+    //
+    // The claim itself is public to anyone signed in: which team holds the number (null once the team
+    // that held it was deleted), its status, and whether a review or a request is open. Creating a team, claiming a number and sharing with a team
+    // by its number need exactly that. Its history is not public. Every step is its own document in
+    // claims/{teamNumber}/history, numbered from 0, readable only by the teams that step involves and
+    // by Horizon admins, because steps carry reviewers' reasons and appeals (spec 13 section 4.4: every
+    // step goes into the claim's history, "which the teams involved can read"). The claim counts its
+    // steps in historyCount, and every change to it adds exactly the step numbered historyCount, as the
+    // caller, in the same write.
+
+    function historyPath(teamNumber, index) {
+      return /databases/$(database)/documents/claims/$(string(teamNumber))/history/$(string(index));
+    }
+
+    match /claims/{teamNumber} {
+      allow get: if signedIn();
+      allow list: if isHorizonAdmin();
+
+      allow create: if signedIn()
+        && teamNumber.matches('^[1-9][0-9]{0,5}$')
+        && hasExactly(['teamId', 'status', 'claimedAt', 'historyCount'], ['disputeId', 'requestId'])
+        && incoming().status == 'unverified'
+        && incoming().claimedAt == request.time
+        && incoming().get('disputeId', null) == null
+        && incoming().get('requestId', null) == null
+        && incoming().historyCount == 1
+        && claimsFirst()
+        && getAfter(docAt('teams/' + incoming().teamId)).data.number == int(teamNumber)
+        && roleAfter(incoming().teamId) in ['owner', 'admin'];
+
+      allow update: if contests() || requestsVerification() || appealsDecision() || reviewerDecides()
+        || releasesOnDelete() || claimsReleased();
+
+      // A team's owner may drop a claim nothing has happened to yet, together with its one step, which
+      // is what deleting the team does. Once a claim has more history (a request, a review, a decision),
+      // no team can delete it, because that history belongs to every team involved; deleting the team
+      // detaches it instead (releasesOnDelete below).
+      allow delete: if isOwner(existing().teamId)
+        && existing().historyCount == 1
+        && getAfter(historyPath(teamNumber, 0)) == null;
+
+      /** Step 0 of a new claim: this team's claim, by the caller. */
+      function claimsFirst() {
+        let first = getAfter(historyPath(teamNumber, 0)).data;
+        return first.kind == 'claim'
+          && first.teamId == incoming().teamId
+          && first.otherTeamId == null
+          && first.by == me();
+      }
+
+      /** The step this write adds. */
+      function newStep() {
+        return getAfter(historyPath(teamNumber, existing().historyCount)).data;
+      }
+
+      function appendsOwnStep() {
+        return incoming().historyCount == existing().historyCount + 1
+          && newStep().by == me();
+      }
+
+      // Another team's owner or admin claims the number too. An unverified claim becomes contested; a
+      // verified one stays verified while its review is open. Either way the dispute is made in the same
+      // write, and only one dispute is open at a time. The step involves both teams.
+      function contests() {
+        let step = newStep();
+        let dispute = getAfter(docAt('disputes/' + step.disputeId));
+        return existing().teamId != null
+          && existing().status in ['unverified', 'verified']
+          && existing().get('disputeId', null) == null
+          && onlyChanged(['status', 'historyCount', 'disputeId'])
+          && incoming().status == (existing().status == 'verified' ? 'verified' : 'contested')
+          && appendsOwnStep()
+          && step.kind == 'contest'
+          && step.teamId != existing().teamId
+          && step.otherTeamId == existing().teamId
+          && isTeamAdmin(step.teamId)
+          && incoming().disputeId == step.disputeId
+          && dispute.data.challengerTeamId == step.teamId
+          && dispute.data.holderTeamId == existing().teamId
+          && dispute.data.teamNumber == int(teamNumber);
+      }
+
+      // Deleting the team that holds a claim with more history than the claim itself keeps the claim,
+      // because its history belongs to every team involved, but detaches it: no team holds the number,
+      // and the step 'release' records that the deleted team gave it up. The claim is no longer
+      // verified to anyone. A review still open stays open, with its labels, for a reviewer to decide;
+      // an open verification request stays for a reviewer to decline. Only the owner deleting the team,
+      // under its tombstone.
+      function releasesOnDelete() {
+        let step = newStep();
+        return existing().teamId != null
+          && purges(existing().teamId)
+          && onlyChanged(['teamId', 'status', 'historyCount'])
+          && incoming().teamId == null
+          && incoming().status == (existing().get('disputeId', null) == null ? 'unverified' : existing().status)
+          && appendsOwnStep()
+          && step.kind == 'release'
+          && step.teamId == existing().teamId
+          && step.otherTeamId == null;
+      }
+
+      // A team claims a number nobody holds any more, afresh: unverified, with its own 'claim' step
+      // added to the history, and only once no review or request is left open on it. The new team
+      // reads only its own steps; the verification history before it stays with the teams it names.
+      function claimsReleased() {
+        let step = newStep();
+        return existing().teamId == null
+          && existing().get('disputeId', null) == null
+          && existing().get('requestId', null) == null
+          && onlyChanged(['teamId', 'status', 'claimedAt', 'historyCount'])
+          && incoming().status == 'unverified'
+          && incoming().claimedAt == request.time
+          && appendsOwnStep()
+          && step.kind == 'claim'
+          && step.teamId == incoming().teamId
+          && step.otherTeamId == null
+          && getAfter(docAt('teams/' + incoming().teamId)).data.number == int(teamNumber)
+          && roleAfter(incoming().teamId) in ['owner', 'admin'];
+      }
+
+      // The holder's owner or admin asks for verification, with the request made in the same write.
+      function requestsVerification() {
+        let step = newStep();
+        let pending = getAfter(docAt('verifications/' + step.requestId));
+        return existing().status == 'unverified'
+          && existing().get('requestId', null) == null
+          && onlyChanged(['historyCount', 'requestId'])
+          && appendsOwnStep()
+          && step.kind == 'request'
+          && step.teamId == existing().teamId
+          && step.otherTeamId == null
+          && isTeamAdmin(existing().teamId)
+          && incoming().requestId == step.requestId
+          && pending.data.teamId == existing().teamId
+          && pending.data.status == 'open';
+      }
+
+      // The team that lost records its appeal, made on the dispute in the same write. The step involves
+      // the team that won too.
+      function appealsDecision() {
+        let step = newStep();
+        let dispute = getAfter(docAt('disputes/' + step.disputeId));
+        return onlyChanged(['historyCount'])
+          && appendsOwnStep()
+          && step.kind == 'appeal'
+          && isTeamAdmin(step.teamId)
+          && dispute.data.teamNumber == int(teamNumber)
+          && step.otherTeamId == dispute.data.decision.winner
+          && dispute.data.appeal.team == step.teamId
+          && dispute.data.appeal.by == me()
+          && dispute.data.appeal.at == request.time;
+      }
+
+      // A Horizon admin changes a claim only together with the decision that says why.
+      function reviewerDecides() {
+        let step = newStep();
+        return isHorizonAdmin()
+          && onlyChanged(['teamId', 'status', 'historyCount', 'disputeId', 'requestId'])
+          && appendsOwnStep()
+          && (decidesRequest(step) || decidesDispute(step) || decidesAppeal(step));
+      }
+
+      function decidesRequest(step) {
+        let decided = getAfter(docAt('verifications/' + step.requestId)).data;
+        return step.kind in ['verify', 'decline']
+          && step.otherTeamId == null
+          && step.requestId == existing().get('requestId', null)
+          && incoming().get('requestId', null) == null
+          && unchanged(['teamId', 'disputeId'])
+          && decided.teamNumber == int(teamNumber)
+          && decided.decision.by == me()
+          && decided.decision.at == request.time
+          && (step.kind == 'verify'
+              ? decided.decision.verdict == 'verified' && existing().status == 'unverified'
+                && incoming().status == 'verified' && decided.teamId == existing().teamId
+              : decided.decision.verdict == 'declined' && unchanged(['status']));
+      }
+
+      /** The step names the winner, and the other team of the dispute as the team that lost. */
+      function namesBothTeams(step, dispute, winner) {
+        return step.teamId == winner
+          && step.otherTeamId in [dispute.holderTeamId, dispute.challengerTeamId]
+          && step.otherTeamId != winner;
+      }
+
+      function decidesDispute(step) {
+        let dispute = getAfter(docAt('disputes/' + step.disputeId)).data;
+        return step.kind == 'decision'
+          && step.disputeId == existing().get('disputeId', null)
+          && incoming().get('disputeId', null) == null
+          && unchanged(['requestId'])
+          && dispute.teamNumber == int(teamNumber)
+          && dispute.status == 'decided'
+          && dispute.decision.by == me()
+          && dispute.decision.at == request.time
+          && namesBothTeams(step, dispute, dispute.decision.winner)
+          && incoming().teamId == dispute.decision.winner
+          && incoming().status == 'verified';
+      }
+
+      // Any Horizon admin decides the appeal, the one who made the first decision included (owner
+      // ruling 2026-10-01); the step records who.
+      function decidesAppeal(step) {
+        let dispute = getAfter(docAt('disputes/' + step.disputeId)).data;
+        return step.kind == 'appeal-decision'
+          && unchanged(['requestId', 'disputeId'])
+          && dispute.teamNumber == int(teamNumber)
+          && dispute.status == 'final'
+          && dispute.appealDecision.by == me()
+          && dispute.appealDecision.at == request.time
+          && namesBothTeams(step, dispute, dispute.appealDecision.winner)
+          && incoming().teamId == dispute.appealDecision.winner
+          && incoming().status == 'verified';
+      }
+
+      // -------------------------------------------------------------- claims/{teamNumber}/history/{index}
+
+      // One step of the claim's history. `teamId` is the team the step is about (the claimant, the
+      // requester, the challenger, the appellant or the winner) and `otherTeamId` the second team it
+      // involves (the holder a contest is against, the team that lost, the team that won an appealed
+      // decision), or null. Active members of those teams and Horizon admins read it; lists filter on
+      // teamId or otherTeamId, or come from an admin. The claim's rules above check what a step says;
+      // these check its shape and that the claim moves on to it in the same write. Never changed.
+      match /history/{index} {
+        allow get, list: if isHorizonAdmin()
+          || readsAsMember(resource.data.teamId)
+          || readsAsMember(resource.data.otherTeamId);
+
+        allow create: if signedIn()
+          && index.matches('^(0|[1-9][0-9]{0,3})$')
+          && hasExactly(['kind', 'teamId', 'otherTeamId', 'by', 'at'], ['disputeId', 'requestId', 'note'])
+          && incoming().kind in ['claim', 'request', 'verify', 'decline', 'contest', 'decision', 'appeal',
+                                 'appeal-decision', 'release']
+          && text(incoming().teamId, 64)
+          && (incoming().otherTeamId == null || text(incoming().otherTeamId, 64))
+          && incoming().by == me()
+          && incoming().at == request.time
+          && incoming().get('disputeId', '') is string
+          && incoming().get('requestId', '') is string
+          && incoming().get('note', '') is string && incoming().get('note', '').size() <= 500
+          && isNextStep(int(index));
+
+        allow update: if false;
+
+        // Only step 0, only with its claim, and only while it is the claim's one step.
+        allow delete: if index == '0' && droppedWithClaim();
+
+        function isNextStep(n) {
+          let before = get(claimPath(teamNumber));
+          let after = getAfter(claimPath(teamNumber));
+          return after != null
+            && after.data.historyCount == n + 1
+            && (before == null ? n == 0 : before.data.historyCount == n);
+        }
+
+        function droppedWithClaim() {
+          let before = get(claimPath(teamNumber));
+          return before != null
+            && getAfter(claimPath(teamNumber)) == null
+            && before.data.historyCount == 1
+            && isOwner(before.data.teamId);
+        }
+      }
+    }
+
+    // ---------------------------------------------------------------- verifications/{requestId}
+
+    // A team's request that a Horizon admin verify its number (spec 13 section 4.4). The team's active
+    // members and Horizon admins read it; nobody else. Lists filter on teamId, or come from an admin.
+    match /verifications/{requestId} {
+      allow get: if isHorizonAdmin() || readsAsMember(existing().teamId);
+      allow list: if isHorizonAdmin() || readsAsMember(resource.data.teamId);
+
+      allow create: if signedIn()
+        && isRandomId(requestId)
+        && hasExactly(['teamNumber', 'teamId', 'requestedBy', 'createdAt', 'status', 'evidence', 'decision'], [])
+        && incoming().teamNumber is int
+        && incoming().status == 'open'
+        && incoming().decision == null
+        && incoming().requestedBy == me()
+        && incoming().createdAt == request.time
+        && isTeamAdmin(incoming().teamId)
+        && requestEvidenceList(incoming().evidence)
+        && marksClaim(requestId);
+
+      allow update: if decides();
+      allow delete: if false;
+
+      // The team holds the number, unverified, with no other request open, and this write points the
+      // claim at this request.
+      function marksClaim(requestId) {
+        let before = get(claimPath(incoming().teamNumber)).data;
+        let after = getAfter(claimPath(incoming().teamNumber)).data;
+        return before.teamId == incoming().teamId
+          && before.status == 'unverified'
+          && before.get('requestId', null) == null
+          && after.requestId == requestId;
+      }
+
+      // Any Horizon admin decides a request, a member of the team included (owner ruling 2026-10-01);
+      // the decision records who.
+      function decides() {
+        let decision = incoming().decision;
+        return isHorizonAdmin()
+          && existing().status == 'open'
+          && onlyChanged(['status', 'decision'])
+          && incoming().status == 'decided'
+          && decision.keys().hasAll(['verdict', 'reason', 'by', 'at'])
+          && decision.keys().hasOnly(['verdict', 'reason', 'by', 'at'])
+          && decision.verdict in ['verified', 'declined']
+          && oneSentence(decision.reason)
+          && decision.by == me()
+          && decision.at == request.time;
+      }
+    }
+
+    // ---------------------------------------------------------------- disputes/{disputeId}
+
+    // A review record both teams read, and nobody else but Horizon admins (spec 13 section 4.4). Lists
+    // filter on holderTeamId or challengerTeamId, or come from an admin. Never deleted: the record and
+    // the claim's history are how both teams see what happened.
+    function isParty(dispute) {
+      return readsAsMember(dispute.holderTeamId) || readsAsMember(dispute.challengerTeamId);
+    }
+
+    match /disputes/{disputeId} {
+      allow get: if isHorizonAdmin() || isParty(existing());
+      allow list: if isHorizonAdmin() || isParty(resource.data);
+
+      // Opened by the challenging team's owner or admin, a team with no number, in the same write that
+      // marks the claim as under review.
+      allow create: if signedIn()
+        && isRandomId(disputeId)
+        && hasExactly(['teamNumber', 'holderTeamId', 'challengerTeamId', 'openedBy', 'createdAt', 'status',
+                       'evidence', 'decision', 'appeal', 'appealDecision'], [])
+        && incoming().teamNumber is int
+        && incoming().status == 'open'
+        && incoming().evidence == []
+        && incoming().decision == null
+        && incoming().appeal == null
+        && incoming().appealDecision == null
+        && incoming().openedBy == me()
+        && incoming().createdAt == request.time
+        && incoming().holderTeamId != incoming().challengerTeamId
+        && isTeamAdmin(incoming().challengerTeamId)
+        && get(docAt('teams/' + incoming().challengerTeamId)).data.number == null
+        && get(claimPath(incoming().teamNumber)).data.teamId == incoming().holderTeamId
+        && getAfter(claimPath(incoming().teamNumber)).data.disputeId == disputeId;
+
+      allow update: if decides() || decidesAppeal() || addsEvidence() || appeals();
+      allow delete: if false;
+
+      function validDecision(decision) {
+        return decision.keys().hasAll(['winner', 'reason', 'by', 'at'])
+          && decision.keys().hasOnly(['winner', 'reason', 'by', 'at'])
+          && decision.winner in [existing().holderTeamId, existing().challengerTeamId]
+          && oneSentence(decision.reason)
+          && decision.by == me()
+          && decision.at == request.time;
+      }
+
+      // Any Horizon admin decides an open dispute, a member of either team included (owner ruling
+      // 2026-10-01); the decision records who.
+      function decides() {
+        return isHorizonAdmin()
+          && existing().status == 'open'
+          && onlyChanged(['status', 'decision'])
+          && incoming().status == 'decided'
+          && validDecision(incoming().decision);
+      }
+
+      // Any Horizon admin decides the one appeal, and that decision is final. The admin who made the
+      // first decision may decide it, and so may a member of either team (owner ruling 2026-10-01: no
+      // Horizon-admin action needs two people); the appeal decision records who.
+      function decidesAppeal() {
+        return isHorizonAdmin()
+          && existing().status == 'appealed'
+          && onlyChanged(['status', 'appealDecision'])
+          && incoming().status == 'final'
+          && validDecision(incoming().appealDecision);
+      }
+
+      // Either team's owners and admins add evidence while a reviewer has yet to decide.
+      function addsEvidence() {
+        let entry = incoming().evidence[existing().evidence.size()];
+        return signedIn()
+          && existing().status in ['open', 'appealed']
+          && onlyChanged(['evidence'])
+          && appendsOne(existing().evidence, incoming().evidence)
+          && incoming().evidence.size() <= 20
+          && entry.keys().hasOnly(['team', 'kind', 'summary', 'url', 'by', 'at'])
+          && evidenceBody(entry)
+          && entry.team in [existing().holderTeamId, existing().challengerTeamId]
+          && isTeamAdmin(entry.team);
+      }
+
+      // One appeal, by the team that lost, within 14 days of the decision (spec 13 section 4.4).
+      function appeals() {
+        let appeal = incoming().appeal;
+        return signedIn()
+          && existing().status == 'decided'
+          && existing().appeal == null
+          && onlyChanged(['appeal', 'status'])
+          && incoming().status == 'appealed'
+          && appeal.keys().hasAll(['team', 'by', 'reason', 'at'])
+          && appeal.keys().hasOnly(['team', 'by', 'reason', 'at'])
+          && appeal.team in [existing().holderTeamId, existing().challengerTeamId]
+          && appeal.team != existing().decision.winner
+          && appeal.by == me()
+          && appeal.at == request.time
+          && text(appeal.reason, 500)
+          && isTeamAdmin(appeal.team)
+          && request.time < existing().decision.at + duration.value(14, 'd');
+      }
+    }
+  }
+}

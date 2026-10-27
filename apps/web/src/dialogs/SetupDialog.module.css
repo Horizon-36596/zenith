@@ -1,0 +1,32 @@
+/* Set up Zenith in a folder (issue #159): the two choices, each with the line saying where its prefill came from. */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* The opening statement and the line on what was read, as one block. */
+.lead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* The library choice and the line on where its prefill came from, together; the field's own row
+   padding lines the note up with the label. */
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.choice > .note {
+  padding-inline: var(--pad-row-x);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}

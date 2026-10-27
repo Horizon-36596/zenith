@@ -1,0 +1,230 @@
+/* The Code tab (issue #102): the header lines up with the Problems tab's, and the code sits on the
+   panel itself, no box round it. The selected step's lines take the selected-row ground and the 2 px
+   accent bar, as a selected row does everywhere else (UI_GUIDE section 4.1). */
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: none;
+  height: var(--row-h);
+  padding-inline: var(--pad-row-x);
+  min-width: 0;
+}
+
+/* The class file and the library, after the tabs; the file name gives way first on a narrow window. */
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library {
+  flex: none;
+  white-space: nowrap;
+}
+
+.copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+  margin-left: auto;
+  height: var(--ctl-h-sm);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.copy:hover {
+  background: var(--bg-hover);
+  color: var(--text-hi);
+}
+
+/* Under the header: the Reference / Export switch, and one line beside it saying which class this is
+   (issues #534, #535). The exported OpMode's line is a warning: it is the path Zenith does not
+   recommend. The line wraps under the switch on a narrow panel. */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  flex: none;
+  padding: 0 var(--pad-row-x) var(--space-2);
+}
+
+.bar > [role="group"] {
+  align-self: center;
+}
+
+.note {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}
+
+.note[data-form="export"] {
+  color: var(--sev-warn);
+}
+
+.blocked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding: var(--space-3) var(--pad-row-x);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-mid);
+}
+
+/* The JSON a blocked line asks for, as it is typed into zenith.json. */
+.blockedJson {
+  margin: 0 var(--pad-row-x) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  overflow: auto;
+  border-radius: var(--radius-xs);
+  background: var(--bg-hover);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-variant-ligatures: none;
+  color: var(--text-hi);
+}
+
+.link {
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--accent);
+  border-radius: var(--radius-xs);
+}
+
+.link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The code scrolls inside the panel both ways, so a long line never widens the page. */
+.well {
+  /* Positioned, so a line's offsetTop is measured from the well when a step scrolls into view. */
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding-bottom: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-variant-numeric: var(--numeric);
+  /* The Java as written: "->" stays two characters, as it reads in the file. */
+  font-variant-ligatures: none;
+  color: var(--text-hi);
+  /* A comment line wraps at the well's own width (cqw), however wide the longest code line is. */
+  container-type: inline-size;
+}
+
+.well:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--ring-width) var(--ring);
+}
+
+/* Every line is as wide as the longest, so a highlight runs the full width while scrolled. */
+.lines {
+  min-width: max-content;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: calc(var(--gutter, 3ch) + var(--pad-row-x) + var(--space-3)) max-content;
+  background: var(--bg-panel);
+}
+
+.line[data-step] {
+  cursor: pointer;
+}
+
+.line[data-step]:hover,
+.line[data-step]:hover .num {
+  background: var(--bg-hover);
+}
+
+.line[data-selected="true"],
+.line[data-selected="true"] .num,
+.line[data-selected="true"]:hover,
+.line[data-selected="true"]:hover .num {
+  background: var(--bg-selected);
+}
+
+/* The numbers stay put when the code scrolls sideways, and are never copied with it. */
+.num {
+  position: sticky;
+  left: 0;
+  padding-left: var(--pad-row-x);
+  padding-right: var(--space-3);
+  text-align: right;
+  color: var(--text-lo);
+  background: var(--bg-panel);
+  user-select: none;
+}
+
+.line[data-selected="true"] .num {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.text {
+  white-space: pre;
+  padding-right: var(--pad-row-x);
+}
+
+/* A line that is only comment (issue #413) wraps at the visible width of the well rather than
+   running off the right edge, and adds nothing to how wide the longest line makes the code. */
+.line[data-comment="true"] .text {
+  contain: inline-size;
+  width: calc(100cqw - var(--gutter, 3ch) - var(--pad-row-x) - var(--space-3));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.keyword {
+  color: var(--code-keyword);
+}
+
+.string {
+  color: var(--code-string);
+}
+
+.number {
+  color: var(--code-number);
+}
+
+.comment {
+  color: var(--code-comment);
+  font-style: italic;
+}

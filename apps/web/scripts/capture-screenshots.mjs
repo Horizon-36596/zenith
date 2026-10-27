@@ -1,7 +1,7 @@
 /**
  * Captures the public docs screenshots (site/SCREENSHOTS.md) headless, against the starter
- * example only. Writes PNGs straight into site/docs/assets/screenshots/, replacing the 68-byte
- * placeholders. Also writes the CLI and MCP-loop shots, which are styled captures of real text
+ * example only. Writes PNGs straight into site/docs/assets/screenshots/, replacing the ones there.
+ * Also writes the CLI and MCP-loop shots, which are styled captures of real text
  * rather than a live page.
  *
  * Usage (from the repo root, PowerShell 5.1):
@@ -23,6 +23,12 @@ const SHOTS_DIR = join(REPO_ROOT, "site", "docs", "assets", "screenshots");
 const PORT = Number(process.env["ZENITH_SHOTS_PORT"] ?? "5199");
 const BASE_URL = `http://localhost:${String(PORT)}`;
 
+/** Use an installed browser when the pinned Playwright browser is unavailable locally. */
+function launchBrowser() {
+  const executablePath = process.env["ZENITH_SHOTS_BROWSER"];
+  return chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+}
+
 /** Marks the first-run tour as already seen, the same key `apps/web/e2e/qa/helpers.ts` uses. */
 async function skipTour(page) {
   await page.addInitScript(() => {
@@ -43,7 +49,7 @@ async function settle(page, ms = 350) {
 }
 
 /**
- * Dismisses the status bar overlay (e.g. the "Loaded the bundled example" message every
+ * Dismisses the status bar overlay (e.g. the "Example loaded" message every
  * canvas-load-example click raises) so it never sits in a screenshot. Mirrors
  * `apps/web/e2e/qa/helpers.ts`'s `clearStatus`: it is an overlay out of the layout flow, so
  * clearing it never shifts anything else in the shot.
@@ -173,7 +179,10 @@ async function worldToScreen(page, xIn, yIn) {
 // iterating on one capture instead of the whole set).
 const ALL_SHOTS = {
   overview: (b) => shootEditorOverview(b),
+  narrowInspector: (b) => shootNarrowInspector(b),
+  waypoints: (b) => shootWaypoints(b),
   welcome: (b) => shootWelcome(b),
+  presetChoice: (b) => shootPresetChoice(b),
   tourChoice: (b) => shootTourChoice(b),
   titleToolbar: (b) => shootTitleToolbar(b),
   inspectorFindings: (b) => shootInspectorAndFindings(b),
@@ -192,27 +201,53 @@ async function main() {
   const names = only === undefined || only === "" ? Object.keys(ALL_SHOTS) : only.split(",");
   const needsServer = names.some((name) => name !== "cliValidate" && name !== "agentsLoop");
   const server = needsServer ? await startDevServer() : undefined;
-  const browser = await chromium.launch({ headless: true });
+  let browser;
   try {
+    browser = await launchBrowser();
+    if (server !== undefined) await warmUp(browser);
     for (const name of names) {
       const shoot = ALL_SHOTS[name];
       if (shoot === undefined) throw new Error(`unknown shot: ${name}`);
       await shoot(browser);
     }
   } finally {
-    await browser.close();
+    await browser?.close();
     await stopDevServer(server);
   }
 
   console.log(
-    "\nSkipped (documented in the SCREENSHOTS.md entry and the capture report):\n" +
+    "\nNot shipped (documented in their SCREENSHOTS.md rows):\n" +
       "  review-pr-diff.png       - needs a real GitHub-connected PR/head-vs-base session\n" +
       "  getting-started-smartscreen.png - real Windows SmartScreen chrome, not producible headless",
   );
 }
 
+/**
+ * The beta notice's dismissal for this version, so no docs screenshot shows it. The key is
+ * `betaNoticeKey` in src/dialogs/betaNoticeState.ts (UI_GUIDE section 9.14), spelled out here
+ * because this script cannot import TypeScript; betaNoticeState.test.ts checks the two agree.
+ */
+const APP_VERSION = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")).version;
+const BETA_NOTICE_SEEN = {
+  cookies: [],
+  origins: [{ origin: BASE_URL, localStorage: [{ name: `zenith.betaNotice.${APP_VERSION}`, value: "dismissed" }] }],
+};
+
+/**
+ * Loads the app once, with a long timeout, before any shot: a fresh dev server transforms every
+ * module and optimizes its dependencies on the first load (and reloads once when that finishes),
+ * which on a busy machine takes longer than one shot's own timeout.
+ */
+async function warmUp(browser) {
+  const { context, page } = await newPage(browser, { width: 1280, height: 800 });
+  await skipTour(page);
+  await page.goto(BASE_URL, { timeout: 300000 });
+  await waitVisible(page.getByTestId("canvas-empty"), 300000);
+  await context.close();
+}
+
 async function newPage(browser, viewport) {
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 2, storageState: BETA_NOTICE_SEEN });
   context.setDefaultTimeout(45000);
   context.setDefaultNavigationTimeout(45000);
   const page = await context.newPage();
@@ -239,6 +274,45 @@ async function shootEditorOverview(browser) {
   await context.close();
 }
 
+/** The Inspector becomes an overlay below 820 px; the steps stay beside the field at 700 px. */
+async function shootNarrowInspector(browser) {
+  const { context, page } = await newPage(browser, { width: 700, height: 900 });
+  await skipTour(page);
+  await page.goto(BASE_URL);
+  await page.getByTestId("canvas-load-example").click();
+  await page.getByTestId("step-row-driveOut").click();
+  await page.getByTestId("panel-switch-inspector").click();
+  await waitVisible(page.getByTestId("inspector-panel"));
+  await clearStatus(page);
+  await waitForFonts(page);
+  await page.mouse.move(350, 880);
+  await settle(page);
+  await writePng(await page.screenshot(), "editor-narrow-inspector.png");
+  await context.close();
+}
+
+/**
+ * The field draws only the waypoints the open auto follows. With nothing selected the inspector
+ * lists them, and "Other waypoints" holds the rest; selecting park there shows its mark on the field.
+ */
+async function shootWaypoints(browser) {
+  const { context, page } = await newPage(browser, { width: 1440, height: 900 });
+  await skipTour(page);
+  await page.goto(BASE_URL);
+  await page.getByTestId("canvas-load-example").click();
+  await waitVisible(page.getByTestId("step-row-driveOut"));
+  await clearStatus(page);
+  await waitForFonts(page);
+  const others = page.getByTestId("inspector-waypoints-others");
+  await waitVisible(others);
+  if ((await others.getAttribute("aria-expanded")) === "false") await others.click();
+  await page.getByTestId("inspector-waypoint-row-park").click();
+  await page.mouse.move(700, 880);
+  await settle(page, 400);
+  await writePng(await page.screenshot(), "editor-waypoints.png");
+  await context.close();
+}
+
 async function shootWelcome(browser) {
   const { context, page } = await newPage(browser, { width: 1280, height: 800 });
   await skipTour(page);
@@ -252,13 +326,16 @@ async function shootWelcome(browser) {
 
 async function shootTourChoice(browser) {
   const { context, page } = await newPage(browser, { width: 1280, height: 800 });
-  // No skipTour: a genuinely first visit auto-loads the example and starts the core tour.
+  // No skipTour: a genuinely first visit auto-loads the example and asks for a preset; Essential,
+  // the recommended one, starts the core tour. Next is pressed until the choice card shows, so the
+  // shot does not depend on how many stops the core tour has.
   await page.goto(BASE_URL);
+  await waitVisible(page.getByTestId("preset-card"));
+  await page.getByTestId("preset-card-essential").click();
   await waitVisible(page.getByTestId("tour-card"));
-  const stops = ["field", "steps", "insert", "inspector", "findings", "run"];
-  for (const stop of stops) {
-    await waitVisible(page.getByTestId("tour-card"));
+  for (let stop = 0; stop < 20 && (await page.getByTestId("tour-choice").count()) === 0; stop += 1) {
     await page.getByTestId("tour-next").click();
+    await settle(page, 150);
   }
   await waitVisible(page.getByTestId("tour-choice"));
   await clearStatus(page);
@@ -268,8 +345,21 @@ async function shootTourChoice(browser) {
   await context.close();
 }
 
+/** A fresh profile loads the example and asks for a preset before starting the tour. */
+async function shootPresetChoice(browser) {
+  const { context, page } = await newPage(browser, { width: 1280, height: 800 });
+  await page.goto(BASE_URL);
+  await waitVisible(page.getByTestId("preset-card"));
+  await clearStatus(page);
+  await waitForFonts(page);
+  await page.mouse.move(10, 780);
+  await settle(page);
+  await writePng(await page.screenshot(), "getting-started-presets.png");
+  await context.close();
+}
+
 async function shootTitleToolbar(browser) {
-  const { context, page } = await newPage(browser, { width: 1280, height: 400 });
+  const { context, page } = await newPage(browser, { width: 1280, height: 800 });
   await skipTour(page);
   await page.goto(BASE_URL);
   await page.getByTestId("canvas-load-example").click();
@@ -277,16 +367,18 @@ async function shootTitleToolbar(browser) {
   await clearStatus(page);
   await waitForFonts(page);
   await settle(page);
-  const png = await page.screenshot({ clip: { x: 0, y: 0, width: 1280, height: 160 } });
+  // The title bar and the toolbar under it, down to the toolbar's bottom edge and no further.
+  const toolbar = await page.getByTestId("toolbar").boundingBox();
+  const png = await page.screenshot({ clip: { x: 0, y: 0, width: 1280, height: Math.ceil(toolbar.y + toolbar.height) } });
   await writePng(png, "editor-title-toolbar.png");
   await context.close();
 }
 
 /**
- * Both editor-inspector-path.png and editor-findings-panel.png come from the same setup used in
- * apps/web/e2e/editor.spec.ts's "a pose edited in the inspector changes the findings" test:
- * driveOut's end is made a literal pose, then moved into the hive's approach margin, which is a
- * real, reproducible finding (not fabricated data) from the shipped example.
+ * editor-inspector-path.png is the shipped driveOut as it is, selected. editor-findings-panel.png
+ * comes from the same setup as apps/web/e2e/editor.spec.ts's "a pose edited in the inspector changes
+ * the findings" test: driveOut's end is made a literal pose, then moved into the hive's approach
+ * margin, which gives real, reproducible findings (not fabricated data) from the shipped example.
  */
 async function shootInspectorAndFindings(browser) {
   const { context, page } = await newPage(browser, { width: 1440, height: 900 });
@@ -299,6 +391,23 @@ async function shootInspectorAndFindings(browser) {
 
   await page.getByTestId("step-row-driveOut").getByRole("button").first().click();
   await waitVisible(page.getByTestId("inspector"));
+  await settle(page, 300);
+
+  // The panel is as tall as the window; crop it to its sections, with a little of the panel under them.
+  const panel = page.locator('[data-testid="inspector-panel"]');
+  const box = await panel.boundingBox();
+  const contentBottom = await panel.evaluate((el) => {
+    let bottom = el.getBoundingClientRect().top;
+    for (const child of el.querySelectorAll("section, header, h2, h3")) {
+      const rect = child.getBoundingClientRect();
+      if (rect.height > 0) bottom = Math.max(bottom, rect.bottom);
+    }
+    return bottom;
+  });
+  const height = Math.min(box.height, Math.ceil(contentBottom - box.y + 16));
+  const inspectorPng = await page.screenshot({ clip: { x: box.x, y: box.y, width: box.width, height } });
+  await writePng(inspectorPng, "editor-inspector-path.png");
+
   await page.evaluate(() =>
     import("/src/state/store.ts").then((m) => {
       const s = m.getState();
@@ -312,7 +421,7 @@ async function shootInspectorAndFindings(browser) {
                 segments: x.segments.map((seg) => ({
                   ...seg,
                   to: {
-                    xIn: -12,
+                    xIn: -13,
                     yIn: -36,
                     headingRad: 1.5708,
                     provenance: "SET BY HAND: docs screenshot, the scoreSouth waypoint",
@@ -323,11 +432,8 @@ async function shootInspectorAndFindings(browser) {
       });
     }),
   );
-  await waitVisible(page.getByTestId("inspector-to-x-0"));
+  await waitVisible(page.getByTestId("inspector-to-y-0"));
   await settle(page, 200);
-
-  const inspectorPng = await page.locator('[data-testid="inspector-panel"]').screenshot();
-  await writePng(inspectorPng, "editor-inspector-path.png");
 
   // Move the leg's end up into the hive's approach margin: scorePreload now launches from an
   // illegal approach pose, which is a real error finding, not an invented one.
@@ -409,8 +515,8 @@ async function shootContextMenu(browser) {
   await waitVisible(page.getByTestId("step-row-driveOut"));
   await clearStatus(page);
   await waitForFonts(page);
-  // Midpoint of driveOut's line, start (-12, -63) to scoreSouth (-12, -36).
-  const at = await worldToScreen(page, -12, -49.5);
+  // Midpoint of driveOut's line, start (-13, -63) to scoreSouth (-13, -36).
+  const at = await worldToScreen(page, -13, -49.5);
   await page.mouse.click(at.x, at.y, { button: "right" });
   await waitVisible(page.getByTestId("canvas-context-menu"));
   await settle(page, 150);
@@ -428,7 +534,7 @@ async function shootMeasureTool(browser) {
   await clearStatus(page);
   await waitForFonts(page);
   await page.getByTestId("toolbar-tool.measure").click();
-  const a = await worldToScreen(page, -12, -63);
+  const a = await worldToScreen(page, -13, -63);
   const b = await worldToScreen(page, -61, -44);
   await page.mouse.move(a.x, a.y);
   await page.mouse.down();
@@ -490,8 +596,8 @@ async function shootPlaybackLevels(browser) {
 }
 
 /**
- * A piecewise heading on first-auto's driveOut, the straight leg from (-12, -63) north to
- * scoreSouth (-12, -36): split in the middle on the inspector's track, the first half Constant at
+ * A piecewise heading on first-auto's driveOut, the straight leg from (-13, -63) north to
+ * scoreSouth (-13, -36): split in the middle on the inspector's track, the first half Constant at
  * 90 degrees and the second Linear from 90 to 180 degrees. Two shots: the inspector's Heading
  * section with the range editor, and the field round the leg with its heading arrows and the tick
  * at the boundary.
@@ -530,8 +636,16 @@ async function shootHeadingPiecewise(browser) {
   const box = await track.boundingBox();
   await track.click({ position: { x: box.width / 2, y: box.height / 2 } });
   await waitVisible(page.getByTestId("heading-range-1"));
+  // Each range's rows fold away under its header; open the one being set before setting it.
+  const openRange = async (index) => {
+    const toggle = page.getByTestId(`heading-range-${String(index)}-toggle`);
+    if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    await waitVisible(page.getByTestId(`heading-range-${String(index)}-mode`));
+  };
+  await openRange(0);
   await pickMode("heading-range-0-mode", "constant");
   await setNumber("heading-range-0-constant", 90);
+  await openRange(1);
   await pickMode("heading-range-1-mode", "linear");
   await setNumber("heading-range-1-from", 90);
   await setNumber("heading-range-1-to", 180);
@@ -555,7 +669,7 @@ async function shootHeadingPiecewise(browser) {
   await page.mouse.move(700, 880);
   await settle(page, 200);
   const field = await page.getByTestId("field-canvas").boundingBox();
-  const mid = await worldToScreen(page, -12, -49.5);
+  const mid = await worldToScreen(page, -13, -49.5);
   const clip = cropAround(field, mid, Math.min(640, field.width), Math.min(480, field.height));
   await writePng(await page.screenshot({ clip }), "editor-heading-arrows.png");
   await context.close();
@@ -572,8 +686,9 @@ async function shootCliValidate() {
     .filter((line) => !/^>\s|zenith@\d|[A-Za-z]:\\|packages\/cli\/src\/index\.ts/.test(line))
     .join("\n")
     .trim();
-  const html = terminalHtml("zenith validate examples/starter/autos/first-auto.auto.json", output);
-  await shootStaticHtml(html, "cli-validate-output.png", 900, 500);
+  const height = Math.min(500, Math.max(200, 110 + output.trim().split("\n").length * 21));
+  const html = terminalHtml("zenith validate examples/starter/autos/first-auto.auto.json", output, height);
+  await shootStaticHtml(html, "cli-validate-output.png", 900, height);
 }
 
 function runCli(args) {
@@ -599,11 +714,11 @@ function escapeHtml(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function terminalHtml(command, output) {
+function terminalHtml(command, output, height) {
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   body { margin: 0; background: #0d1117; font-family: "JetBrains Mono", ui-monospace, monospace; }
-  .win { width: 900px; height: 500px; box-sizing: border-box; background: #14181f; border-radius: 10px;
+  .win { width: 900px; height: ${String(height)}px; box-sizing: border-box; background: #14181f; border-radius: 10px;
     overflow: hidden; border: 1px solid #262c36; }
   .bar { display: flex; align-items: center; gap: 6px; padding: 10px 12px; background: #1b212b; }
   .dot { width: 11px; height: 11px; border-radius: 50%; }
@@ -656,7 +771,7 @@ async function shootAgentsLoop() {
 }
 
 async function shootStaticHtml(html, name, width, height) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchBrowser();
   try {
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2 });
     const page = await context.newPage();

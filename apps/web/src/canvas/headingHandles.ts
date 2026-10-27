@@ -16,6 +16,7 @@
  * t is the step's arc-length fraction, the same t the file's ranges use.
  */
 import {
+  makePath,
   moveBoundary,
   toPiecewise,
   splitRange,
@@ -24,7 +25,7 @@ import {
   type Vec2,
 } from "@horizon36596/zenith-core";
 import type { Heading, HeadingRange, RangeHeading } from "@horizon36596/zenith-schema";
-import { poseAtT, type SceneStep } from "./scene.js";
+import { isSceneTurn, poseAtT, type SceneStep } from "./scene.js";
 
 export type HeadingHandleRole = "start" | "end" | "point";
 
@@ -141,14 +142,27 @@ function handlesForMode(
   }
 }
 
-/** Every heading handle of a step, in draw order. None for a step with no heading mode. */
+/**
+ * Every heading handle of a step, in draw order. None for a step with no heading mode.
+ *
+ * A turn on the spot (issue #187) gets only its end arrow, and a facing point: the runtime holds the
+ * end heading, so the robot turns from wherever it arrives facing, and a start arrow would be an
+ * angle that does nothing, drawn on top of the end of the step before. For a piecewise heading the
+ * end is the last range's, at the end of the turn.
+ */
 export function headingHandlesFor(step: SceneStep, heading: Heading | undefined): HeadingHandle[] {
   if (heading === undefined) return [];
-  if (heading.mode !== "piecewise") return handlesForMode(step, heading, 0, 1, null);
+  const turn = isSceneTurn(step);
+  if (heading.mode !== "piecewise") {
+    const handles = handlesForMode(step, heading, 0, 1, null);
+    return turn ? handles.filter((handle) => handle.role !== "start") : handles;
+  }
   const out: HeadingHandle[] = [];
   heading.ranges.forEach((range: HeadingRange, index) => {
+    if (turn && index !== heading.ranges.length - 1) return;
     const inset = (range.endT - range.startT) * RANGE_INSET_SHARE;
-    out.push(...handlesForMode(step, range.heading, range.startT + inset, range.endT - inset, index));
+    const handles = handlesForMode(step, range.heading, range.startT + inset, turn ? 1 : range.endT - inset, index);
+    out.push(...(turn ? handles.filter((handle) => handle.role !== "start") : handles));
   });
   return out;
 }
@@ -228,11 +242,22 @@ export function dragBoundary(heading: Heading, index: number, t: number): Headin
 }
 
 /**
- * The heading after the canvas's "Split heading here": any mode becomes piecewise first, one range
- * holding what the step did, then that range is cut at t.
+ * The heading after the canvas's "Split heading here": any mode becomes piecewise first, holding
+ * what the step did, then the range that holds t is cut there. `polygons` are the step's segments
+ * (`SceneStep.polygons`): a linear sweep of more than half a turn over several segments becomes one
+ * range per segment, so the robot still turns the way it did (`toPiecewise`). Null when t is too
+ * close to a range end to cut there, so the menu item is greyed out rather than converting the
+ * heading to piecewise with no cut.
  */
-export function splitHeadingAt(heading: Heading | undefined, t: number): Heading {
-  return splitRange(toPiecewise(heading), t);
+export function splitHeadingAt(
+  heading: Heading | undefined,
+  t: number,
+  polygons: readonly (readonly Vec2[])[] = [],
+): Heading | null {
+  const path = heading?.mode === "linear" && polygons.length > 1 ? makePath(polygons) : undefined;
+  const whole = toPiecewise(heading, path);
+  const split = splitRange(whole, t);
+  return split.ranges.length > whole.ranges.length ? split : null;
 }
 
 /** Every handle that shares a value with this one: the other end of a Constant, else itself. */

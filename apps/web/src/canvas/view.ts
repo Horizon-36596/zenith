@@ -100,17 +100,72 @@ function screenExtent(bounds: Box2, orientation: Orientation): { widthPx: number
   };
 }
 
-/** The view that shows all of `bounds` inside `widthPx` x `heightPx` with `paddingPx` to spare. */
+/** Room kept clear at each edge of the pane when a box is fitted into it, in CSS pixels. */
+export interface FitPadding {
+  readonly topPx: number;
+  readonly rightPx: number;
+  readonly bottomPx: number;
+  readonly leftPx: number;
+}
+
+/**
+ * How far past the field perimeter a fit keeps visible, in inches. Since issue #412 a fit frames the
+ * field board itself, so the board is as large as the well allows; the alliance zones and anything
+ * else outside the board may crop at the well's edge.
+ */
+export const FIT_MARGIN_IN = 0;
+
+/**
+ * The editor canvas's fit padding (issues #151 and #412). The top and the sides keep the 5 px wall
+ * band just outside the board on the well. The bottom keeps the board's edge above the corner
+ * readout and the scale bar, which are 22 px tall and `--space-2` (8 px) up from the well's bottom
+ * (`liveLayer.ts`).
+ */
+export const FIT_PADDING: FitPadding = { topPx: 8, rightPx: 8, bottomPx: 8 + 22, leftPx: 8 };
+
+/**
+ * What Zoom to fit frames (issues #151 and #412): the field board with `marginIn` around it, and
+ * any point of the routine drawn outside it (`routineIn`: the start, every pose and every control
+ * point) with `reachIn` around that point, which is the robot's half-diagonal, so an outline out
+ * there is never cropped. A routine that stays on the field frames just the board.
+ */
+export function fitBounds(
+  fieldIn: Box2,
+  routineIn: readonly Vec2[],
+  reachIn: number,
+  marginIn: number = FIT_MARGIN_IN,
+): Box2 {
+  const box = { ...expandBounds(fieldIn, marginIn) };
+  for (const point of routineIn) {
+    const onField =
+      point.xIn >= fieldIn.minXIn && point.xIn <= fieldIn.maxXIn && point.yIn >= fieldIn.minYIn && point.yIn <= fieldIn.maxYIn;
+    if (onField) continue;
+    box.minXIn = Math.min(box.minXIn, point.xIn - reachIn);
+    box.maxXIn = Math.max(box.maxXIn, point.xIn + reachIn);
+    box.minYIn = Math.min(box.minYIn, point.yIn - reachIn);
+    box.maxYIn = Math.max(box.maxYIn, point.yIn + reachIn);
+  }
+  return box;
+}
+
+const paddingOf = (padding: number | FitPadding): FitPadding =>
+  typeof padding === "number" ? { topPx: padding, rightPx: padding, bottomPx: padding, leftPx: padding } : padding;
+
+/**
+ * The view that shows all of `bounds` inside `widthPx` x `heightPx` with `padding` to spare at each
+ * edge (one number for all four), centred in the space the padding leaves.
+ */
 export function fitView(
   bounds: Box2,
   widthPx: number,
   heightPx: number,
-  paddingPx: number,
+  padding: number | FitPadding,
   orientation: Orientation,
 ): View {
+  const { topPx, rightPx, bottomPx, leftPx } = paddingOf(padding);
   const extent = screenExtent(bounds, orientation);
-  const usableX = Math.max(widthPx - 2 * paddingPx, 1);
-  const usableY = Math.max(heightPx - 2 * paddingPx, 1);
+  const usableX = Math.max(widthPx - leftPx - rightPx, 1);
+  const usableY = Math.max(heightPx - topPx - bottomPx, 1);
   const pxPerIn = clampZoom(
     Math.min(usableX / Math.max(extent.widthPx, 1e-9), usableY / Math.max(extent.heightPx, 1e-9)),
   );
@@ -121,8 +176,8 @@ export function fitView(
   const { xAxis, yAxis } = orientation;
   return {
     pxPerIn,
-    originXPx: widthPx / 2 - pxPerIn * (xAxis.xPx * centre.xIn + yAxis.xPx * centre.yIn),
-    originYPx: heightPx / 2 - pxPerIn * (xAxis.yPx * centre.xIn + yAxis.yPx * centre.yIn),
+    originXPx: (leftPx + widthPx - rightPx) / 2 - pxPerIn * (xAxis.xPx * centre.xIn + yAxis.xPx * centre.yIn),
+    originYPx: (topPx + heightPx - bottomPx) / 2 - pxPerIn * (xAxis.yPx * centre.xIn + yAxis.yPx * centre.yIn),
     orientation,
   };
 }

@@ -7,7 +7,11 @@ import {
   HEADING_SNAP_DEG,
   WALL_SNAP_IN,
   type SnapContext,
+  snapWaypointsOf,
 } from "./snap.js";
+import type { Waypoints } from "@horizon36596/zenith-schema";
+import { NO_KEYS, resolveModifiers } from "./modifiers.js";
+import { placeAddPoint } from "./pointDrag.js";
 
 const BOUNDS: Box2 = { minXIn: -72, maxXIn: 72, minYIn: -72, maxYIn: 72 };
 
@@ -141,5 +145,40 @@ describe("snapHeading", () => {
     const result = snapHeading(3.2, context());
     expect(result.headingRad).toBeLessThanOrEqual(Math.PI);
     expect(result.headingRad).toBeGreaterThan(-Math.PI);
+  });
+});
+
+// Issue #236: a pin this person hid is no snap target, so a snap never lands on, or names, a pin
+// nobody can see. The canvas builds rule 1's list with `snapWaypointsOf`.
+describe("the waypoints a point may snap onto", () => {
+  const waypoints = {
+    waypoints: {
+      park: { xIn: -40, yIn: -36, headingRad: 0 },
+      scoreSouth: { xIn: -12, yIn: -36, headingRad: 1.5708 },
+    },
+  } as unknown as Waypoints;
+  const from = pose(0, -60);
+  const snapOn = resolveModifiers(true, NO_KEYS);
+
+  it("are every pin but the hidden ones", () => {
+    expect(snapWaypointsOf(waypoints).map((entry) => entry.name)).toEqual(["park", "scoreSouth"]);
+    expect(snapWaypointsOf(waypoints, new Set(["park"]))).toEqual([{ name: "scoreSouth", xIn: -12, yIn: -36 }]);
+    expect(snapWaypointsOf(null)).toEqual([]);
+  });
+
+  it("leave an Add path click on a hidden pin's spot unjoined to it", () => {
+    const click = { xIn: -40.3, yIn: -35.8 };
+    const shown = placeAddPoint({ pointerIn: click, from, adding: "path", modifiers: snapOn, context: context({ waypoints: snapWaypointsOf(waypoints) }) });
+    expect(shown).toMatchObject({ kind: "waypoint", waypoint: "park" });
+    const hidden = placeAddPoint({
+      pointerIn: click,
+      from,
+      adding: "path",
+      modifiers: snapOn,
+      context: context({ waypoints: snapWaypointsOf(waypoints, new Set(["park"])) }),
+    });
+    expect(hidden).not.toBeNull();
+    expect(hidden?.kind).not.toBe("waypoint");
+    expect(hidden?.waypoint).toBeUndefined();
   });
 });

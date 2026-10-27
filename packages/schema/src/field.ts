@@ -3,7 +3,7 @@ import { provenanceSchema } from "./common.js";
 import { formatVersionFor, schemaIdField } from "./ids.js";
 
 /** An axis-aligned box the robot may not drive through, with a z range. */
-export const obstacleSchema = z.object({
+export const boxObstacleSchema = z.object({
   id: z.string().min(1),
   kind: z.literal("box"),
   minXIn: z.number(),
@@ -16,6 +16,32 @@ export const obstacleSchema = z.object({
   provenance: provenanceSchema.optional(),
 });
 
+/** A point in the field frame with its height above the tiles, every key in inches. */
+export const point3InSchema = z.object({
+  xIn: z.number(),
+  yIn: z.number(),
+  zIn: z.number(),
+});
+
+/**
+ * A straight bar between two points with a round envelope (format version 3), such as a slanted
+ * leg of a hive frame. `fromIn` and `toIn` are the centres of its end faces and `radiusIn` is the
+ * radius of the round envelope that holds the whole part. How much of the floor it blocks depends
+ * on the robot's height (site/docs/checks-and-findings.md, STRUCTURE).
+ */
+export const strutObstacleSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal("strut"),
+  fromIn: point3InSchema,
+  toIn: point3InSchema,
+  radiusIn: z.number().positive(),
+  solidToRobot: z.boolean().optional(),
+  provenance: provenanceSchema.optional(),
+});
+
+/** Something the robot may not drive through: a box, or (format version 3) a strut. */
+export const obstacleSchema = z.discriminatedUnion("kind", [boxObstacleSchema, strutObstacleSchema]);
+
 /** An axis-aligned rectangle a rule talks about (a loading zone, a parking zone). */
 export const zoneSchema = z.object({
   id: z.string().min(1),
@@ -26,6 +52,12 @@ export const zoneSchema = z.object({
   maxYIn: z.number(),
   rule: z.string().optional(),
   appliesInAuto: z.boolean().optional(),
+  /**
+   * What the ledger counts in this zone, when it counts anything: `loadingZone` marks an
+   * alliance's LOADING ZONE, where the human player enters game pieces, and the season plugin
+   * keeps a count for it. Planner-only, like every ledger key.
+   */
+  ledger: z.enum(["loadingZone"]).optional(),
   provenance: provenanceSchema.optional(),
 });
 
@@ -81,8 +113,8 @@ export const fieldImageVariantSchema = z.object({
  * site/docs/file-format.md has the exact mapping).
  *
  * - `src`: a path relative to the field file, or `app:<path>` for an asset the app ships (resolved
- *   against the app's public root, so `app:fields/biobuzz/biobuzz-dark.webp` is
- *   `apps/web/public/fields/biobuzz/biobuzz-dark.webp`).
+ *   against the app's public root, so `app:fields/example.webp` is `apps/web/public/fields/example.webp`.
+ *   The editor ships no field picture: it draws every season it knows from the geometry.
  * - `pxBoundsIn`: the box in the stored image, in image pixels, that the field perimeter occupies,
  *   or `"fullBleed"` when the perimeter is the image's own edge.
  * - `rotationDeg`: how far the cropped image is turned **clockwise as seen on screen** before it is
@@ -165,6 +197,9 @@ export const fieldSchema = z.object({
 });
 
 export type Obstacle = z.infer<typeof obstacleSchema>;
+export type BoxObstacle = z.infer<typeof boxObstacleSchema>;
+export type StrutObstacle = z.infer<typeof strutObstacleSchema>;
+export type Point3In = z.infer<typeof point3InSchema>;
 export type Zone = z.infer<typeof zoneSchema>;
 export type FieldElement = z.infer<typeof elementSchema>;
 export type FieldTarget = z.infer<typeof targetSchema>;

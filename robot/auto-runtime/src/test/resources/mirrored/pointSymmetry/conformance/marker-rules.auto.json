@@ -1,0 +1,184 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 4,
+  "name": "marker-rules",
+  "title": "Markers on a path cut short, and markers that need one subsystem",
+  "alliance": "BLUE",
+  "start": {
+    "pose": {
+      "xIn": 48,
+      "yIn": 48,
+      "headingRad": 3.1416
+    }
+  },
+  "steps": [
+    {
+      "id": "cut",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": 48,
+            "yIn": 48,
+            "headingRad": 3.1416
+          },
+          "to": {
+            "xIn": 24,
+            "yIn": 48,
+            "headingRad": 3.1416
+          }
+        },
+        {
+          "kind": "line",
+          "from": {
+            "xIn": 24,
+            "yIn": 48,
+            "headingRad": 3.1416
+          },
+          "to": {
+            "xIn": 24,
+            "yIn": 24,
+            "headingRad": -1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "markers": [
+        {
+          "at": {
+            "t": 0.25
+          },
+          "command": {
+            "name": "instant",
+            "args": {
+              "at": "before cut"
+            }
+          }
+        },
+        {
+          "at": {
+            "t": 0.9
+          },
+          "command": {
+            "name": "instant",
+            "args": {
+              "at": "past cut"
+            }
+          }
+        }
+      ],
+      "endCondition": {
+        "condition": "pastHalfway"
+      }
+    },
+    {
+      "id": "share",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": 0,
+            "yIn": 24,
+            "headingRad": 3.1416
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "markers": [
+        {
+          "at": {
+            "t": 0
+          },
+          "command": {
+            "name": "take",
+            "args": {
+              "at": "raise",
+              "loops": 40,
+              "requires": "shooter"
+            }
+          }
+        },
+        {
+          "at": {
+            "t": 0
+          },
+          "command": {
+            "name": "take",
+            "args": {
+              "at": "side",
+              "loops": 40,
+              "requires": "intake"
+            }
+          }
+        },
+        {
+          "at": {
+            "distanceIn": 10
+          },
+          "command": {
+            "name": "take",
+            "args": {
+              "at": "lower",
+              "loops": 3,
+              "requires": "shooter"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "turn",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": 0,
+            "yIn": 24,
+            "headingRad": 3.1416
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "headingRad": -2.3562
+      },
+      "markers": [
+        {
+          "at": {
+            "t": 0
+          },
+          "command": {
+            "name": "take",
+            "args": {
+              "at": "turn raise",
+              "loops": 40,
+              "requires": "shooter"
+            }
+          }
+        },
+        {
+          "at": {
+            "t": 0
+          },
+          "command": {
+            "name": "take",
+            "args": {
+              "at": "turn lower",
+              "loops": 3,
+              "requires": "shooter"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

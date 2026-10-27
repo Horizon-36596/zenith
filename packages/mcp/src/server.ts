@@ -1,5 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { GitHubDeps } from "@horizon36596/zenith-cli/lib";
+import { registerGitHubTools } from "./tools/github.js";
+import { registerAllianceTools } from "./tools/alliance.js";
 import { registerAnalysisTools } from "./tools/analysis.js";
+import { registerAppTools } from "./tools/app.js";
+import { registerCommandTools } from "./tools/commands.js";
+import { registerInterchangeTools } from "./tools/interchange.js";
+import { registerProposalTools } from "./tools/proposal.js";
 import { registerAutoTools } from "./tools/auto.js";
 import { registerEditTools } from "./tools/edit.js";
 import { registerProjectTools } from "./tools/project.js";
@@ -17,11 +24,22 @@ export const SERVER_VERSION = VERSION;
  * test can connect a client to it directly, and so a host that wants to embed the server without
  * spawning a child process can too.
  */
-export function createServer(): McpServer {
+export interface ServerOptions {
+  /** git, `gh` and `fetch` for the GitHub tools; a test passes fakes. Default: the real ones. */
+  github?: GitHubDeps;
+}
+
+export function createServer(options: ServerOptions = {}): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
   registerProjectTools(server);
+  registerAppTools(server);
+  registerGitHubTools(server, options.github);
   registerAutoTools(server);
   registerAnalysisTools(server);
+  registerAllianceTools(server);
+  registerInterchangeTools(server);
+  registerCommandTools(server);
+  registerProposalTools(server);
   registerEditTools(server);
   registerResources(server);
   return server;

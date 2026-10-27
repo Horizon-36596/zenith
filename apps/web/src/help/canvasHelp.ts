@@ -26,7 +26,7 @@ export function modifierSentence(): string {
   const parts = [
     has("invertSnap") ? "Ctrl to flip snapping" : null,
     has("noQuantise") ? "Alt to skip the grid" : null,
-    has("axis") ? "Shift to keep to one axis" : null,
+    has("axis") ? "Shift to keep to a line" : null,
   ].filter((part): part is string => part !== null);
   if (parts.length === 0) return "";
   const last = parts.pop() as string;

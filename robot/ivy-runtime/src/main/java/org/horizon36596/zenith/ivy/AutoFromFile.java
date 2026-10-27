@@ -34,6 +34,7 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import org.horizon36596.zenith.AllianceFrame;
 import org.horizon36596.zenith.AutoFile;
 import org.horizon36596.zenith.AutoSource;
+import org.horizon36596.zenith.PathSpeeds;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,14 +63,16 @@ import java.util.List;
  *       alliance-correct start pose; build the whole routine.</li>
  *   <li><b>Waiting for start</b> ({@link #initialize_loop()}): show the file, its step count and
  *       each of the file's load warnings ({@code AutoFile.warnings}).</li>
- *   <li><b>Start</b> ({@link #startRoutine()}): {@code Scheduler.schedule(routine)}, which starts it at
+ *   <li><b>Start</b> ({@link #startRoutine()}): {@link ZenithRobot#onStart}, then
+ *       {@code Scheduler.schedule(routine)}, which starts it at
  *       once, then a check that Ivy did start it. A command still running from init that holds one of
  *       its requirements at a higher priority would make Ivy drop the routine without a word; the
  *       OpMode fails instead, naming the requirement.</li>
  *   <li><b>Every loop</b> ({@link #run()}): {@link ZenithRobot#periodic}, which updates the follower by
- *       default, then {@code Scheduler.execute()}. The same order as SolversLib, whose scheduler runs
- *       every subsystem's {@code periodic()} before any command.</li>
- *   <li><b>Stop</b> ({@link #reset()}): {@code Scheduler.reset()}, which ends nothing, as SolversLib's
+ *       default, then {@code Scheduler.execute()}, then {@link ZenithRobot#afterLoop}. The same order as
+ *       SolversLib, whose scheduler runs every subsystem's {@code periodic()} before any command.</li>
+ *   <li><b>Stop</b> ({@link #reset()}): {@link ZenithRobot#onStop}, once, whenever {@code createRobot()}
+ *       returned a robot, then {@code Scheduler.reset()}, which ends nothing, as SolversLib's
  *       {@code CommandOpMode.reset()} ends nothing. It runs however the OpMode stops, a thrown exception
  *       included, so the next OpMode starts with an empty scheduler.</li>
  * </ol>
@@ -89,6 +92,9 @@ import java.util.List;
  * <h2>Where the file comes from</h2>
  * By default the APK's {@code assets/autos/}. A headless sim calls {@link #setAutoSource(AutoSource)}
  * before the OpMode is initialised and points it at the source tree.
+ *
+ * <p>A class {@code zenith codegen --export} wrote reads no file at all: it overrides {@link #loadSpec()}
+ * to return {@link AutoFile#inCode} and builds its own routine in {@link #buildRoutine()}.
  */
 public abstract class AutoFromFile extends LinearOpMode implements AutoContext {
 
@@ -112,6 +118,16 @@ public abstract class AutoFromFile extends LinearOpMode implements AutoContext {
 
     /** Set by a test; {@code null} on the robot, which means the APK's assets. */
     private AutoSource source;
+
+    /**
+     * What a path with no speed of its own drives at: the robot's own {@code defaultSpeedFraction()} when
+     * it has one, otherwise {@code kinematics.defaultPathSpeedFraction} from the deployed
+     * {@code robot.json}, or 1.0 with a warning when that cannot be read. Set at init.
+     */
+    private double defaultSpeed = PathSpeeds.FALLBACK;
+
+    /** Set once {@link ZenithRobot#onStop} has been called, so a second {@link #reset()} does not call it again. */
+    private boolean stopped;
 
     /**
      * Read the auto from somewhere other than the APK. Call before the OpMode is initialised; after
@@ -146,7 +162,9 @@ public abstract class AutoFromFile extends LinearOpMode implements AutoContext {
     /** Init: see <b>Order of events</b>. */
     public void initialize() {
         Scheduler.reset();
-        spec = AutoFile.loadForInit(autoSource(), autoName());
+        stopped = false;
+        robot = null;
+        spec = loadSpec();
         robot = createRobot();
         if (robot == null) {
             throw new IllegalStateException(getClass().getSimpleName() + ".createRobot() returned null");
@@ -154,6 +172,7 @@ public abstract class AutoFromFile extends LinearOpMode implements AutoContext {
         robot.init(this);
         NamedCommands.reset();
         robot.registerCommands(this);
+        checkPathSpeeds();
         // Read once, here, so a mirror whose headings disagree with its positions fails on the tile,
         // whichever way the routine is built.
         frame = AutoBuilder.frame(this);
@@ -161,6 +180,45 @@ public abstract class AutoFromFile extends LinearOpMode implements AutoContext {
         routine = buildRoutine();
         if (routine == null) {
             throw new IllegalStateException(getClass().getSimpleName() + ".buildRoutine() returned null");
+        }
+    }
+
+    /**
+     * The auto this OpMode runs: the file {@link #autoName()} names, read from {@link #autoSource()}. A
+     * class {@code zenith codegen --export} wrote returns {@link AutoFile#inCode} instead, and reads no
+     * file.
+     *
+     * @return the parsed auto
+     */
+    protected AutoFile loadSpec() {
+        return AutoFile.loadForInit(autoSource(), autoName());
+    }
+
+    /**
+     * Settle what a path with no speed of its own drives at, and say so on the Driver Station when a
+     * path's speed would not be applied: a path step below full speed, with neither {@code atSpeed} nor
+     * {@code followPath} replaced by the team, drives at full speed while the editor times it slower.
+     */
+    private void checkPathSpeeds() {
+        if (PathSpeeds.overrides(robot, ZenithRobot.class, "defaultSpeedFraction")) {
+            defaultSpeed = robot.defaultSpeedFraction();
+        } else if (spec.defaultSpeedFraction != null) {
+            // An exported class wrote the number in; there is no robot.json beside it to read.
+            defaultSpeed = spec.defaultSpeedFraction;
+        } else {
+            List<String> problems = new ArrayList<String>();
+            defaultSpeed = PathSpeeds.defaultFromRobotFile(autoSource(), problems);
+            for (String problem : problems) {
+                spec.addWarning(problem);
+            }
+        }
+        boolean applied = PathSpeeds.overrides(robot, ZenithRobot.class, "atSpeed", Path.class, double.class)
+                || PathSpeeds.overrides(robot, ZenithRobot.class, "followPath", Path.class, double.class);
+        if (!applied) {
+            String warning = PathSpeeds.unappliedWarning(spec.steps, defaultSpeed);
+            if (warning != null) {
+                spec.addWarning(warning);
+            }
         }
     }
 
@@ -188,8 +246,12 @@ public abstract class AutoFromFile extends LinearOpMode implements AutoContext {
     /** One loop while waiting for start. */
     public void initialize_loop() {
         robot.initLoop(this);
-        telemetry.addData("Auto file", autoName() + ".auto.json (" + spec.title + ")");
-        telemetry.addData("Auto steps", spec.steps.size());
+        if (spec.fromCode) {
+            telemetry.addData("Auto class", getClass().getSimpleName() + " (" + spec.title + "), exported from Zenith");
+        } else {
+            telemetry.addData("Auto file", autoName() + ".auto.json (" + spec.title + ")");
+            telemetry.addData("Auto steps", spec.steps.size());
+        }
         // What the file says that the runtime read past (AutoFile.warnings), such as a timeoutS on a
         // group step. Shown on every loop so it is still there after the team's own init telemetry.
         for (String warning : spec.warnings) {
@@ -212,9 +274,12 @@ public abstract class AutoFromFile extends LinearOpMode implements AutoContext {
      * <p>A command holding a requirement at the routine's priority or below is interrupted, as the
      * routine's {@code ConflictBehavior.OVERRIDE} and Ivy's priority rule say, and the routine starts.
      *
+     * <p>{@link ZenithRobot#onStart} runs first, so whatever it starts sees the routine's first loop.
+     *
      * @throws IllegalStateException when Ivy's scheduler did not start the routine
      */
     public void startRoutine() {
+        robot.onStart(this);
         Scheduler.schedule(routine);
         if (Scheduler.isRunning(routine)) {
             return;
@@ -287,15 +352,29 @@ public abstract class AutoFromFile extends LinearOpMode implements AutoContext {
         return String.valueOf(requirement);
     }
 
-    /** One loop after start: the robot's {@link ZenithRobot#periodic}, then the scheduler. */
+    /**
+     * One loop after start: the robot's {@link ZenithRobot#periodic}, then the scheduler, then
+     * {@link ZenithRobot#afterLoop}.
+     */
     public void run() {
         robot.periodic(this);
         Scheduler.execute();
+        robot.afterLoop(this);
     }
 
-    /** Stop: empty the scheduler. Ends nothing; see <b>Order of events</b>. */
+    /**
+     * Stop: {@link ZenithRobot#onStop}, once, whenever {@code createRobot()} returned a robot, then empty
+     * the scheduler, even when {@code onStop} throws. Ends nothing; see <b>Order of events</b>.
+     */
     public void reset() {
-        Scheduler.reset();
+        try {
+            if (robot != null && !stopped) {
+                stopped = true;
+                robot.onStop(this);
+            }
+        } finally {
+            Scheduler.reset();
+        }
     }
 
     @Override
@@ -380,7 +459,7 @@ public abstract class AutoFromFile extends LinearOpMode implements AutoContext {
 
     @Override
     public double defaultSpeedFraction() {
-        return robot.defaultSpeedFraction();
+        return defaultSpeed;
     }
 
     @Override

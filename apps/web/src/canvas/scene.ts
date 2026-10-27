@@ -5,17 +5,22 @@
  *
  * v2 (site/docs/editor.md) removed the footprint ghosts: the scene no longer stamps
  * robot outlines along a path. What it carries instead is the clock: every sample's time on the
- * estimated run (`estimate.timeAtSampleS`, offset by where the step starts), so the one robot
- * outline can be put at the playback time or at the hovered point with its time beside it.
+ * estimated run (`estimate.timeAtSampleS`, offset by where the step starts and by its joint turn),
+ * so the one robot outline can be put at the playback time or at the hovered point with its time
+ * beside it.
  *
  * Nothing here touches the DOM, so the shapes are unit-testable and the whole module is a pure
  * function of the props.
  */
 import {
+  envelopeOf,
   flattenSteps,
   lerpAngle,
+  mirrorVec,
+  TURN_IN_PLACE_LENGTH_IN,
   type Estimate,
   type Finding,
+  type MirrorMode,
   type PathGeometry,
   type Plan,
   type PlanStep,
@@ -24,8 +29,9 @@ import {
   type Vec2,
 } from "@horizon36596/zenith-core";
 import type { Heading } from "@horizon36596/zenith-schema";
+import { plannedHeadingAt } from "../lib/headingModes.js";
 import { bezierNodes, type BezierNode } from "./bezier.js";
-import type { PointTarget, TraceOverlay } from "./types.js";
+import type { PointTarget, SelectedPoint, TraceOverlay } from "./types.js";
 
 /** One draggable endpoint of a segment, with the pose a heading handle would rotate. */
 export interface SceneHandle {
@@ -37,6 +43,12 @@ export interface SceneHandle {
    * `"current"` with a literal pose and break the chain).
    */
   chained: boolean;
+  /**
+   * The heading the plan gives the robot here, which the hover bubble and the readout show (issue
+   * #147). `poseIn.headingRad` is the point's own, which no heading mode reads. Absent when the plan
+   * has no sample here.
+   */
+  plannedHeadingRad?: number;
 }
 
 /** A Bezier control point, and the endpoints its hairlines run to. */
@@ -90,12 +102,25 @@ export interface SceneSpan {
   endS: number;
 }
 
+/**
+ * A step's envelope (spec 13 section 10): the area its robot is declared to stay inside while the
+ * step runs, drawn as a hatched polygon under the paths. Any step that runs may carry one, a
+ * command included, so this is listed apart from `steps`, which holds only what has a polyline.
+ */
+export interface SceneEnvelope {
+  stepId: string;
+  polygonIn: Vec2[];
+  maxDurationS: number;
+}
+
 export interface Scene {
   steps: SceneStep[];
   startPose: Pose;
   spans: SceneSpan[];
   /** Null when there is no estimate: the canvas owns no time model of its own. */
   totalS: number | null;
+  /** Every step's envelope, in document order. Absent means none. */
+  envelopes?: SceneEnvelope[];
 }
 
 /** A finding with no t covers its whole step; one with a t gets a band this wide either side. */
@@ -127,8 +152,26 @@ export function poseAtDistance(step: SceneStep, sIn: number): Pose {
   };
 }
 
-export const poseAtT = (step: SceneStep, t: number): Pose =>
-  poseAtDistance(step, step.lengthIn * Math.min(1, Math.max(0, t)));
+/**
+ * The pose at arc-length parameter t. A turn on the spot (core's `isTurnInPlace`) has no length, and
+ * its samples sit on one point and turn through t from 0 to 1, so its pose is interpolated in t.
+ */
+export function poseAtT(step: SceneStep, t: number): Pose {
+  const clamped = Math.min(1, Math.max(0, t));
+  if (step.lengthIn > TURN_IN_PLACE_LENGTH_IN || step.poses.length < 2) return poseAtDistance(step, step.lengthIn * clamped);
+  let index = 0;
+  while (index + 2 < step.ts.length && (step.ts[index + 1] as number) < clamped) index += 1;
+  const a = step.poses[index] as Pose;
+  const b = step.poses[index + 1] as Pose;
+  const ta = step.ts[index] as number;
+  const tb = step.ts[index + 1] as number;
+  const u = tb - ta <= 1e-12 ? 1 : Math.min(1, Math.max(0, (clamped - ta) / (tb - ta)));
+  return { xIn: a.xIn, yIn: a.yIn, headingRad: lerpAngle(a.headingRad, b.headingRad, u) };
+}
+
+/** True for a step drawn as a turn on the spot: a path with no length, turning at one point. */
+export const isSceneTurn = (step: Pick<SceneStep, "kind" | "lengthIn" | "poses">): boolean =>
+  step.kind === "path" && step.lengthIn <= TURN_IN_PLACE_LENGTH_IN && step.poses.length >= 2;
 
 /** The value of a per-sample series at arc-length parameter t, interpolated. */
 function seriesAtT(step: SceneStep, series: readonly number[], t: number): number | null {
@@ -169,20 +212,34 @@ function buildHighlights(findings: readonly Finding[], stepId: string): SceneHig
     if (finding.stepId !== stepId) continue;
     if (finding.severity === "info") continue;
     const t = finding.t;
+    // A STRUCTURE finding says the whole stretch the robot stays in contact (issue #152), which
+    // is tinted all the way along, and never narrower than the band round its worst point.
+    const range = finding.geometry?.tRange;
     if (t === undefined) {
-      out.push({ severity: finding.severity, t0: 0, t1: 1 });
+      // A finding about a stretch with no worst point, STRAFE_FRACTION's sideways driving, tints
+      // that stretch, or each of its stretches apart, never narrower than the band round a point;
+      // one about the whole step tints all of it.
+      const stretches = finding.geometry?.tRanges ?? [range ?? [0, 1]];
+      for (const [from, to] of stretches) {
+        const middle = (from + to) / 2;
+        out.push({
+          severity: finding.severity,
+          t0: Math.max(0, Math.min(from, middle - FINDING_BAND_T)),
+          t1: Math.min(1, Math.max(to, middle + FINDING_BAND_T)),
+        });
+      }
     } else {
       out.push({
         severity: finding.severity,
-        t0: Math.max(0, t - FINDING_BAND_T),
-        t1: Math.min(1, t + FINDING_BAND_T),
+        t0: Math.max(0, Math.min(t - FINDING_BAND_T, range?.[0] ?? t)),
+        t1: Math.min(1, Math.max(t + FINDING_BAND_T, range?.[1] ?? t)),
       });
     }
   }
   return out.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
 }
 
-function buildStep(planStep: PlanStep, findings: readonly Finding[]): SceneStep {
+function buildStep(planStep: PlanStep, findings: readonly Finding[], showMarkers: boolean): SceneStep {
   const poses: Pose[] = [];
   const ts: number[] = [];
   const sIns: number[] = [];
@@ -198,6 +255,10 @@ function buildStep(planStep: PlanStep, findings: readonly Finding[]): SceneStep 
   const controls: SceneControl[] = [];
   const polygons: Vec2[][] = [];
   const segments = planStep.segments ?? [];
+  const planned = (segmentIndex: number, pointKind: "from" | "to"): { plannedHeadingRad?: number } => {
+    const headingRad = plannedHeadingAt(planStep, { segmentIndex, pointKind });
+    return headingRad === null ? {} : { plannedHeadingRad: headingRad };
+  };
   for (const [segmentIndex, segment] of segments.entries()) {
     polygons.push(segment.pointsIn.map((point) => ({ xIn: point.xIn, yIn: point.yIn })));
     if (segmentIndex === 0) {
@@ -205,9 +266,10 @@ function buildStep(planStep: PlanStep, findings: readonly Finding[]): SceneStep 
         target: { segmentIndex, pointKind: "from" },
         poseIn: segment.fromPose,
         chained: firstFrom === "current",
+        ...planned(segmentIndex, "from"),
       });
     }
-    handles.push({ target: { segmentIndex, pointKind: "to" }, poseIn: segment.toPose, chained: false });
+    handles.push({ target: { segmentIndex, pointKind: "to" }, poseIn: segment.toPose, chained: false, ...planned(segmentIndex, "to") });
     const count = segment.pointsIn.length;
     for (let i = 1; i + 1 < count; i += 1) {
       // A control's hairline runs to the end it belongs to: the first half to `from`, the second
@@ -242,7 +304,7 @@ function buildStep(planStep: PlanStep, findings: readonly Finding[]): SceneStep 
     ...(authored.kind === "path" && authored.heading !== undefined ? { heading: authored.heading } : {}),
   };
 
-  if (authored.kind === "path" && authored.markers !== undefined) {
+  if (showMarkers && authored.kind === "path" && authored.markers !== undefined) {
     for (const [markerIndex, marker] of authored.markers.entries()) {
       const t = markerT(marker.at, planStep.lengthIn);
       step.markers.push({ markerIndex, t, pointIn: poseAtT(step, t), label: marker.command.name });
@@ -255,6 +317,11 @@ export interface BuildSceneInput {
   plan: Plan;
   findings: readonly Finding[];
   estimate: Estimate | null;
+  /**
+   * Whether the paths carry their markers. False while the Commands switch is off
+   * (`state/features.ts`): the markers stay in the file, but none is drawn or can be hit.
+   */
+  showMarkers?: boolean;
 }
 
 /**
@@ -309,19 +376,70 @@ export function buildScene(input: BuildSceneInput): Scene {
   const steps: SceneStep[] = [];
   for (const planStep of flattenSteps(plan.steps)) {
     if (planStep.samples.length < 2) continue;
-    const step = buildStep(planStep, findings);
+    const step = buildStep(planStep, findings, input.showMarkers !== false);
     const span = spanOf.get(planStep.id);
     const atSample = byId[planStep.id]?.timeAtSampleS;
+    // A path that opens with a joint turn starts to drive once the turn is done.
+    const driveStartS = (span?.startS ?? 0) + (byId[planStep.id]?.turnS ?? 0);
     if (estimate !== null && span !== undefined) {
       step.timesS =
         atSample !== undefined && atSample.length === step.poses.length
-          ? atSample.map((seconds) => span.startS + seconds)
+          ? atSample.map((seconds) => driveStartS + seconds)
           : step.ts.map((t) => span.startS + t * (span.endS - span.startS));
     }
     steps.push(step);
   }
 
-  return { steps, startPose: plan.startPose, spans, totalS: estimate === null ? null : totalS };
+  const envelopes: SceneEnvelope[] = [];
+  for (const planStep of flattenSteps(plan.steps)) {
+    const envelope = envelopeOf(planStep.step);
+    if (envelope === undefined) continue;
+    envelopes.push({
+      stepId: planStep.id,
+      polygonIn: envelope.polygon.map((corner) => ({ xIn: corner.xIn, yIn: corner.yIn })),
+      maxDurationS: envelope.maxDurationS,
+    });
+  }
+
+  return { steps, startPose: plan.startPose, spans, totalS: estimate === null ? null : totalS, envelopes };
+}
+
+/** Two points closer than this, in inches, are one spot: written from one waypoint or the same numbers. */
+const SAME_SPOT_IN = 1e-6;
+
+/** Whether two points are the same spot on the field. */
+export const sameSpot = (a: Vec2, b: Vec2): boolean => Math.hypot(a.xIn - b.xIn, a.yIn - b.yIn) <= SAME_SPOT_IN;
+
+/**
+ * The path points that sit on the routine's start: the first point of each path, written as a pose
+ * or a waypoint rather than `"current"`, on the start's own spot, as in the starter autos, where the
+ * start and the first path both follow the start waypoint. The start mark takes the press from
+ * their dots and a start drag carries them, so the route stays joined to the start (issue #133).
+ */
+export function pointsOnStart(scene: Scene): SelectedPoint[] {
+  const points: SelectedPoint[] = [];
+  for (const step of scene.steps) {
+    for (const handle of step.handles) {
+      if (handle.chained || handle.target.pointKind !== "from" || handle.target.segmentIndex !== 0) continue;
+      if (sameSpot(handle.poseIn, scene.startPose)) points.push({ stepId: step.stepId, point: handle.target });
+    }
+  }
+  return points;
+}
+
+/**
+ * Every point the routine is drawn at, for what Zoom to fit frames (issue #151): the start, every
+ * pose along every step and every curve control, put through the alliance mirror the canvas draws
+ * them with, so the points are where they are on screen.
+ */
+export function routinePoints(scene: Scene, mirror: MirrorMode): Vec2[] {
+  const points: Vec2[] = [scene.startPose];
+  for (const step of scene.steps) {
+    points.push(...step.poses);
+    for (const handle of step.handles) points.push(handle.poseIn);
+    for (const control of step.controls) points.push(control.pointIn);
+  }
+  return points.map((point) => mirrorVec({ xIn: point.xIn, yIn: point.yIn }, mirror));
 }
 
 /** The pose on the estimated clock at `atS`, or null when nothing has a time. */

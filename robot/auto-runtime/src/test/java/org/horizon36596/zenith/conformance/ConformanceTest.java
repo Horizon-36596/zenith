@@ -108,6 +108,7 @@ class ConformanceTest {
         }
         for (String name : new String[] {
             "sequence-rules", "groups", "branches", "never-ends", "edges", "headings", "mirror-headings",
+            "envelopes", "chain-current", "marker-rules",
         }) {
             addWithMirrors(cases, name, conformance(), name);
         }
@@ -230,6 +231,47 @@ class ConformanceTest {
                 || log.indexOf(t1 + " step markers end") < 0, "a marker at t = 1 fires before the path ends");
     }
 
+    /**
+     * An end condition that cuts a path short ends the markers' runner with the path, so a marker past
+     * the cut never fires; and a marker that needs a subsystem another running marker needs ends that
+     * one, as the scheduler would, rather than both driving it at once.
+     */
+    @Test
+    void aPathCutShortFiresNoMarkerPastTheCutAndMarkersTakeTurnsOnASubsystem() {
+        List<String> log = both("marker-rules").log();
+        assertEquals(1, count(log, "instant {at=before cut} start"), log.toString());
+        assertEquals(0, count(log, "instant {at=past cut} start"), "the marker at t = 0.9 is past the cut: " + log);
+        int heldAtB = 0;
+        for (String line : log) {
+            if (line.substring(line.indexOf(' ') + 1).startsWith("hold (-24.00, -48.00, ")) {
+                heldAtB++;
+            }
+        }
+        assertEquals(1, heldAtB, "the path was cut short, halfway, at b: " + log);
+        assertEquals(1, count(log, "step cut end"));
+
+        int lower = loopOf(log, "take {at=lower, loops=3, requires=shooter} start");
+        assertEquals(lower, loopOf(log, "take {at=raise, loops=40, requires=shooter} interrupted"),
+                "the lower marker takes the shooter over on the loop it starts");
+        assertTrue(log.indexOf(lower + " take {at=raise, loops=40, requires=shooter} interrupted")
+                < log.indexOf(lower + " take {at=lower, loops=3, requires=shooter} start"), log.toString());
+        assertEquals(1, count(log, "take {at=lower, loops=3, requires=shooter} end"));
+        assertEquals(loopOf(log, "step share end"),
+                loopOf(log, "take {at=side, loops=40, requires=intake} interrupted"),
+                "a marker on another subsystem runs on until the path ends");
+
+        // A turn on the spot starts every marker at once, through the same runner, so the second
+        // shooter marker takes over from the first on that loop, as the sim's MarkerRunner does.
+        int turnLower = loopOf(log, "take {at=turn lower, loops=3, requires=shooter} start");
+        assertEquals(loopOf(log, "step turn start"), turnLower, log.toString());
+        assertEquals(turnLower, loopOf(log, "take {at=turn raise, loops=40, requires=shooter} interrupted"), log.toString());
+        // The robot already faces the turn's heading, so the turn settles at once and ends the marker.
+        assertEquals(loopOf(log, "step turn end"),
+                loopOf(log, "take {at=turn lower, loops=3, requires=shooter} interrupted"), log.toString());
+        assertEquals(1, count(log, "step turn end"));
+        assertEquals(1, count(log, "routine finished"));
+    }
+
     @Test
     void groupsEndTheirMembersOnceAndInterruptOnlyWhatIsStillRunning() {
         List<String> log = both("groups").log();
@@ -243,6 +285,52 @@ class ConformanceTest {
         assertEquals(1, count(log, "step timedTake end"), "a member's timeout does not end another member");
         assertEquals(loopOf(log, "step timedForever end"), loopOf(log, "step memberTimeout end"),
                 "the group ends once its last member has");
+    }
+
+    /**
+     * An envelope and a rejoin pose are planner-only (spec 13 section 10): the runtime reads past
+     * them, so the fixture runs exactly as its companion with both taken out, which
+     * packages/cli/src/commands/envelopes.test.ts keeps in step with it.
+     */
+    @Test
+    void envelopesAndARejoinPoseChangeNothingTheRobotDoes() {
+        List<String> with = both("envelopes").log();
+        List<String> without = both("envelopes-stripped").log();
+        assertEquals(String.join("\n", without), String.join("\n", with));
+        assertEquals(1, count(with, "step collect end"), "the command with an envelope runs to its own end: " + with);
+        assertEquals(1, count(with, "step rejoin end"), "the path with a rejoin pose starts from the live pose and ends");
+        assertEquals(1, count(with, "routine finished"));
+    }
+
+    /**
+     * Inside one path step, a later segment's {@code "current"} is the pose the segment before it
+     * ended at (site/docs/file-format.md, "Segments"; decision D5, issue #185). The fixture's two
+     * chains start every later segment from {@code "current"}, and its companion writes each of them
+     * as the end of the segment before it, which packages/core/src/chainCurrent.test.ts keeps in step.
+     * Both must drive the same paths and log the same events on the same loops, so the joint cannot tear.
+     */
+    @Test
+    void aLaterSegmentFromCurrentStartsWhereTheSegmentBeforeItEnded() {
+        Case current = new Case("chain-current", conformance(), "chain-current", "RED");
+        Case refs = new Case("chain-refs", conformance(), "chain-refs", "RED");
+        for (Outcome[] pair : new Outcome[][] {
+            {solversLib(current), solversLib(refs)},
+            {ivy(current), ivy(refs)},
+        }) {
+            assertNull(pair[0].thrown, "chain-current threw; log " + pair[0].log());
+            assertNull(pair[1].thrown, "chain-refs threw; log " + pair[1].log());
+            assertEquals(String.join("\n", pair[1].log()), String.join("\n", pair[0].log()));
+            // Each trace names its own file stem; everything after that must match.
+            assertEquals(pair[1].trace.render().replace("\"auto\": \"chain-refs\"", "\"auto\": \"chain-current\""),
+                    pair[0].trace.render());
+        }
+        List<String> log = both("chain-current").log();
+        assertEquals(1, count(log, "arrive (0.00, -24.00, 0.000)"), "the chain of three ends at d: " + log);
+        assertEquals(1, count(log, "arrive (-24.00, -48.00, 0.000)"), "the chain from the live pose ends at b");
+        assertEquals(1, count(log, "instant {at=secondPath} start"), "the marker on the second path fires once");
+        assertEquals(1, count(log, "step chain end"));
+        assertEquals(1, count(log, "step back end"));
+        assertEquals(1, count(log, "routine finished"));
     }
 
     @Test
@@ -333,10 +421,12 @@ class ConformanceTest {
     // ---------------------------------------------------------------------------------------------
 
     /**
-     * The build copies examples/starter/generated/{solverslib,ivy}/CycleAndParkGenerated.java into
-     * packages of their own and compiles them with these tests. Each is run as a team would run it, as
-     * a subclass that names the file and the robot, and must log the same events on the same loops and
-     * write the same trace as both runtimes building the routine from the file. The world runs once
+     * The build copies examples/starter/generated/{solverslib,ivy}/CycleAndParkGenerated.java and
+     * CycleAndParkExported.java into packages of their own and compiles them with these tests. Each
+     * generated class is run as a team would run it, as a subclass that names the file and the robot;
+     * each exported class reads no file and is given only the robot (issue #535). All four must log the
+     * same events on the same loops and write the same trace as both runtimes building the routine from
+     * the file. The world runs once
      * with {@code holdingPiece} true, so the branch scores again, and once with it never true, so the
      * empty else arm runs and the park starts from where the collect left the robot.
      */
@@ -355,11 +445,17 @@ class ConformanceTest {
                             SOLVERSLIB_GENERATED);
                     Outcome ivyFile = IvyRun.run(starter, name, alliance, world(holding), LOOPS);
                     Outcome ivyGenerated = IvyRun.run(starter, name, alliance, world(holding), LOOPS, IVY_GENERATED);
+                    Outcome solversExported = SolversLibRun.run(starter, name, alliance, world(holding), LOOPS,
+                            SOLVERSLIB_EXPORTED);
+                    Outcome ivyExported = IvyRun.run(starter, name, alliance, world(holding), LOOPS, IVY_EXPORTED);
                     save(label, "solverslib-file", solversFile);
                     save(label, "solverslib-generated", solversGenerated);
+                    save(label, "solverslib-exported", solversExported);
                     save(label, "ivy-file", ivyFile);
                     save(label, "ivy-generated", ivyGenerated);
-                    for (Outcome outcome : Arrays.asList(solversFile, solversGenerated, ivyFile, ivyGenerated)) {
+                    save(label, "ivy-exported", ivyExported);
+                    for (Outcome outcome : Arrays.asList(solversFile, solversGenerated, solversExported, ivyFile,
+                            ivyGenerated, ivyExported)) {
                         assertNull(outcome.thrown, "a run threw; log " + outcome.log());
                     }
                     // The arm the world chose was the one that ran, so both cases prove what they claim.
@@ -371,10 +467,14 @@ class ConformanceTest {
                     assertEquals(expected, String.join("\n", solversGenerated.log()), "SolversLib, generated");
                     assertEquals(expected, String.join("\n", ivyFile.log()), "Ivy, from the file");
                     assertEquals(expected, String.join("\n", ivyGenerated.log()), "Ivy, generated");
+                    assertEquals(expected, String.join("\n", solversExported.log()), "SolversLib, exported");
+                    assertEquals(expected, String.join("\n", ivyExported.log()), "Ivy, exported");
                     String trace = solversFile.trace.render();
                     assertEquals(trace, solversGenerated.trace.render(), "SolversLib, generated");
                     assertEquals(trace, ivyFile.trace.render(), "Ivy, from the file");
                     assertEquals(trace, ivyGenerated.trace.render(), "Ivy, generated");
+                    assertEquals(trace, solversExported.trace.render(), "SolversLib, exported");
+                    assertEquals(trace, ivyExported.trace.render(), "Ivy, exported");
                 }));
             }
         }
@@ -403,6 +503,27 @@ class ConformanceTest {
                     return name;
                 }
 
+                @Override
+                protected org.horizon36596.zenith.ivy.ZenithRobot createRobot() {
+                    return teamRobot;
+                }
+            };
+
+    /**
+     * The exported SolversLib class, given only the robot: its own {@code autoName()} and
+     * {@code loadSpec()} stand, so it reads no file.
+     */
+    static final SolversLibRun.OpModeMaker SOLVERSLIB_EXPORTED = (name, teamRobot) ->
+            new org.horizon36596.zenith.examples.solverslib.CycleAndParkExported() {
+                @Override
+                protected org.horizon36596.zenith.solverslib.ZenithRobot createRobot() {
+                    return teamRobot;
+                }
+            };
+
+    /** The exported Ivy class, given only the robot the same way. */
+    static final IvyRun.OpModeMaker IVY_EXPORTED = (name, teamRobot) ->
+            new org.horizon36596.zenith.examples.ivy.CycleAndParkExported() {
                 @Override
                 protected org.horizon36596.zenith.ivy.ZenithRobot createRobot() {
                     return teamRobot;

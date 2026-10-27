@@ -1,6 +1,6 @@
 import { parseAuto, SCHEMA_ID, type Auto, type PathStep, type Step } from "@horizon36596/zenith-schema";
 import { describe, expect, it } from "vitest";
-import { listIds } from "./ids.js";
+import { listIds, stepIdProblem } from "./ids.js";
 import { EditError } from "./errors.js";
 import {
   insertStepAfter,
@@ -106,9 +106,9 @@ describe("unwrapStep", () => {
     expect(outer).toMatchObject({ deadline: "go" });
   });
 
-  it("keeps positional members' ids", () => {
+  it("keeps positional members' ids, without the dot a step's id cannot hold", () => {
     const a = auto([{ id: "grp", kind: "sequence", steps: [wait(), wait()] }, wait()]);
-    expect(listIds(unwrapStep(a, "grp").steps)).toEqual(["grp.1", "grp.2", "step2"]);
+    expect(listIds(unwrapStep(a, "grp").steps)).toEqual(["grp1", "grp2", "step2"]);
   });
 
   it("refuses a branch and a leaf", () => {
@@ -192,6 +192,21 @@ describe("insertStepAfter", () => {
     const a = auto([line(undefined, "current", 10, 0), line(undefined, "current", 20, 0)]);
     const result = insertStepAfter(a, "step1", wait("pause"));
     expect(listIds(result.auto.steps)).toEqual(["step1", "pause", "step2"]);
+  });
+
+  it("writes the id the caller chose as given, so the id it returns names the new step", () => {
+    const result = insertStepAfter(route(), "one", wait("x_2"));
+    expect(result.id).toBe("x_2");
+    expect(listIds(result.auto.steps)).toEqual(["one", "x_2", "two", "three"]);
+  });
+
+  it("refuses an explicit id outside the step id rule, in the rule's own words", () => {
+    expect(() => insertStepAfter(route(), "one", wait("park.2"))).toThrow(EditError);
+    expect(() => insertStepAfter(route(), "one", wait("park.2"))).toThrow(stepIdProblem("park.2") ?? "");
+    expect(() => insertStepAfter(route(), "one", wait("a".repeat(65)))).toThrow(
+      "A step's id is at most 64 characters.",
+    );
+    expect(insertStepAfter(route(), "one", wait("a".repeat(64))).id).toBe("a".repeat(64));
   });
 
   it("refuses an unknown anchor", () => {

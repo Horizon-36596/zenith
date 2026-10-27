@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
-  "title": "Zenith auto file, formatVersion 3",
+  "title": "Zenith auto file, formatVersion 4",
   "type": "object",
   "properties": {
     "$schema": {
@@ -9,7 +9,7 @@
     },
     "formatVersion": {
       "type": "number",
-      "const": 3
+      "const": 4
     },
     "name": {
       "type": "string",
@@ -118,8 +118,30 @@
               },
               "timeoutS": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0
+                "exclusiveMinimum": 0
+              },
+              "rejoinFrom": {
+                "type": "object",
+                "properties": {
+                  "xIn": {
+                    "type": "number"
+                  },
+                  "yIn": {
+                    "type": "number"
+                  },
+                  "headingRad": {
+                    "type": "number"
+                  },
+                  "provenance": {
+                    "$ref": "#/properties/start/properties/pose/anyOf/1/properties/provenance"
+                  }
+                },
+                "required": [
+                  "xIn",
+                  "yIn",
+                  "headingRad"
+                ],
+                "additionalProperties": false
               },
               "segments": {
                 "type": "array",
@@ -353,8 +375,7 @@
               },
               "speedFraction": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0,
+                "exclusiveMinimum": 0,
                 "maximum": 1
               },
               "markers": {
@@ -474,6 +495,50 @@
                 },
                 "additionalProperties": false
               },
+              "envelope": {
+                "type": "object",
+                "properties": {
+                  "polygon": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "xIn": {
+                          "type": "number"
+                        },
+                        "yIn": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "xIn",
+                        "yIn"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 3,
+                    "maxItems": 32
+                  },
+                  "maxDurationS": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 30
+                  },
+                  "actualDurationS": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "provenance": {
+                    "$ref": "#/properties/start/properties/pose/anyOf/1/properties/provenance"
+                  }
+                },
+                "required": [
+                  "polygon",
+                  "maxDurationS",
+                  "provenance"
+                ],
+                "additionalProperties": false
+              },
               "notes": {
                 "type": "string"
               }
@@ -511,11 +576,13 @@
               },
               "timeoutS": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0
+                "exclusiveMinimum": 0
               },
               "expect": {
                 "$ref": "#/properties/steps/items/anyOf/0/properties/expect"
+              },
+              "envelope": {
+                "$ref": "#/properties/steps/items/anyOf/0/properties/envelope"
               },
               "notes": {
                 "type": "string"
@@ -548,8 +615,10 @@
               },
               "timeoutS": {
                 "type": "number",
-                "exclusiveMinimum": true,
-                "minimum": 0
+                "exclusiveMinimum": 0
+              },
+              "envelope": {
+                "$ref": "#/properties/steps/items/anyOf/0/properties/envelope"
               },
               "notes": {
                 "type": "string"
@@ -557,6 +626,45 @@
             },
             "required": [
               "kind"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "const": "transfer"
+              },
+              "from": {
+                "type": "string",
+                "minLength": 1
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expectedCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "actualCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "from",
+              "to",
+              "expectedCount"
             ],
             "additionalProperties": false
           },

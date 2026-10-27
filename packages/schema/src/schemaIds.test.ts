@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KINDS, LEGACY_SCHEMA_ID, SCHEMA_ID, withCurrentSchemaId } from "./ids.js";
+import { KINDS, LEGACY_KINDS, LEGACY_SCHEMA_ID, SCHEMA_ID, withCurrentSchemaId } from "./ids.js";
 import { detectKind, migrate } from "./migrate.js";
 import { parseAuto, validateKind } from "./parse.js";
 
@@ -27,8 +27,8 @@ describe("schema ids", () => {
     }
   });
 
-  it("keeps the legacy zenith.horizon36596.org ids as aliases, one per kind", () => {
-    for (const kind of KINDS) {
+  it("keeps the legacy zenith.horizon36596.org ids as aliases, one per kind that predates the move", () => {
+    for (const kind of LEGACY_KINDS) {
       expect(LEGACY_SCHEMA_ID[kind]).toBe(`https://zenith.horizon36596.org/schema/v1/${kind}.json`);
       expect(detectKind({ $schema: LEGACY_SCHEMA_ID[kind] })).toBe(kind);
     }

@@ -119,8 +119,8 @@ export function buildSimPlan(root: string, fileName: string, host: Platform = ho
 /* ---- Running ------------------------------------------------------------- */
 
 /** Colour and cursor escapes, which some Gradle builds print even without a terminal. */
-const ANSI = /\u001b\[[0-9;?]*[A-Za-z]/g;
-const TAIL_LINES = 60;
+export const ANSI = /\u001b\[[0-9;?]*[A-Za-z]/g;
+export const TAIL_LINES = 60;
 
 export interface RunnerDeps {
   spawnImpl?: typeof nodeSpawn;
@@ -130,7 +130,7 @@ export interface RunnerDeps {
   readTrace?: (path: string) => { text: string; mtimeMs: number } | null;
 }
 
-function defaultKillTree(child: ChildProcess): void {
+export function defaultKillTree(child: ChildProcess): void {
   if (child.pid === undefined) return;
   if (process.platform === "win32") {
     // The wrapper's JVM starts children of its own; /T takes the whole tree down with it.
@@ -149,7 +149,11 @@ const defaultReadTrace = (path: string): { text: string; mtimeMs: number } | nul
 };
 
 /** A hint for the failures people actually hit, found in what Gradle printed. */
-export function explainFailure(code: number | null, tail: readonly string[]): string {
+export function explainFailure(
+  code: number | null,
+  tail: readonly string[],
+  otherwise = "The sim command failed. Show the sim's output to see what it printed.",
+): string {
   const text = tail.join("\n");
   if (/Unsupported class file major version|requires Java \d+|Android Gradle plugin requires Java/i.test(text)) {
     return "The robot code needs a different Java version from the one Zenith found. Install the JDK the robot repository asks for (usually Java 17) and set JAVA_HOME to it.";
@@ -166,7 +170,24 @@ export function explainFailure(code: number | null, tail: readonly string[]): st
   if (/There were failing tests|tests completed, \d+ failed/i.test(text)) {
     return "The sim ran, but its test failed. The lines below say which assertion; the auto may stall in the sim or hit something.";
   }
-  return `The sim command stopped with exit code ${String(code)}. The last lines it printed are below.`;
+  // The exit code (`code`) is in the sim's output, where `SimRunner` adds it as the last line, not here;
+  // the sim server's prepare command, which has no such line, says it in `otherwise`.
+  return otherwise;
+}
+
+/**
+ * Why a sim command could not be started at all (`spawn` reported ENOENT), worded by what was
+ * missing: Java, a file the command names by its path, or a program that is not on the PATH.
+ */
+export function cannotStart(file: string, what = "the sim"): string {
+  const name = file.split(/[\\/]/).pop() ?? file;
+  if (/^java(?:\.exe)?$/i.test(name)) {
+    return `Could not start Java (${file}), so ${what} did not run. Install the JDK the robot repository asks for (usually Java 17) and set JAVA_HOME to it.`;
+  }
+  if (/[\\/]/.test(file)) {
+    return `Could not find ${name}, so ${what} did not run. Check that it is in the robot repository, or fix the command in zenith.json.`;
+  }
+  return `Could not start ${file}: it is not installed or not on the PATH.`;
 }
 
 interface Run {
@@ -199,11 +220,17 @@ export class SimRunner {
     return this.runs.size > 0;
   }
 
-  start(plan: SimPlan): string {
+  /**
+   * Starts the run, under `runId` when one is given: a sim-server run that falls back to the sim
+   * command (simServer.ts) keeps the id the renderer already holds.
+   */
+  start(plan: SimPlan, runId: string = randomUUID()): string {
     if (this.running) throw new BridgeError("A sim is already running. Wait for it or cancel it first.");
-    const runId = randomUUID();
     const startedAt = this.now();
     const tail: string[] = [];
+    // The trace already there, if any: a run that leaves it exactly as it was wrote no new one, however
+    // recently the last run wrote it (issue #407).
+    const before = this.readTrace(plan.tracePath);
     let settled = false;
 
     const fail = (message: string, cancelled: boolean): void => {
@@ -240,9 +267,7 @@ export class SimRunner {
 
     child.on("error", (error: NodeJS.ErrnoException) => {
       fail(
-        error.code === "ENOENT"
-          ? `Could not start ${plan.launch.file}: it is not installed or not on the PATH.`
-          : `Could not start the sim command: ${error.message}`,
+        error.code === "ENOENT" ? cannotStart(plan.launch.file) : `Could not start the sim command: ${error.message}`,
         false,
       );
     });
@@ -255,6 +280,8 @@ export class SimRunner {
         return;
       }
       if (code !== 0) {
+        // The code itself goes with the output, behind "Show the sim's output", not in the sentence.
+        this.line(runId, "stderr", `The sim command exited with code ${String(code)}.`, tail);
         fail(explainFailure(code, tail), false);
         return;
       }
@@ -263,8 +290,8 @@ export class SimRunner {
         fail(`The sim finished but wrote no trace at ${plan.traceRel}. Check zenith.json's sim.trace path.`, false);
         return;
       }
-      // A trace older than this run is the previous run's, and overlaying it would be a quiet lie.
-      if (read.mtimeMs < startedAt - 2000) {
+      // An unchanged trace is the previous run's, and overlaying it would be a quiet lie.
+      if (before !== null && read.mtimeMs === before.mtimeMs && read.text === before.text) {
         fail(`The sim finished but did not write a new trace; ${plan.traceRel} is from an earlier run.`, false);
         return;
       }
@@ -282,6 +309,10 @@ export class SimRunner {
     });
 
     return runId;
+  }
+
+  has(runId: string): boolean {
+    return this.runs.has(runId);
   }
 
   cancel(runId: string): void {

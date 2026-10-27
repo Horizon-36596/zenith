@@ -1,0 +1,88 @@
+/*
+ * The save question's two choices: rows separated by one hairline, no card round each, the words on
+ * the left edge and the button on the right (UI_GUIDE section 9.14; the Horizon guide's section 7).
+ */
+.choices {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+.detail {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-lo);
+}
+
+/*
+ * The waypoint step's names and poses (issue #158): flat bordered rows like the ledger (UI_GUIDE
+ * 8.6), no stripes, the numbers in mono so the two columns line up digit for digit.
+ */
+.poses {
+  width: 100%;
+  margin-block: var(--space-2) var(--space-3);
+  border-collapse: collapse;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+}
+
+.poses th,
+.poses td {
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.poses thead th {
+  font-weight: var(--fw-medium);
+  color: var(--text-lo);
+}
+
+.poses tbody th {
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+/* A waypoint the other project lacks: said in words, in the warning hue, not by colour alone. */
+.absent {
+  color: var(--sev-warn);
+}
+
+/* The auto's file name never breaks at its hyphens. */
+.file {
+  white-space: nowrap;
+}

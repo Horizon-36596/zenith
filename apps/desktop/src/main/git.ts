@@ -14,32 +14,57 @@
  * - Hooks run as the repository configures them; Zenith never passes `--no-verify`.
  */
 import { execFile } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { lstatSync, mkdirSync, realpathSync, unlinkSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { estimate as coreEstimate, hasErrors, ledger as coreLedger, prBody, render as coreRender } from "@horizon36596/zenith-core";
 import { resolveSeason } from "@horizon36596/zenith-seasons";
 import type {
   DesktopCommitResult,
   DesktopGitFile,
+  DesktopGitHubOrigin,
   DesktopGitStatus,
   DesktopPullRequestResult,
   DesktopPushResult,
 } from "../../../web/src/project/desktopBridge.js";
-import { confinePath, loadAutoAndPlan, tryCore, type LoadedAuto, type Project } from "./cli.js";
-import { BridgeError, assertAutoFileName } from "./confine.js";
-import { autoRelPath, loadDesktopProject } from "./project.js";
+import { loadAutoAndPlan, tryCore, type LoadedAuto, type Project } from "./cli.js";
+import { BridgeError, assertAutoFileName, confineRelative } from "./confine.js";
+import { autoRelPath, loadDesktopProject, writeReplacing } from "./project.js";
 
 export interface GitOutput {
   code: number;
   stdout: string;
   stderr: string;
+  /** True when git was stopped for taking longer than the call's time limit. */
+  timedOut?: boolean;
+}
+
+/** What one git call may set: a time limit, for the calls that wait on the network. */
+export interface GitCallOptions {
+  timeoutMs?: number;
 }
 
 /** Runs `git <args>` in `cwd`. The seam the tests replace. */
-export type GitRunner = (args: readonly string[], cwd: string) => Promise<GitOutput>;
+export type GitRunner = (args: readonly string[], cwd: string, options?: GitCallOptions) => Promise<GitOutput>;
 
-export const execGit: GitRunner = (args, cwd) =>
-  new Promise((resolve) => {
+/**
+ * Thrown when there is no `git` to run, so the panel says that instead of "not a git repository",
+ * which is what an empty failure would otherwise read as. ghCli.ts says the same of a missing `gh`.
+ */
+export class GitMissingError extends BridgeError {
+  constructor() {
+    super("Git is not installed on this computer, so Zenith cannot commit. Install Git for Windows from git-scm.com, then reopen this panel.");
+    this.name = "GitMissingError";
+  }
+}
+
+/**
+ * How long a push may wait on the network before Zenith stops it and says so (SET BY HAND: a push of
+ * an auto is a few kilobytes, so two minutes is a stalled connection, not a slow one).
+ */
+export const PUSH_TIMEOUT_MS = 120_000;
+
+export const execGit: GitRunner = (args, cwd, options = {}) =>
+  new Promise((resolve, reject) => {
     execFile(
       "git",
       [...args],
@@ -47,15 +72,25 @@ export const execGit: GitRunner = (args, cwd) =>
         cwd,
         windowsHide: true,
         maxBuffer: 16 * 1024 * 1024,
+        ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
         // Never let git stop and wait for a password on a terminal nobody can see.
         env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" },
       },
       (error, stdout, stderr) => {
+        if (error !== null && error.code === "ENOENT") {
+          reject(new GitMissingError());
+          return;
+        }
         const code = error === null ? 0 : typeof error.code === "number" ? error.code : 1;
-        resolve({ code, stdout: String(stdout), stderr: String(stderr) });
+        // execFile kills a call that runs past its timeout and reports it as killed.
+        const timedOut = error !== null && options.timeoutMs !== undefined && error.killed === true;
+        resolve({ code, stdout: String(stdout), stderr: String(stderr), ...(timedOut ? { timedOut } : {}) });
       },
     );
   });
+
+/** Git's words for a remote it could not reach at all: no network, no DNS, a firewall. */
+const UNREACHABLE = /Could not resolve host|unable to access|Failed to connect|Connection timed out|Connection refused|Network is unreachable|Could not read from remote repository/i;
 
 const FORCE_FLAGS = new Set(["--force", "-f", "--force-with-lease", "--force-if-includes", "--mirror", "--delete", "-d"]);
 
@@ -78,13 +113,16 @@ export function guardArgv(args: readonly string[]): readonly string[] {
 /** The argv builders, one per git call, so the tests can pin every command Zenith runs. */
 export const gitArgv = {
   isRepo: (): string[] => ["rev-parse", "--is-inside-work-tree"],
+  topLevel: (): string[] => ["rev-parse", "--show-toplevel"],
+  prefix: (): string[] => ["rev-parse", "--show-prefix"],
   currentBranch: (): string[] => ["symbolic-ref", "--quiet", "--short", "HEAD"],
   originHead: (): string[] => ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
   branchExists: (branch: string): string[] => ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`],
   checkRefFormat: (branch: string): string[] => ["check-ref-format", "--branch", branch],
   remoteUrl: (): string[] => ["remote", "get-url", "origin"],
   status: (): string[] => ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-  ahead: (): string[] => ["rev-list", "--count", "@{upstream}..HEAD"],
+  /** Commits on HEAD that origin's copy of `branch` lacks; fails when origin has no copy yet. */
+  ahead: (branch: string): string[] => ["rev-list", "--count", `refs/remotes/origin/${branch}..HEAD`],
   userName: (): string[] => ["config", "user.name"],
   createBranch: (branch: string): string[] => ["switch", "-c", branch],
   switchBranch: (branch: string): string[] => ["switch", branch],
@@ -149,6 +187,21 @@ export function parsePorcelain(output: string): DesktopGitFile[] {
 
 const slash = (path: string): string => path.split("\\").join("/").replace(/^\.\//, "");
 
+/** Two folder paths name the same folder, as the operating system compares them (git prints `/`). */
+export function samePath(a: string, b: string): boolean {
+  const key = (path: string): string => {
+    let full = resolve(path);
+    try {
+      full = realpathSync.native(full);
+    } catch {
+      // A folder that is not there keeps its spelling; it then matches nothing that is.
+    }
+    full = full.replace(/[\\/]+$/, "");
+    return process.platform === "win32" ? full.toLowerCase() : full;
+  };
+  return a !== "" && key(a) === key(b);
+}
+
 export interface GitDeps {
   run?: GitRunner;
   /** The signed-in GitHub login, for the work branch name; null falls back to git's user.name. */
@@ -179,8 +232,8 @@ export class GitService {
     this.login = deps.login ?? (() => Promise.resolve(null));
   }
 
-  private async git(root: string, args: readonly string[]): Promise<GitOutput> {
-    return this.run(guardArgv(args), root);
+  private async git(root: string, args: readonly string[], options?: GitCallOptions): Promise<GitOutput> {
+    return options === undefined ? this.run(guardArgv(args), root) : this.run(guardArgv(args), root, options);
   }
 
   private async gitOk(root: string, args: readonly string[], what: string): Promise<string> {
@@ -214,6 +267,44 @@ export class GitService {
     return name.code === 0 && name.stdout.trim() !== "" ? name.stdout.trim() : "zenith";
   }
 
+  /**
+   * The project folder's path inside the repository as git prints paths (`planner/`, or "" when
+   * `zenith.json` is at the top). `git status` lists paths from the top of the repository and
+   * `HEAD:<path>` names one from there, so a project in a subfolder needs this to match its own
+   * project-relative paths (issue #406).
+   */
+  private async prefix(root: string): Promise<string> {
+    return (await this.gitOk(root, gitArgv.prefix(), "Finding the project in the repository")).trim();
+  }
+
+  /**
+   * The GitHub repository the folder is a clone of, and the base to open it at in GitHub mode
+   * (issue #213), or null when the folder is not a repository or `origin` is not on github.com.
+   * Read only: it runs `rev-parse`, `remote get-url` and `symbolic-ref`, nothing that writes.
+   */
+  async githubOrigin(root: string): Promise<DesktopGitHubOrigin | null> {
+    try {
+      return await this.readGitHubOrigin(root);
+    } catch (error) {
+      // Without git there is no clone to offer GitHub mode for; the open dialog just does not offer it.
+      if (error instanceof GitMissingError) return null;
+      throw error;
+    }
+  }
+
+  private async readGitHubOrigin(root: string): Promise<DesktopGitHubOrigin | null> {
+    if ((await this.git(root, gitArgv.isRepo())).code !== 0) return null;
+    // GitHub mode reads zenith.json at the top of the repository, so a project in a subfolder of
+    // one cannot be opened there.
+    const top = await this.git(root, gitArgv.topLevel());
+    if (top.code !== 0 || !samePath(top.stdout.trim(), root)) return null;
+    const url = await this.git(root, gitArgv.remoteUrl());
+    if (url.code !== 0) return null;
+    const remote = parseGitHubRemote(url.stdout);
+    if (remote === null) return null;
+    return { ...remote, base: await this.baseBranch(root) };
+  }
+
   async status(root: string, fileName: string | null): Promise<DesktopGitStatus> {
     const isRepo = (await this.git(root, gitArgv.isRepo())).code === 0;
     if (!isRepo) {
@@ -231,11 +322,14 @@ export class GitService {
     }
     const project = loadDesktopProject(root);
     const [branch, base] = [await this.currentBranch(root), await this.baseBranch(root)];
+    const prefix = await this.prefix(root);
     const files = parsePorcelain(await this.gitOk(root, gitArgv.status(), "Reading the git status"));
-    const autosDir = slash(project.link.autosDir).replace(/\/+$/, "");
-    const changedAutos = files.filter((file) => file.path.startsWith(`${autosDir}/`) && file.path.endsWith(".auto.json"));
+    const autosDir = `${prefix}${slash(project.link.autosDir).replace(/\/+$/, "")}`;
+    const changedAutos = files
+      .filter((file) => file.path.startsWith(`${autosDir}/`) && file.path.endsWith(".auto.json"))
+      .map((file) => ({ ...file, path: file.path.slice(prefix.length) }));
     const hasRemote = (await this.git(root, gitArgv.remoteUrl())).code === 0;
-    const aheadOut = await this.git(root, gitArgv.ahead());
+    const aheadOut = branch === null ? null : await this.git(root, gitArgv.ahead(branch));
     let workBranch: string | null = branch;
     if (branch === base && fileName !== null) {
       const autoName = assertAutoFileName(fileName).replace(/\.auto\.json$/, "");
@@ -250,7 +344,7 @@ export class GitService {
       changedAutos,
       otherChanges: files.length - changedAutos.length,
       hasRemote,
-      ahead: aheadOut.code === 0 ? Number(aheadOut.stdout.trim()) : null,
+      ahead: aheadOut !== null && aheadOut.code === 0 ? Number(aheadOut.stdout.trim()) : null,
     };
   }
 
@@ -263,6 +357,14 @@ export class GitService {
     const project = loadDesktopProject(root);
     const loaded = loadForGit(project, fileName);
     const autoName = loaded.auto.name;
+    const autoRel = autoRelPath(project, fileName);
+    // Refused before anything moves: with the auto unchanged, the commit would hold only its render.
+    // Status paths are from the top of the repository; the paths staged below are from the project.
+    const prefix = await this.prefix(root);
+    const changed = parsePorcelain(await this.gitOk(root, gitArgv.status(), "Reading the git status"));
+    if (!changed.some((file) => file.path === `${prefix}${autoRel}`)) {
+      throw new BridgeError(`Nothing to commit: ${fileName} is the same as in the last commit. Save your edits first.`);
+    }
     const base = await this.baseBranch(root);
     let branch = await this.currentBranch(root);
     if (branch === null) {
@@ -285,14 +387,12 @@ export class GitService {
     // Checked again after the switch: whatever happened above, the commit below never lands on base.
     const onto = assertNotBase(branch, base);
 
-    const autoRel = autoRelPath(project, fileName);
     const paths = [autoRel];
     const renderRel = writeRender(project, loaded);
     if (renderRel !== null) paths.push(renderRel);
     if (project.link.waypoints !== undefined) {
       const waypoints = slash(project.link.waypoints);
-      const changed = parsePorcelain((await this.git(root, gitArgv.status())).stdout).some((file) => file.path === waypoints);
-      if (changed) paths.push(waypoints);
+      if (changed.some((file) => file.path === `${prefix}${waypoints}`)) paths.push(waypoints);
     }
 
     await this.gitOk(root, gitArgv.add(paths), "Staging the auto");
@@ -307,10 +407,15 @@ export class GitService {
 
   async push(root: string): Promise<DesktopPushResult> {
     const branch = assertNotBase(await this.currentBranch(root), await this.baseBranch(root));
-    if ((await this.git(root, gitArgv.remoteUrl())).code !== 0) {
+    const url = await this.git(root, gitArgv.remoteUrl());
+    if (url.code !== 0) {
       throw new BridgeError("This repository has no remote called origin, so there is nowhere to push.");
     }
-    const out = await this.git(root, gitArgv.push(branch));
+    const where = parseGitHubRemote(url.stdout) === null ? "the origin remote" : "GitHub";
+    const out = await this.git(root, gitArgv.push(branch), { timeoutMs: PUSH_TIMEOUT_MS });
+    if (out.timedOut === true) {
+      throw new BridgeError("The push took too long, so Zenith stopped it. Check the connection and try again.");
+    }
     if (out.code !== 0) {
       const detail = out.stderr.trim();
       if (/rejected|non-fast-forward|fetch first/i.test(detail)) {
@@ -323,6 +428,9 @@ export class GitService {
           "GitHub refused the push: this computer is not signed in to git for that repository, or the account cannot push to it. Sign in with GitHub Desktop, Git Credential Manager or `gh auth login`, then push again.",
         );
       }
+      if (UNREACHABLE.test(detail)) {
+        throw new BridgeError(`Could not reach ${where}. Check the connection and try again.`);
+      }
       throw new BridgeError(`The push failed.\n${detail.split("\n").slice(-6).join("\n")}`);
     }
     return { branch, remote: "origin" };
@@ -330,11 +438,23 @@ export class GitService {
 
   /**
    * Opens (or updates) the pull request for the current work branch (06 section 3): validation
-   * errors block it, the branch is pushed first when the remote is behind, and the body is
+   * errors block it, the branch is pushed first when origin's copy is behind, and the body is
    * `core.prBody` with the committed render's raw URL.
+   *
+   * The pull request holds the branch's commits, while the check and the body read the auto on
+   * disk, so an auto that differs from the last commit (a save since the commit, or never
+   * committed) is refused: both then describe exactly what is pushed (issue #406).
    */
   async openPullRequest(root: string, fileName: string, deps: PullRequestDeps): Promise<DesktopPullRequestResult> {
     const project = loadDesktopProject(root);
+    const autoRel = autoRelPath(project, fileName);
+    const prefix = await this.prefix(root);
+    const files = parsePorcelain(await this.gitOk(root, gitArgv.status(), "Reading the git status"));
+    if (files.some((file) => file.path === `${prefix}${autoRel}`)) {
+      throw new BridgeError(
+        `${fileName} has changes that are not committed, and a pull request holds only commits. Commit it first, then open the pull request.`,
+      );
+    }
     const loaded = loadForGit(project, fileName);
     const errors = loaded.findings.filter((finding) => finding.severity === "error").length;
     if (hasErrors(loaded.findings)) {
@@ -346,10 +466,11 @@ export class GitService {
     const remote = parseGitHubRemote((await this.gitOk(root, gitArgv.remoteUrl(), "Reading the origin remote")).trim());
     if (remote === null) throw new BridgeError("The origin remote is not a GitHub repository, so Zenith cannot open a pull request there.");
 
-    const ahead = await this.git(root, gitArgv.ahead());
+    const ahead = await this.git(root, gitArgv.ahead(branch));
     if (ahead.code !== 0 || Number(ahead.stdout.trim()) > 0) await this.push(root);
 
-    const renderRel = `${slash(project.link.autosDir).replace(/\/+$/, "")}/.renders/${loaded.auto.name}.svg`;
+    // From the top of the repository: both `HEAD:<path>` and the raw URL name the file from there.
+    const renderRel = `${prefix}${renderRelPath(project, loaded.auto.name)}`;
     const renderCommitted = (await this.git(root, gitArgv.tracked(renderRel))).code === 0;
     const renderUrl = renderCommitted
       ? `https://raw.githubusercontent.com/${remote.owner}/${remote.repo}/${branch}/${renderRel}`
@@ -376,14 +497,35 @@ export class GitService {
 }
 
 function loadForGit(project: Project, fileName: string): LoadedAuto {
-  const result = loadAutoAndPlan(confinePath(project.root, autoRelPath(project, fileName)), project);
+  const result = loadAutoAndPlan(confineRelative(project.root, autoRelPath(project, fileName)), project);
   if (!result.ok) {
     throw new BridgeError(`${fileName} does not load: ${result.findings[0]?.message ?? "it does not parse"}`);
   }
   return result.loaded;
 }
 
-/** Writes `autosDir/.renders/<name>.svg`, the render the PR body shows (06 section 3). */
+/** The project-relative path of an auto's render, `autosDir/.renders/<name>.svg`. */
+const renderRelPath = (project: Project, autoName: string): string =>
+  `${slash(project.link.autosDir).replace(/\/+$/, "")}/.renders/${autoName}.svg`;
+
+const isLink = (path: string): boolean => {
+  try {
+    // Node reports a Windows junction as a symbolic link too.
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Writes `autosDir/.renders/<name>.svg`, the render the PR body shows (06 section 3). Both paths are
+ * confined through links like every other write, and a `.renders` that is itself a link is refused,
+ * so a link committed to the repository cannot lead the write out of it (issue #406). A link at the
+ * render's own name is removed, never followed, once its folder is known to be a plain one inside
+ * the project, so the render replaces it. That has to happen before the file's path is confined:
+ * the confinement resolves links, and would otherwise read the link's target as the render's place
+ * and refuse the commit instead of replacing the link (issue #453).
+ */
 function writeRender(project: Project, loaded: LoadedAuto): string | null {
   const estimateOutcome = tryCore(() => coreEstimate(loaded.plan, loaded.robot));
   const ledgerOutcome = tryCore(() => coreLedger(loaded.plan, loaded.field, resolveSeason(loaded.field).rules));
@@ -397,9 +539,17 @@ function writeRender(project: Project, loaded: LoadedAuto): string | null {
     ),
   );
   if (!renderOutcome.ok) return null;
-  const rel = `${slash(project.link.autosDir).replace(/\/+$/, "")}/.renders/${loaded.auto.name}.svg`;
-  const full = confinePath(project.root, rel);
-  mkdirSync(dirname(full), { recursive: true });
-  writeFileSync(full, renderOutcome.value, "utf8");
+  const rel = renderRelPath(project, loaded.auto.name);
+  const dirRel = dirname(rel);
+  const dir = confineRelative(project.root, dirRel);
+  if (isLink(dir)) {
+    throw new BridgeError(`${dirRel} is a link, so Zenith will not write the render through it. Make it a plain folder, then commit again.`);
+  }
+  mkdirSync(dir, { recursive: true });
+  // lstat, not stat: a file symlink, a directory symlink and a Windows junction are each unlinked
+  // themselves, and nothing at their target is touched.
+  const own = join(dir, basename(rel));
+  if (isLink(own)) unlinkSync(own);
+  writeReplacing(confineRelative(project.root, rel), renderOutcome.value);
   return rel;
 }

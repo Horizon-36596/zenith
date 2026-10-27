@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { poseSchema, poseSourceSchema } from "./common.js";
+import { poseSchema, poseSourceSchema, provenanceSchema } from "./common.js";
 import { formatVersionFor, schemaIdField } from "./ids.js";
 
 /**
@@ -103,16 +103,84 @@ export const expectSchema = z.object({
   tip: z.enum(["own", "opponent"]).optional(),
 });
 
+/** The fewest and the most corners an envelope's polygon may have. */
+export const ENVELOPE_MIN_POINTS = 3;
+export const ENVELOPE_MAX_POINTS = 32;
+
+/**
+ * The longest window an envelope may declare, in seconds: the whole autonomous period of an FTC
+ * match (SPEC: game manual, 30 s autonomous). A window longer than the period says nothing.
+ */
+export const ENVELOPE_MAX_DURATION_S = 30;
+
+/** One corner of an envelope's polygon, in field inches. */
+export const envelopePointSchema = z.object({
+  xIn: z.number(),
+  yIn: z.number(),
+});
+
+/**
+ * An optional, planner-only envelope on a step that runs (spec 13 section 10): while the step
+ * runs, for at most `maxDurationS`, the robot's bounding box is declared to stay inside `polygon`.
+ * The editor draws it, the estimate times a step with no prediction of its own by `maxDurationS`,
+ * and a share carries the polygon and the window, never the command behind it. The runtime ignores
+ * it. The schema bounds the corner count; ENVELOPE_SHAPE checks that the polygon is simple, so a
+ * half-edited file still loads and says what is wrong with it.
+ *
+ * `actualDurationS` is a what-if (issue #481): how long the step runs this time, to preview a run
+ * that finishes sooner than the window or fails early. Where the window times the step (the
+ * estimate, the instant sim and so the ideal playback), the planner uses it in place of
+ * `maxDurationS`. It is over 0 and at most `maxDurationS`, and absent means the step runs the whole
+ * window. A partner's projection keeps `maxDurationS`, the promise; the runtime ignores both.
+ */
+export const envelopeSchema = z
+  .object({
+    polygon: z.array(envelopePointSchema).min(ENVELOPE_MIN_POINTS).max(ENVELOPE_MAX_POINTS),
+    maxDurationS: z.number().positive().max(ENVELOPE_MAX_DURATION_S),
+    actualDurationS: z.number().positive().optional(),
+    provenance: provenanceSchema,
+  })
+  .refine(actualWithinWindow, (envelope) => ({
+    message: actualOverWindowMessage(envelope),
+    path: ["actualDurationS"],
+  }));
+
+/** True when an envelope's what-if run time, if it has one, fits inside its window. */
+export function actualWithinWindow(envelope: { maxDurationS: number; actualDurationS?: number | undefined }): boolean {
+  return envelope.actualDurationS === undefined || envelope.actualDurationS <= envelope.maxDurationS;
+}
+
+/** What the schema says about a what-if run time longer than the window it is a what-if of. */
+export function actualOverWindowMessage(envelope: { maxDurationS: number; actualDurationS?: number | undefined }): string {
+  return `An envelope's actualDurationS (${String(envelope.actualDurationS)} s) is longer than its maxDurationS (${String(envelope.maxDurationS)} s); the actual run time is at most maxDurationS.`;
+}
+
+/**
+ * Where a path that starts from `"current"` assumes the robot is when the step before it ends at a
+ * pose nobody can predict (a `movesRobot` command): the rejoin pose of spec 13 section 10. The
+ * planner starts the path here and takes it as the end of that step; when the step before ends at
+ * a known pose, the known pose wins and this is not used. The runtime ignores it: on the robot,
+ * `"current"` is always the follower's own pose.
+ */
+export const rejoinPoseSchema = z.object({
+  xIn: z.number(),
+  yIn: z.number(),
+  headingRad: z.number(),
+  provenance: provenanceSchema.optional(),
+});
+
 export const pathStepSchema = z.object({
   id: z.string().min(1).optional(),
   kind: z.literal("path"),
   timeoutS: z.number().positive().optional(),
+  rejoinFrom: rejoinPoseSchema.optional(),
   segments: z.array(segmentSchema).min(1),
   heading: headingSchema.optional(),
   speedFraction: z.number().positive().max(1).optional(),
   markers: z.array(markerSchema).optional(),
   endCondition: conditionRefSchema.optional(),
   expect: expectSchema.optional(),
+  envelope: envelopeSchema.optional(),
   notes: z.string().optional(),
 });
 
@@ -123,6 +191,7 @@ export const commandStepSchema = z.object({
   args: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   timeoutS: z.number().positive().optional(),
   expect: expectSchema.optional(),
+  envelope: envelopeSchema.optional(),
   notes: z.string().optional(),
 });
 
@@ -143,6 +212,7 @@ export const waitStepSchema = z
     seconds: z.number().nonnegative().optional(),
     until: z.string().min(1).optional(),
     timeoutS: z.number().positive().optional(),
+    envelope: envelopeSchema.optional(),
     notes: z.string().optional(),
   })
   .refine((step) => step.seconds !== undefined || step.until !== undefined, (step) => ({
@@ -152,7 +222,31 @@ export const waitStepSchema = z
     message: `${waitName(step)} has both seconds and until; a wait ends either after a time or on a condition, not both`,
   }));
 
+/**
+ * A planner-only transfer (format version 4): the author telling the ledger that game pieces move
+ * from one ledger location to another at this point in the routine, such as the alliance partner
+ * scoring into the hive, or the human player entering pieces through the loading zone. Nothing on
+ * the robot does it, so the robot runtime runs it as a wait of zero seconds and the Java generator
+ * writes it as a comment only.
+ *
+ * `expectedCount` is what the auto is written for; `actualCount`, when present, is what the ledger
+ * uses instead, so a team can preview "the partner did not tip" by setting it to 0 without touching
+ * the routine's structure. Absent, it equals `expectedCount`. Location ids are the season plugin's
+ * (`robot`, `partner`, a hive cell, a flower, a floor quadrant, a loading zone), and the
+ * TRANSFER_LOCATION check reports one the plugin does not know.
+ */
+export const transferStepSchema = z.object({
+  id: z.string().min(1).optional(),
+  kind: z.literal("transfer"),
+  from: z.string().min(1),
+  to: z.string().min(1),
+  expectedCount: z.number().int().nonnegative(),
+  actualCount: z.number().int().nonnegative().optional(),
+  notes: z.string().optional(),
+});
+
 export type PathStep = z.infer<typeof pathStepSchema>;
+export type TransferStep = z.infer<typeof transferStepSchema>;
 export type CommandStep = z.infer<typeof commandStepSchema>;
 export type WaitStep = z.infer<typeof waitStepSchema>;
 
@@ -183,14 +277,27 @@ export interface BranchStep {
   notes?: string;
 }
 
-export type Step = PathStep | CommandStep | WaitStep | SequenceStep | ParallelStep | BranchStep;
+export type Step =
+  | PathStep
+  | CommandStep
+  | WaitStep
+  | TransferStep
+  | SequenceStep
+  | ParallelStep
+  | BranchStep;
 
 /** The step kinds that hold other steps. */
 export type GroupStep = SequenceStep | ParallelStep | BranchStep;
 
 /** Every step kind, in the order the editor's insert menu lists them. */
-export const STEP_KINDS = ["path", "command", "wait", "sequence", "parallel", "branch"] as const;
+export const STEP_KINDS = ["path", "command", "wait", "transfer", "sequence", "parallel", "branch"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
+
+/** The step kinds the robot never acts on: they exist for the planner's ledger alone. */
+export const PLANNER_ONLY_STEP_KINDS = ["transfer"] as const;
+
+/** The count a transfer step moves in the ledger: `actualCount`, which defaults to `expectedCount`. */
+export const transferCount = (step: TransferStep): number => step.actualCount ?? step.expectedCount;
 
 /**
  * The lists of steps a step holds, in document order: none for a leaf, one for a sequence or a
@@ -272,6 +379,7 @@ export const stepSchema: z.ZodType<Step> = z.lazy(() =>
     pathStepSchema,
     commandStepSchema,
     waitStepSchema,
+    transferStepSchema,
     sequenceStepSchema,
     parallelStepSchema,
     branchStepSchema,
@@ -311,4 +419,10 @@ export type MarkerAt = z.infer<typeof markerAtSchema>;
 export type Marker = z.infer<typeof markerSchema>;
 export type CommandCall = z.infer<typeof commandCallSchema>;
 export type Expect = z.infer<typeof expectSchema>;
+export type EnvelopePoint = z.infer<typeof envelopePointSchema>;
+export type Envelope = z.infer<typeof envelopeSchema>;
+export type RejoinPose = z.infer<typeof rejoinPoseSchema>;
+
+/** The step kinds that may carry an `envelope`: the ones that run, as opposed to the groups. */
+export const ENVELOPE_STEP_KINDS = ["path", "command", "wait"] as const;
 export type Auto = z.infer<typeof autoSchema>;

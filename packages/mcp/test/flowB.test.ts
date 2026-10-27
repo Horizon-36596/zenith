@@ -180,15 +180,15 @@ describe("MCP flow B: an agent authors a new auto end to end", () => {
       });
       const createdBody = JSON.parse(textResult(created).text) as EditResult;
       expect(textResult(created).isError).toBe(false);
-      expect(createdBody.auto.steps.map((step) => step.id)).toContain("leg1");
+      expect(createdBody.auto.steps.map((step) => step.id)).toContain("path1");
 
-      // 2. addStep (path): after "leg1", deliberately with no heading mode, so the next validate
+      // 2. addStep (path): after "path1", deliberately with no heading mode, so the next validate
       // finds exactly the HEADING_MISSING error this flow is about to fix.
       const withPath = await client.callTool({
         name: "zenith.edit.addStep",
         arguments: {
           auto: "flowb",
-          afterId: "leg1",
+          afterId: "path1",
           step: {
             id: "toShoot",
             kind: "path",
@@ -320,7 +320,7 @@ describe("MCP flow B: an agent authors a new auto end to end", () => {
         name: "zenith.edit.addStep",
         arguments: {
           auto: "blocked",
-          afterId: "leg1",
+          afterId: "path1",
           step: {
             id: "noHeading",
             kind: "path",

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { bezierNodes, carriedHandles, inferNodeKind, mirroredOpposite, nodeKey, type NodeKind } from "./bezier.js";
 import { emptyHitScene, hitTest } from "./hit.js";
 import { NO_KEYS, resolveModifiers, type HeldKeys } from "./modifiers.js";
-import { headingDrag, planPointDrag, resolveLeader, smoothNodeMoves, type StartPoint } from "./pointDrag.js";
+import { headingDrag, planPointDrag, rayAnchorOf, resolveLeader, smoothNodeMoves, type StartPoint } from "./pointDrag.js";
 import { snapLabel, type SnapContext } from "./snap.js";
 import type { PointTarget } from "./types.js";
 
@@ -74,6 +74,100 @@ describe("resolveLeader: the point under the pointer", () => {
     const result = resolveLeader(start, { xIn: 20.6, yIn: 4 }, resolveModifiers(true, keys({ shift: true })), onAxis);
     expect(result.snap.kind).toBe("waypoint");
     expect(result.label).toBe("waypoint ahead · axis x (Shift)");
+  });
+});
+
+describe("resolveLeader with Shift on a path end: a ray from the anchor", () => {
+  const anchor: Vec2 = { xIn: -12, yIn: -63 };
+  /** driveOut made diagonal: (-12, -63) to (8, -43), 28.28 in at 45 degrees. */
+  const diagonalEnd: Pose = { xIn: 8, yIn: -43, headingRad: 0.3 };
+  const shift = resolveModifiers(true, keys({ shift: true }));
+  const length = (pose: Pose): number => Math.hypot(pose.xIn - anchor.xIn, pose.yIn - anchor.yIn);
+
+  it("lets the line come as short as the pointer does, not as short as its axis offset", () => {
+    const pointer = { xIn: anchor.xIn + 1.27, yIn: anchor.yIn + 1.27 };
+    const result = resolveLeader(diagonalEnd, pointer, shift, context(), anchor);
+    expect(length(result.pose)).toBeLessThanOrEqual(2);
+    expect(result.pose.xIn - anchor.xIn).toBeCloseTo(result.pose.yIn - anchor.yIn, 9);
+  });
+
+  it("moves the end by about the pointer's own move when the pointer crosses the diagonal", () => {
+    const along = { xIn: anchor.xIn + 14, yIn: anchor.yIn + 14 };
+    const before = resolveLeader(diagonalEnd, along, shift, context(), anchor).pose;
+    const across = resolveLeader(diagonalEnd, { xIn: along.xIn + 0.5, yIn: along.yIn - 0.5 }, shift, context(), anchor).pose;
+    expect(Math.hypot(across.xIn - before.xIn, across.yIn - before.yIn)).toBeLessThanOrEqual(1.5);
+  });
+
+  it("rounds the length, not the coordinates, to a half inch with quantise on", () => {
+    const pointer = { xIn: anchor.xIn + 10.1, yIn: anchor.yIn + 10.3 };
+    const result = resolveLeader(diagonalEnd, pointer, shift, context(), anchor);
+    expect(length(result.pose) / 0.5).toBeCloseTo(Math.round(length(result.pose) / 0.5), 9);
+    expect(result.pose.xIn - anchor.xIn).toBeCloseTo(result.pose.yIn - anchor.yIn, 9);
+    expect(result.label).toBe("grid 0.5 in · line 45° · length (Shift)");
+    expect(result.snap.ray).toEqual({ anchorIn: anchor, bearingRad: Math.PI / 4 });
+    const altShift = resolveModifiers(true, keys({ shift: true, alt: true }));
+    const free = resolveLeader(diagonalEnd, pointer, altShift, context(), anchor);
+    expect(length(free.pose)).toBeCloseTo(Math.hypot(10.2, 10.2), 9);
+    expect(free.label).toBe("free (Alt) · line 45° · length (Shift)");
+  });
+
+  it("takes a waypoint only when it is within the tolerance of the ray", () => {
+    const on = context({ waypoints: [{ name: "onRay", xIn: anchor.xIn + 10, yIn: anchor.yIn + 10.5 }] });
+    const taken = resolveLeader(diagonalEnd, { xIn: anchor.xIn + 10.2, yIn: anchor.yIn + 10.3 }, shift, on, anchor);
+    expect(taken.snap).toMatchObject({ kind: "waypoint", waypoint: "onRay" });
+    // 5 in off the ray: 20 px at 4 px/in, far past the 6 px tolerance.
+    const off = context({ waypoints: [{ name: "beside", xIn: anchor.xIn + 20, yIn: anchor.yIn + 10 }] });
+    const refused = resolveLeader(diagonalEnd, { xIn: anchor.xIn + 20, yIn: anchor.yIn + 10 }, shift, off, anchor);
+    expect(refused.snap.kind).not.toBe("waypoint");
+    expect(refused.pose.xIn - anchor.xIn).toBeCloseTo(refused.pose.yIn - anchor.yIn, 9);
+  });
+
+  it("moves the point along the ray to rest the footprint on a wall", () => {
+    const origin: Vec2 = { xIn: 0, yIn: 0 };
+    // The square footprint is 9 in either side, so it is flush with the 72 in walls at x = y = 63.
+    const press: Pose = { xIn: 20, yIn: 20, headingRad: 0 };
+    const result = resolveLeader(press, { xIn: 62.7, yIn: 62.7 }, shift, context(), origin);
+    expect(result.snap.kind).toBe("wall");
+    expect(result.pose.xIn).toBeCloseTo(63, 6);
+    expect(result.pose.yIn).toBeCloseTo(63, 6);
+    expect(result.label).toBe("wall · line 45° · length (Shift)");
+  });
+
+  it("keeps the axis rule when there is no anchor, as for a control point", () => {
+    const result = resolveLeader(start, { xIn: 20.1, yIn: 3 }, shift, context());
+    expect(result.pose).toMatchObject({ xIn: 20, yIn: 0 });
+    expect(result.label).toBe("grid 0.5 in · axis x (Shift)");
+  });
+
+  it("does nothing different without Shift", () => {
+    const result = resolveLeader(diagonalEnd, { xIn: 3.3, yIn: -50.2 }, resolveModifiers(true, keys()), context(), anchor);
+    expect(result.pose).toMatchObject({ xIn: 3.5, yIn: -50 });
+    expect(result.snap.ray).toBeUndefined();
+  });
+});
+
+describe("rayAnchorOf: where a path end's ray starts", () => {
+  const polygons: Vec2[][] = [
+    [{ xIn: 0, yIn: 0 }, { xIn: 5, yIn: 5 }, { xIn: 10, yIn: 0 }],
+    [{ xIn: 10, yIn: 0 }, { xIn: 20, yIn: 10 }],
+    [{ xIn: 20, yIn: 10 }, { xIn: 30, yIn: 10 }],
+  ];
+  const target = (segmentIndex: number, pointKind: PointTarget["pointKind"]): PointTarget => ({ segmentIndex, pointKind });
+
+  it("is the segment's own start for an end, even one with controls", () => {
+    expect(rayAnchorOf(polygons, target(0, "to"))).toEqual({ xIn: 0, yIn: 0 });
+    expect(rayAnchorOf(polygons, target(2, "to"))).toEqual({ xIn: 20, yIn: 10 });
+  });
+
+  it("is the incoming segment's start for the node that joins two segments, whichever copy is grabbed", () => {
+    expect(rayAnchorOf(polygons, target(1, "to"))).toEqual({ xIn: 10, yIn: 0 });
+    expect(rayAnchorOf(polygons, target(2, "from"))).toEqual({ xIn: 10, yIn: 0 });
+  });
+
+  it("is the first segment's far end for the path's first point, and none for a control", () => {
+    expect(rayAnchorOf(polygons, target(0, "from"))).toEqual({ xIn: 10, yIn: 0 });
+    expect(rayAnchorOf(polygons, { segmentIndex: 0, pointKind: "control", controlIndex: 0 })).toBeNull();
+    expect(rayAnchorOf([], target(0, "to"))).toBeNull();
   });
 });
 

@@ -107,7 +107,8 @@ describe("examples/starter", () => {
     const auto = loadStarterAuto("collect-and-score");
     const steps = allSteps(auto.steps);
     const marked = steps.filter((step) => step.kind === "path" && (step.markers ?? []).some((marker) => marker.command.name === "intakeOn"));
-    expect(marked.map((step) => step.id)).toEqual(["sweepGarden"]);
+    // Both collecting paths, the one up to the flower and the one along the garden line, start the intake with a marker.
+    expect(marked.map((step) => step.id)).toEqual(["collectFlower", "sweepGarden"]);
     expect(steps.some((step) => step.kind === "wait" && step.until === "hopperFull")).toBe(true);
 
     const group = auto.steps.find((step) => step.kind === "parallel");
@@ -161,12 +162,13 @@ describe("examples/starter", () => {
     }
   });
 
-  it("every robot and waypoint number is a placeholder or set by hand", () => {
-    // The public example is made up: nothing in it may claim to be measured.
+  it("every robot and waypoint number is a placeholder, set by hand or set from the editor", () => {
+    // The public example is made up: nothing in it may claim to be measured. The waypoints moved off
+    // the centre line for issue #365 say they were set from the editor.
     const text = readText("autos/robot.json") + readText("autos/waypoints.json");
     const provenance = [...text.matchAll(/"provenance": "([^"]*)"/g)].map((match) => match[1] ?? "");
     expect(provenance.length).toBeGreaterThan(10);
-    for (const label of provenance) expect(label, label).toMatch(/^(PLACEHOLDER|SET BY HAND|SPEC)/);
+    for (const label of provenance) expect(label, label).toMatch(/^(PLACEHOLDER|SET BY HAND|SPEC|SET FROM EDITOR)/);
     expect(text).not.toMatch(/MEASURED/);
   });
 });

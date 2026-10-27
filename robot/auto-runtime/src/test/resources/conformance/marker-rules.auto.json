@@ -1,0 +1,45 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 2,
+  "name": "marker-rules",
+  "title": "Markers on a path cut short, and markers that need one subsystem",
+  "alliance": "RED",
+  "start": { "pose": { "ref": "a" } },
+  "steps": [
+    {
+      "id": "cut",
+      "kind": "path",
+      "segments": [
+        { "kind": "line", "from": { "ref": "a" }, "to": { "ref": "b" } },
+        { "kind": "line", "from": { "ref": "b" }, "to": { "ref": "c" } }
+      ],
+      "heading": { "mode": "tangent" },
+      "endCondition": { "condition": "pastHalfway" },
+      "markers": [
+        { "at": { "t": 0.25 }, "command": { "name": "instant", "args": { "at": "before cut" } } },
+        { "at": { "t": 0.9 }, "command": { "name": "instant", "args": { "at": "past cut" } } }
+      ]
+    },
+    {
+      "id": "share",
+      "kind": "path",
+      "segments": [{ "kind": "line", "from": "current", "to": { "ref": "d" } }],
+      "heading": { "mode": "tangent" },
+      "markers": [
+        { "at": { "t": 0 }, "command": { "name": "take", "args": { "at": "raise", "loops": 40, "requires": "shooter" } } },
+        { "at": { "t": 0 }, "command": { "name": "take", "args": { "at": "side", "loops": 40, "requires": "intake" } } },
+        { "at": { "distanceIn": 10 }, "command": { "name": "take", "args": { "at": "lower", "loops": 3, "requires": "shooter" } } }
+      ]
+    },
+    {
+      "id": "turn",
+      "kind": "path",
+      "segments": [{ "kind": "line", "from": "current", "to": { "ref": "d" } }],
+      "heading": { "mode": "constant", "headingRad": 0.7854 },
+      "markers": [
+        { "at": { "t": 0 }, "command": { "name": "take", "args": { "at": "turn raise", "loops": 40, "requires": "shooter" } } },
+        { "at": { "t": 0 }, "command": { "name": "take", "args": { "at": "turn lower", "loops": 3, "requires": "shooter" } } }
+      ]
+    }
+  ]
+}

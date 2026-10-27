@@ -67,6 +67,9 @@ class AllianceFrameTest {
         mirrors.put("point symmetry about (72, 72)", p -> new Pose(144 - p.x(), 144 - p.y(), p.heading() + Math.PI));
         mirrors.put("reflection across x", p -> new Pose(p.x(), -p.y(), -p.heading()));
         mirrors.put("reflection across y", p -> new Pose(-p.x(), p.y(), Math.PI - p.heading()));
+        // Not a mirror, but a frame a team might write: it keeps every heading and still moves a
+        // facePoint target.
+        mirrors.put("shift by (72, 72)", p -> new Pose(p.x() + 72, p.y() + 72, p.heading()));
         return mirrors;
     }
 
@@ -218,7 +221,7 @@ class AllianceFrameTest {
     }
 
     @Test
-    void aFrameThatMirrorsNothingHandsTheFileBackUnchanged() {
+    void aFrameThatTurnsNothingKeepsEveryHeadingAndMovesOnlyFacePointTargets() {
         AllianceFrame identity = AllianceFrame.of(IDENTITY);
         for (AutoFile.Heading heading : headings().values()) {
             assertSame(heading, identity.heading(heading));
@@ -228,6 +231,14 @@ class AllianceFrameTest {
         AllianceFrame shifted = AllianceFrame.of(p -> new Pose(p.x() + 72, p.y() + 72, p.heading()));
         AutoFile.Heading linear = linear(-2.3562, 2.3562);
         assertSame(linear, shifted.heading(linear));
+        assertEquals(3.5, shifted.heading(3.5), 0);
+        // Its facePoint target still moves with the field, inside a piecewise range too.
+        AutoFile.Heading face = shifted.heading(facePoint(-60, 12));
+        assertEquals(12, face.pointXIn, 0);
+        assertEquals(84, face.pointYIn, 0);
+        AutoFile.Heading ranges = shifted.heading(headings().get("piecewise with a linear inner"));
+        assertEquals(102, ranges.ranges.get(2).heading.pointXIn, 0);
+        assertEquals(42, ranges.ranges.get(2).heading.pointYIn, 0);
     }
 
     @Test

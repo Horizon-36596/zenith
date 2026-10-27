@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   emptyHitScene,
+  handleRank,
   hitTest,
+  isMarkerOrLineHit,
+  nextStepUnder,
   projectOntoPolyline,
+  stepsUnder,
   type HitScene,
+  type MarkerEntry,
   type PolylineEntry,
 } from "./hit.js";
 
@@ -94,5 +99,158 @@ describe("hitTest priority", () => {
     const below: PolylineEntry = { stepId: "park", xsPx: [100, 200], ysPx: [104, 104], ts: [0, 1] };
     const hit = hitTest(scene({ polylines: [straight, below] }), 150, 103);
     expect(hit?.stepId).toBe("park");
+  });
+});
+
+/**
+ * Issue #149: where steps overlap, markers and lines are one tier, ranked the selected step's
+ * markers, then its line, then other steps' markers, then their lines. Among markers the later step
+ * wins, then the nearer; among lines the nearer wins, then the later step.
+ */
+describe("hitTest on overlapping steps", () => {
+  /** The same straight run as `straight`, for step `stepId` at `stepIndex`. */
+  const line = (stepId: string, stepIndex: number, selected = false, yPx = 100): PolylineEntry => ({
+    stepId,
+    xsPx: [100, 200],
+    ysPx: [yPx, yPx],
+    ts: [0, 1],
+    rank: handleRank(stepIndex, selected),
+  });
+  const markerOf = (stepId: string, stepIndex: number, selected = false, xPx = 150): MarkerEntry => ({
+    stepId,
+    markerIndex: 0,
+    xPx,
+    yPx: 100,
+    rank: handleRank(stepIndex, selected),
+  });
+
+  it("returns the earlier of two identical lines when it is selected", () => {
+    const hit = hitTest(scene({ polylines: [line("outA", 0, true), line("outC", 2)] }), 150, 100);
+    expect(hit).toEqual({ stepId: "outA", t: 0.5 });
+  });
+
+  it("returns the later of two identical lines when neither is selected", () => {
+    expect(hitTest(scene({ polylines: [line("outA", 0), line("outC", 2)] }), 150, 100)?.stepId).toBe("outC");
+  });
+
+  it("does not let a later line beat a nearer earlier one", () => {
+    const polylines = [line("outA", 0, false, 101), line("outC", 2, false, 104)];
+    expect(hitTest(scene({ polylines }), 150, 101)?.stepId).toBe("outA");
+  });
+
+  it("keeps the selected step's line over a nearer line of another step", () => {
+    const polylines = [line("outA", 0, true, 104), line("outC", 2, false, 100)];
+    expect(hitTest(scene({ polylines }), 150, 100)?.stepId).toBe("outA");
+  });
+
+  it("gives a later step's marker on the selected step's line to that line", () => {
+    const hit = hitTest(scene({ polylines: [line("outA", 0, true), line("outC", 2)], markers: [markerOf("outC", 2)] }), 150, 100);
+    expect(hit).toEqual({ stepId: "outA", t: 0.5 });
+  });
+
+  it("gives the selected step's own marker the press over its line", () => {
+    const markers = [markerOf("outC", 2), markerOf("outA", 0, true)];
+    const hit = hitTest(scene({ polylines: [line("outA", 0, true), line("outC", 2)], markers }), 150, 100);
+    expect(hit).toEqual({ stepId: "outA", markerIndex: 0 });
+  });
+
+  it("gives another step's marker the press over the lines of steps that are not selected", () => {
+    const hit = hitTest(scene({ polylines: [line("outA", 0), line("outC", 2)], markers: [markerOf("outA", 0)] }), 150, 100);
+    expect(hit).toEqual({ stepId: "outA", markerIndex: 0 });
+  });
+
+  it("gives the later step's marker an overlap of markers, even when an earlier one is nearer", () => {
+    const markers = [markerOf("outA", 0, false, 150), markerOf("outC", 2, false, 156)];
+    expect(hitTest(scene({ markers }), 151, 100)).toEqual({ stepId: "outC", markerIndex: 0 });
+  });
+
+  it("still gives a pin the press over a line and a marker the press over a pin", () => {
+    const pin = { name: "scoreSouth", xPx: 150, yPx: 100, label: null };
+    expect(hitTest(scene({ polylines: [line("outA", 0, true)], pins: [pin] }), 150, 100)).toEqual({ stepId: "", waypoint: "scoreSouth" });
+    expect(hitTest(scene({ markers: [markerOf("outC", 2)], pins: [pin] }), 150, 100)).toEqual({ stepId: "outC", markerIndex: 0 });
+  });
+});
+
+/** Issue #149: Alt+click moves to the next step under the pointer, in the order a click ranks them. */
+describe("stepsUnder and nextStepUnder", () => {
+  const line = (stepId: string, stepIndex: number, selected = false): PolylineEntry => ({
+    stepId,
+    xsPx: [100, 200],
+    ysPx: [100, 100],
+    ts: [0, 1],
+    rank: handleRank(stepIndex, selected),
+  });
+  /** Three steps on one line, outA selected, as in the e2e spec. */
+  const shared = scene({ polylines: [line("outA", 0, true), line("backB", 1), line("outC", 2)] });
+
+  it("lists every step under the pointer once, in rank order with nothing selected", () => {
+    expect(stepsUnder(shared, 150, 100).map((hit) => hit.stepId)).toEqual(["outC", "backB", "outA"]);
+    expect(stepsUnder(shared, 150, 140)).toEqual([]);
+  });
+
+  it("lists a step at its marker when its marker is under the pointer", () => {
+    const withMarker = { ...shared, markers: [{ stepId: "outA", markerIndex: 2, xPx: 150, yPx: 100, rank: handleRank(0, true) }] };
+    expect(stepsUnder(withMarker, 150, 100)).toEqual([
+      { stepId: "outA", markerIndex: 2 },
+      { stepId: "outC", t: 0.5 },
+      { stepId: "backB", t: 0.5 },
+    ]);
+  });
+
+  it("cycles outC, backB, outA from outA, whichever is selected", () => {
+    expect(nextStepUnder(shared, 150, 100, "outA")?.stepId).toBe("outC");
+    expect(nextStepUnder(shared, 150, 100, "outC")?.stepId).toBe("backB");
+    expect(nextStepUnder(shared, 150, 100, "backB")?.stepId).toBe("outA");
+  });
+
+  it("starts at the top of the list when the selected step is not under the pointer", () => {
+    expect(nextStepUnder(shared, 150, 100, undefined)?.stepId).toBe("outC");
+    expect(nextStepUnder(shared, 150, 100, "park")?.stepId).toBe("outC");
+  });
+
+  it("returns null where no step is under the pointer", () => {
+    expect(nextStepUnder(shared, 150, 140, "outA")).toBeNull();
+  });
+});
+
+/**
+ * Review of issue #149: Alt+click walks the steps under the pointer only where the press landed on a
+ * marker or a line. A dot, the start mark and a pin sit above that tier and keep the press, so an
+ * Alt+click on one of them does what a plain click does, even where a line runs under it.
+ */
+describe("isMarkerOrLineHit", () => {
+  /** One selected step, `solo`, from its start mark at (100, 100) to its end dot at (200, 100). */
+  const solo = scene({
+    polylines: [{ stepId: "solo", xsPx: [100, 200], ysPx: [100, 100], ts: [0, 1], rank: handleRank(0, true) }],
+    handles: [{ stepId: "solo", point: { segmentIndex: 0, pointKind: "to" }, xPx: 200, yPx: 100, rank: handleRank(0, true) }],
+    markers: [{ stepId: "solo", markerIndex: 0, xPx: 125, yPx: 100, rank: handleRank(0, true) }],
+    start: { xPx: 100, yPx: 100 },
+    pins: [{ name: "scoreNorth", xPx: 160, yPx: 100, label: null }],
+  });
+
+  it("is true for a press on a line or a marker", () => {
+    expect(hitTest(solo, 180, 100)).toEqual({ stepId: "solo", t: 0.8 });
+    expect(isMarkerOrLineHit(hitTest(solo, 180, 100))).toBe(true);
+    expect(hitTest(solo, 125, 100)).toEqual({ stepId: "solo", markerIndex: 0 });
+    expect(isMarkerOrLineHit(hitTest(solo, 125, 100))).toBe(true);
+  });
+
+  it("is false for the end dot, the start mark and a pin on the line, selected or not", () => {
+    const endDot = hitTest(solo, 200, 100);
+    expect(endDot).toEqual({ stepId: "solo", point: { segmentIndex: 0, pointKind: "to" } });
+    expect(isMarkerOrLineHit(endDot)).toBe(false);
+    const start = hitTest(solo, 100, 100);
+    expect(start).toEqual({ stepId: "", start: true });
+    expect(isMarkerOrLineHit(start)).toBe(false);
+    const pin = hitTest(solo, 160, 100);
+    expect(pin).toEqual({ stepId: "", waypoint: "scoreNorth" });
+    expect(isMarkerOrLineHit(pin)).toBe(false);
+    const selectedPin = hitTest({ ...solo, pins: [{ name: "scoreNorth", xPx: 160, yPx: 100, label: null, selected: true }] }, 160, 100);
+    expect(selectedPin).toEqual({ stepId: "", waypoint: "scoreNorth" });
+    expect(isMarkerOrLineHit(selectedPin)).toBe(false);
+  });
+
+  it("is false over empty field", () => {
+    expect(isMarkerOrLineHit(hitTest(solo, 150, 140))).toBe(false);
   });
 });

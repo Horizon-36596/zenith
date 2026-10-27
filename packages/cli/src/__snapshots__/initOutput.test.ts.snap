@@ -1,0 +1,212 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`zenith init output > writes the command library and the robot class it is given, and nothing else changes > zenith.json with a library and a robot class 1`] = `
+"{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/link.json",
+  "formatVersion": 1,
+  "autosDir": "autos",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "waypoints": "autos/waypoints.json",
+  "deploy": {
+    "kind": "androidAssets",
+    "dir": "TeamCode/src/main/assets/autos",
+    "commandLibrary": "ivy",
+    "robotClass": "org.firstinspires.ftc.teamcode.robot.TeamRobot"
+  },
+  "codegen": {
+    "package": "org.firstinspires.ftc.teamcode.zenith",
+    "dir": "TeamCode/src/main/java"
+  }
+}
+"
+`;
+
+exports[`zenith init output > writes the same zenith.json, robot.json and waypoints.json as before the skeletons moved into core > robot.json 1`] = `
+"{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/robot.json",
+  "formatVersion": 1,
+  "name": "team-robot",
+  "frame": {
+    "forward": "+x",
+    "left": "+y",
+    "headingZero": "+x",
+    "headingPositive": "ccw"
+  },
+  "footprint": {
+    "startIn": {
+      "lengthIn": 18,
+      "widthIn": 14,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init"
+    },
+    "expandedIn": {
+      "lengthIn": 18,
+      "widthIn": 14,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init"
+    },
+    "centreOfRotationIn": {
+      "xIn": 0,
+      "yIn": 0,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init"
+    }
+  },
+  "heightIn": {
+    "value": 18,
+    "provenance": "NEEDS MEASUREMENT: written by zenith init"
+  },
+  "kinematics": {
+    "maxForwardVelInPerS": {
+      "value": 60,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init"
+    },
+    "maxStrafeVelInPerS": {
+      "value": 50,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init"
+    },
+    "forwardDecelInPerS2": {
+      "value": 60,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init"
+    },
+    "strafeDecelInPerS2": {
+      "value": 30,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init"
+    },
+    "accelInPerS2": {
+      "value": 60,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init"
+    },
+    "maxAngularVelRadPerS": {
+      "value": 6,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init"
+    },
+    "defaultPathSpeedFraction": {
+      "value": 0.8,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init"
+    },
+    "follower": {
+      "library": "pedro",
+      "version": "3.0.0-20260828.185437-17",
+      "holdEnd": true
+    }
+  },
+  "commands": [],
+  "conditions": []
+}
+"
+`;
+
+exports[`zenith init output > writes the same zenith.json, robot.json and waypoints.json as before the skeletons moved into core > waypoints.json 1`] = `
+"{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/waypoints.json",
+  "formatVersion": 1,
+  "waypoints": {
+    "start": {
+      "xIn": -12,
+      "yIn": -63,
+      "headingRad": 1.5708,
+      "provenance": "NEEDS MEASUREMENT: written by zenith init, a legal BIOBUZZ start for the skeleton robot"
+    }
+  }
+}
+"
+`;
+
+exports[`zenith init output > writes the same zenith.json, robot.json and waypoints.json as before the skeletons moved into core > zenith.json 1`] = `
+"{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/link.json",
+  "formatVersion": 1,
+  "autosDir": "autos",
+  "robot": "autos/robot.json",
+  "field": "autos/field/biobuzz.field.json",
+  "waypoints": "autos/waypoints.json",
+  "deploy": {
+    "kind": "androidAssets",
+    "dir": "TeamCode/src/main/assets/autos"
+  },
+  "codegen": {
+    "package": "org.firstinspires.ftc.teamcode.zenith",
+    "dir": "TeamCode/src/main/java"
+  }
+}
+"
+`;
+
+exports[`zenith init output > zenith new writes the same RED and BLUE skeleton autos as before > demo.auto.json 1`] = `
+"{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 4,
+  "name": "demo",
+  "title": "demo",
+  "alliance": "RED",
+  "start": {
+    "pose": {
+      "xIn": -12,
+      "yIn": -63,
+      "headingRad": 1.5708,
+      "provenance": "NEEDS MEASUREMENT: written by zenith new, a legal BIOBUZZ start for the skeleton robot"
+    }
+  },
+  "steps": [
+    {
+      "id": "path1",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": -12,
+            "yIn": -39,
+            "provenance": "PLACEHOLDER: written by zenith new, 24 in straight out from the start"
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "notes": "Replace this path with the real opening move."
+    }
+  ]
+}
+"
+`;
+
+exports[`zenith init output > zenith new writes the same RED and BLUE skeleton autos as before > demo-blue.auto.json 1`] = `
+"{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 4,
+  "name": "demo-blue",
+  "title": "demo-blue",
+  "alliance": "BLUE",
+  "start": {
+    "pose": {
+      "xIn": 12,
+      "yIn": 63,
+      "headingRad": -1.5708,
+      "provenance": "NEEDS MEASUREMENT: written by zenith new, a legal BIOBUZZ start for the skeleton robot"
+    }
+  },
+  "steps": [
+    {
+      "id": "path1",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": 12,
+            "yIn": 39,
+            "provenance": "PLACEHOLDER: written by zenith new, 24 in straight out from the start"
+          }
+        }
+      ],
+      "heading": {
+        "mode": "tangent"
+      },
+      "notes": "Replace this path with the real opening move."
+    }
+  ]
+}
+"
+`;

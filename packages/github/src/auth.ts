@@ -112,16 +112,19 @@ export class BrowserTokenStore implements TokenStore {
 
   constructor(options: { persist?: boolean; storage?: Storage } = {}) {
     const persist = options.persist ?? true;
-    const candidate = options.storage ?? (typeof sessionStorage === "undefined" ? null : sessionStorage);
-    this.storage = persist ? candidate : null;
-    if (this.storage) {
+    let storage: Storage | null = null;
+    if (persist) {
+      // Reading the global is inside the try too: with site data blocked, the `sessionStorage`
+      // getter itself throws, and a memory-only store must still come out (issue #407).
       try {
-        const stored = this.storage.getItem(BrowserTokenStore.KEY);
+        storage = options.storage ?? (typeof sessionStorage === "undefined" ? null : sessionStorage);
+        const stored = storage?.getItem(BrowserTokenStore.KEY);
         if (stored) this.memory.save(stored);
       } catch {
-        this.storage = null;
+        storage = null;
       }
     }
+    this.storage = storage;
   }
 
   private static readonly KEY = "zenith.github.token";

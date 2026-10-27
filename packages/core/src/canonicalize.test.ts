@@ -1,4 +1,6 @@
 import { LEGACY_SCHEMA_ID, parseAuto, parseField, parseRobot, parseWaypoints, SCHEMA_ID } from "@horizon36596/zenith-schema";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { canonicalize } from "./canonicalize.js";
 import { testField, testRobot, testWaypoints } from "./testing/fixtures.js";
@@ -6,7 +8,7 @@ import { testField, testRobot, testWaypoints } from "./testing/fixtures.js";
 /** Written by hand in canonical form. The round trip must give back these exact bytes. */
 const CANONICAL_AUTO = `{
   "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
-  "formatVersion": 3,
+  "formatVersion": 4,
   "name": "collect-and-score",
   "title": "Collect and score",
   "robot": "autos/robot.json",
@@ -104,8 +106,8 @@ describe("canonicalize", () => {
     expect(canonicalize("auto", parsed)).toBe(CANONICAL_AUTO);
   });
 
-  it("format version 3: writes a v1 auto as v3 and changes nothing else", () => {
-    const v1 = CANONICAL_AUTO.replace('"formatVersion": 3,', '"formatVersion": 1,');
+  it("format version 4: writes a v1 auto as v4 and changes nothing else", () => {
+    const v1 = CANONICAL_AUTO.replace('"formatVersion": 4,', '"formatVersion": 1,');
     expect(canonicalize("auto", JSON.parse(v1) as unknown)).toBe(CANONICAL_AUTO);
     expect(canonicalize("auto", parseAuto(JSON.parse(v1) as unknown))).toBe(CANONICAL_AUTO);
   });
@@ -196,5 +198,106 @@ describe("canonicalize", () => {
     const legacyText = CANONICAL_AUTO.replace(SCHEMA_ID.auto, LEGACY_SCHEMA_ID.auto);
     expect(legacyText).not.toBe(CANONICAL_AUTO);
     expect(canonicalize("auto", JSON.parse(legacyText) as unknown)).toBe(CANONICAL_AUTO);
+  });
+
+  it("issue #377: writes the current $schema id first for a file that has none, and nothing else changes", () => {
+    const parsed = JSON.parse(CANONICAL_AUTO) as Record<string, unknown>;
+    delete parsed["$schema"];
+    expect(canonicalize("auto", parsed)).toBe(CANONICAL_AUTO);
+    expect(canonicalize("auto", parseAuto(parsed))).toBe(CANONICAL_AUTO);
+  });
+
+  it("issue #377: a positive timeout that would round to 0 is written as the smallest step, so it loads again", () => {
+    const parsed = JSON.parse(CANONICAL_AUTO) as { steps: Record<string, unknown>[] };
+    parsed.steps[0] = { ...parsed.steps[0], timeoutS: 0.0004 };
+    const text = canonicalize("auto", parseAuto(parsed));
+    expect(text).toContain('"timeoutS": 0.001');
+    expect(() => parseAuto(JSON.parse(text) as unknown)).not.toThrow();
+    expect(canonicalize("auto", parseAuto(JSON.parse(text) as unknown))).toBe(text);
+    // A key that may be 0 still rounds to 0, as before.
+    expect(canonicalize("auto", { ...parseAuto(parsed), start: { pose: { xIn: 0.0004, yIn: 0, headingRad: 0 } } })).toContain(
+      '"xIn": 0,',
+    );
+  });
+});
+
+describe("a strut in canonical form (issue #228)", () => {
+  /** Written by hand in canonical form: the keys in the order the format names them. */
+  const CANONICAL_STRUT = `    {
+      "id": "frameLegNorthEast",
+      "kind": "strut",
+      "fromIn": {
+        "xIn": 23.81,
+        "yIn": 18.56,
+        "zIn": 0.53
+      },
+      "toIn": {
+        "xIn": 12.74,
+        "yIn": 0.51,
+        "zIn": 41.09
+      },
+      "radiusIn": 0.78,
+      "solidToRobot": true,
+      "provenance": "PLACEHOLDER: test fixture"
+    }`;
+
+  it("writes id, kind, fromIn, toIn, radiusIn, solidToRobot and provenance in that order, and reads back the same", () => {
+    const scrambled = {
+      provenance: "PLACEHOLDER: test fixture",
+      radiusIn: 0.78,
+      solidToRobot: true,
+      toIn: { zIn: 41.09, yIn: 0.51, xIn: 12.74 },
+      fromIn: { zIn: 0.53, xIn: 23.81, yIn: 18.56 },
+      kind: "strut",
+      id: "frameLegNorthEast",
+    };
+    const text = canonicalize("field", { ...testField, formatVersion: 3, obstacles: [scrambled] });
+    expect(text).toContain(CANONICAL_STRUT);
+    expect(text).toContain('"formatVersion": 3');
+    const again = canonicalize("field", parseField(JSON.parse(text) as unknown));
+    expect(again).toBe(text);
+  });
+
+  it("rounds a strut's inches to three decimals like every other key that names inches", () => {
+    const strut = {
+      id: "leg",
+      kind: "strut",
+      fromIn: { xIn: 1.23456, yIn: 0, zIn: 0 },
+      toIn: { xIn: 0, yIn: 0, zIn: 10 },
+      radiusIn: 0.77777,
+    };
+    const text = canonicalize("field", { ...testField, formatVersion: 3, obstacles: [strut] });
+    expect(text).toContain('"xIn": 1.235');
+    expect(text).toContain('"radiusIn": 0.778');
+  });
+});
+
+/**
+ * Owner ruling D8: `footprint.clearanceIn` is the last key of `footprint`, after `heightIn`, as
+ * site/docs/file-format.md lists it. The fixture is written by hand in canonical form.
+ */
+describe("footprint.clearanceIn in canonical form (D8)", () => {
+  const fixture = readFileSync(
+    fileURLToPath(new URL("../../schema/fixtures/canonical/robot.clearance.json", import.meta.url)),
+    "utf8",
+  ).replace(/\r\n/g, "\n");
+
+  it("round-trips the fixture byte for byte", () => {
+    expect(canonicalize("robot", parseRobot(JSON.parse(fixture) as unknown))).toBe(fixture);
+  });
+
+  it("puts the key last in footprint, after heightIn, wherever it was written", () => {
+    const parsed = JSON.parse(fixture) as { footprint: Record<string, unknown> };
+    const { clearanceIn, ...rest } = parsed.footprint;
+    const scrambled = { ...parsed, footprint: { clearanceIn, ...rest } };
+    const text = canonicalize("robot", parseRobot(scrambled));
+    expect(text).toBe(fixture);
+    const footprint = text.slice(text.indexOf('"footprint"'), text.indexOf('"kinematics"'));
+    expect(footprint.indexOf('"heightIn"')).toBeLessThan(footprint.indexOf('"clearanceIn"'));
+    expect(footprint.indexOf('"centreOfRotationIn"')).toBeLessThan(footprint.indexOf('"clearanceIn"'));
+  });
+
+  it("leaves a robot without the key unchanged: nothing is added on save", () => {
+    expect(canonicalize("robot", testRobot)).not.toContain("clearanceIn");
   });
 });

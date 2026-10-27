@@ -116,6 +116,18 @@ describe("buildSimReport", () => {
     expect(report.inert).toContain("ledger");
   });
 
+  it("totals the actual time as the span of the steps, not the sum of overlapping parallel steps", () => {
+    const trace = baseTrace({
+      steps: [
+        { id: "drive", startS: 0, endS: 5, interrupted: false },
+        { id: "intake", startS: 0, endS: 5, interrupted: false },
+        { id: "shoot1", startS: 5, endS: 6, interrupted: false },
+      ],
+    });
+    expect(buildSimReport(trace, plan, null).totalActualS).toBeCloseTo(6, 5);
+    expect(buildSimReport(baseTrace({ steps: [] }), plan, null).totalActualS).toBe(0);
+  });
+
   it("leaves estimateNominalS and deltaS null when no estimate is available", () => {
     const report = buildSimReport(baseTrace(), plan, null);
     for (const step of report.steps) {

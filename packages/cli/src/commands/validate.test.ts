@@ -118,3 +118,21 @@ describe("finding 27: validate resolves an auto relative to its project, not the
     }
   });
 });
+
+describe("an auto whose file name does not match its name", () => {
+  it("is a SCHEMA error, because deploy's OpMode loads the auto by name", () => {
+    makeProject(root);
+    writeAuto(root, "autos", "new", simpleAuto("old"));
+    const result = validateAuto(join(root, "autos/new.auto.json"), loadProject(root));
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({ severity: "error", code: "SCHEMA", message: expect.stringContaining('name "old" does not match') }),
+    );
+  });
+
+  it("is clean when they match", () => {
+    makeProject(root);
+    writeAuto(root, "autos", "demo", simpleAuto("demo"));
+    const result = validateAuto(join(root, "autos/demo.auto.json"), loadProject(root));
+    expect(result.findings.filter((finding) => finding.code === "SCHEMA")).toEqual([]);
+  });
+});

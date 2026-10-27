@@ -1,0 +1,76 @@
+/*
+ * The proposals received for a share, under its row on the Sharing page. Tokens only (UI_GUIDE
+ * section 1). A status is never shown by colour alone: every chip carries its word.
+ */
+
+.block {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.head {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-h);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+}
+
+.chip {
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  line-height: 16px;
+  color: var(--text-mid);
+  background: var(--prov-derived-bg);
+}
+
+.chip[data-status="open"] {
+  color: var(--sev-info);
+  background: var(--sev-info-bg);
+}
+
+.chip[data-status="accepted"] {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.chip[data-status="rejected"] {
+  color: var(--sev-warn);
+  background: var(--sev-warn-bg);
+}
+
+.chip:focus-visible {
+  box-shadow: var(--ring-shadow);
+}

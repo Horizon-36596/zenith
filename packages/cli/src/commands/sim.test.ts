@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { main } from "../index.js";
 import { makeProject, simpleAuto, writeAuto } from "../testSupport.js";
 import { runSim } from "./sim.js";
 
@@ -60,14 +61,21 @@ function traceFixture(autoName: string): Record<string, unknown> {
  * script is written to its own file instead and run with a plain `node <file>` - the same shape the
  * task's own fixture idea (a fake sim command) takes without a fragile inline string.
  */
-function fakeSimCommand(root: string, autoName: string, exitCode = 0): string {
+function fakeSimCommand(
+  root: string,
+  autoName: string,
+  exitCode = 0,
+  extra: { traceAuto?: string; stdout?: string; stderr?: string } = {},
+): string {
   const traceRelative = `sim/${autoName}.trace.json`;
   const traceFull = join(root, traceRelative);
   mkdirSync(join(traceFull, ".."), { recursive: true });
   const scriptFull = join(root, `fake-sim-${autoName}.cjs`);
   const script = [
     "const fs = require('fs');",
-    `fs.writeFileSync(${JSON.stringify(traceFull)}, ${JSON.stringify(JSON.stringify(traceFixture(autoName)))});`,
+    ...(extra.stdout === undefined ? [] : [`process.stdout.write(${JSON.stringify(extra.stdout)});`]),
+    ...(extra.stderr === undefined ? [] : [`process.stderr.write(${JSON.stringify(extra.stderr)});`]),
+    `fs.writeFileSync(${JSON.stringify(traceFull)}, ${JSON.stringify(JSON.stringify(traceFixture(extra.traceAuto ?? autoName)))});`,
     `process.exit(${String(exitCode)});`,
   ].join("\n");
   writeFileSync(scriptFull, script, "utf8");
@@ -126,6 +134,70 @@ describe("zenith sim", () => {
     const parsed = JSON.parse(out.join("")) as { report: { auto: string }; estimateAvailable: boolean };
     expect(parsed.report.auto).toBe("demo");
     expect(typeof parsed.estimateAvailable).toBe("boolean");
+  }, 20000);
+
+  it("--json sends the sim command's own stdout to stderr, so stdout is only the JSON report", async () => {
+    makeProject(root, { sim: { command: "PLACEHOLDER", trace: "sim/{auto}.trace.json" } });
+    writeAuto(root, "autos", "demo", simpleAuto("demo"));
+    const link = JSON.parse(readFileSync(join(root, "zenith.json"), "utf8")) as { sim: { command: string } };
+    link.sim.command = fakeSimCommand(root, "demo", 0, { stdout: "BUILD SUCCESSFUL in 4s\n" });
+    writeFileSync(join(root, "zenith.json"), JSON.stringify(link, null, 2), "utf8");
+
+    const code = await runSim("demo", { cwd: root, json: true });
+    expect(code).toBe(0);
+    const parsed = JSON.parse(out.join("")) as { report: { auto: string } };
+    expect(parsed.report.auto).toBe("demo");
+    expect(errOut.join("")).toContain("BUILD SUCCESSFUL");
+  }, 20000);
+
+  it("`zenith sim <auto> --json` as typed prints only the JSON report on stdout, whatever Gradle prints", async () => {
+    makeProject(root, { sim: { command: "PLACEHOLDER", trace: "sim/{auto}.trace.json" } });
+    writeAuto(root, "autos", "demo", simpleAuto("demo"));
+    const link = JSON.parse(readFileSync(join(root, "zenith.json"), "utf8")) as { sim: { command: string } };
+    link.sim.command = fakeSimCommand(root, "demo", 0, {
+      stdout: "> Task :TeamCode:testDebugUnitTest\n\nBUILD SUCCESSFUL in 41s\n12 actionable tasks: 3 executed\n",
+      stderr: "WARNING: A restricted method in java.lang.System has been called\n",
+    });
+    writeFileSync(join(root, "zenith.json"), JSON.stringify(link, null, 2), "utf8");
+
+    const exitCodeBefore = process.exitCode;
+    try {
+      const code = await main(["node", "zenith", "sim", "demo", "--json", "--project", root]);
+      expect(code).toBe(0);
+    } finally {
+      process.exitCode = exitCodeBefore;
+    }
+    // The whole of stdout is one JSON document: nothing before it, nothing after it.
+    const parsed = JSON.parse(out.join("")) as { report: { auto: string; steps: unknown[] } };
+    expect(parsed.report.auto).toBe("demo");
+    expect(parsed.report.steps).toHaveLength(2);
+    const err = errOut.join("");
+    expect(err).toContain("BUILD SUCCESSFUL in 41s");
+    expect(err).toContain("A restricted method");
+  }, 20000);
+
+  it("exits 2 when the command exits 0 and leaves an earlier run's trace untouched", async () => {
+    makeProject(root, { sim: { command: "node -e \"process.exit(0)\"", trace: "sim/{auto}.trace.json" } });
+    writeAuto(root, "autos", "demo", simpleAuto("demo"));
+    mkdirSync(join(root, "sim"), { recursive: true });
+    writeFileSync(join(root, "sim", "demo.trace.json"), JSON.stringify(traceFixture("demo")), "utf8");
+
+    const code = await runSim("demo", { cwd: root });
+    expect(code).toBe(2);
+    expect(errOut.join("")).toContain("from an earlier run");
+    expect(out.join("")).not.toContain("drive");
+  }, 20000);
+
+  it("exits 2 when the trace written is for another auto", async () => {
+    makeProject(root, { sim: { command: "PLACEHOLDER", trace: "sim/{auto}.trace.json" } });
+    writeAuto(root, "autos", "demo", simpleAuto("demo"));
+    const link = JSON.parse(readFileSync(join(root, "zenith.json"), "utf8")) as { sim: { command: string } };
+    link.sim.command = fakeSimCommand(root, "demo", 0, { traceAuto: "other" });
+    writeFileSync(join(root, "zenith.json"), JSON.stringify(link, null, 2), "utf8");
+
+    const code = await runSim("demo", { cwd: root });
+    expect(code).toBe(2);
+    expect(errOut.join("")).toContain('is for auto "other", not "demo"');
   }, 20000);
 
   it("finding 1 / 14: rejects an auto.name that is not [A-Za-z0-9._-]+ before it ever reaches the shell or a path", async () => {

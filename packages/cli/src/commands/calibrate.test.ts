@@ -106,6 +106,30 @@ describe("zenith calibrate", () => {
     expect(parsed.fit.sampleCount).toBe(1);
   });
 
+  it("skips a trace from an auto that names its own robot, since the fit is for the project's robot", () => {
+    makeProject(root);
+    writeFileSync(join(root, "autos/other-robot.json"), readFileSync(join(root, "autos/robot.json"), "utf8"), "utf8");
+    writeAuto(root, "autos", "demo", simpleAuto("demo"));
+    writeAuto(root, "autos", "heavy", simpleAuto("heavy", { robot: "autos/other-robot.json" }));
+    writeAuto(root, "autos", "same", simpleAuto("same", { robot: "autos/robot.json" }));
+    writeTrace(join(root, "sim"), "demo", traceFile("demo", 0.6));
+    writeTrace(join(root, "sim"), "heavy", traceFile("heavy", 3));
+    writeTrace(join(root, "sim"), "same", traceFile("same", 0.6));
+
+    const code = runCalibrate({ cwd: root, json: true });
+    expect(code).toBe(0);
+    const parsed = JSON.parse(out.join("")) as {
+      usedTraces: string[];
+      skipped: { file: string; reason: string }[];
+      fit: { sampleCount: number };
+    };
+    expect(parsed.usedTraces).toEqual(["demo.trace.json", "same.trace.json"]);
+    expect(parsed.skipped).toEqual([
+      { file: "heavy.trace.json", reason: "heavy.auto.json uses its own robot (autos/other-robot.json), not autos/robot.json" },
+    ]);
+    expect(parsed.fit.sampleCount).toBe(2);
+  });
+
   it("reports zero samples and writes nothing when no trace matches an existing auto", () => {
     makeProject(root);
     writeAuto(root, "autos", "demo", simpleAuto("demo"));

@@ -1,7 +1,13 @@
-import { parseAuto, parseField, SCHEMA_ID, type Auto, type Field } from "@horizon36596/zenith-schema";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { parseAuto, parseField, SCHEMA_ID, type Auto, type Field, type Robot } from "@horizon36596/zenith-schema";
 import { describe, expect, it } from "vitest";
 import { check } from "./check.js";
 import { estimate } from "./estimate.js";
+import { fieldBounds } from "./footprint.js";
+import { obstacleShadowIn } from "./geometry/obstacle.js";
+import type { Vec2 } from "./geometry/vec.js";
+import { loadField, loadRobot } from "./load.js";
 import { plan } from "./plan.js";
 import { mirrorAuto, mirrorForField, shouldMirror, type MirrorMode } from "./mirror.js";
 import { render } from "./render.js";
@@ -207,4 +213,75 @@ describe("a routine mirrored and saved for the other alliance", () => {
       );
     });
   }
+});
+
+/**
+ * Issue #230: the exported picture draws each hive frame leg as the field shows it, the part below
+ * the robot's top filled as a blocking obstacle (its shadow, `obstacleShadowIn`) and the whole leg
+ * dashed under it.
+ */
+describe("the hive frame's legs in the exported picture", () => {
+  const root = fileURLToPath(new URL("../../../examples/starter/autos/", import.meta.url));
+  const read = (relative: string): unknown => JSON.parse(readFileSync(`${root}${relative}`, "utf8"));
+  const field = loadField(read("field/biobuzz.field.json"));
+  const robot = loadRobot(read("robot.json"));
+  const legs = (field.obstacles ?? []).filter((obstacle) => obstacle.kind === "strut");
+  const bounds = fieldBounds(field);
+
+  const pictureAt = (heightIn: number): string => {
+    const tall: Robot = { ...robot, heightIn: { value: heightIn, provenance: "PLACEHOLDER: test" } };
+    const stand = parseAuto({
+      $schema: SCHEMA_ID.auto,
+      formatVersion: 1,
+      name: "stand",
+      alliance: "RED",
+      start: { pose: { xIn: -40, yIn: -60, headingRad: 0 } },
+      steps: [{ id: "stand", kind: "wait", seconds: 1 }],
+    });
+    return render(plan(resolve(stand, { formatVersion: 1, waypoints: {} }), tall, field), null, [], []);
+  };
+
+  /** A polygon's points back in field inches, through the field rectangle the picture draws. */
+  const polygonIn = (svg: string, id: string): Vec2[] => {
+    const border = new RegExp(
+      `<rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="[^"]+" fill="none" stroke="${TOKENS.borderDefault}"`,
+    ).exec(svg);
+    const left = Number(border?.[1]);
+    const top = Number(border?.[2]);
+    const scale = Number(border?.[3]) / (bounds.maxXIn - bounds.minXIn);
+    const points = new RegExp(`<polygon id="${id}" points="([^"]+)"`).exec(svg)?.[1] ?? "";
+    return points
+      .split(" ")
+      .filter((pair) => pair !== "")
+      .map((pair) => {
+        const [x, y] = pair.split(",").map(Number) as [number, number];
+        return { xIn: bounds.minXIn + (x - left) / scale, yIn: bounds.maxYIn - (y - top) / scale };
+      });
+  };
+
+  it("contains each leg's band, its shadow at the robot's height, filled as a blocking obstacle", () => {
+    expect(legs).toHaveLength(4);
+    for (const heightIn of [6, 18]) {
+      const svg = pictureAt(heightIn);
+      for (const leg of legs) {
+        expect(svg).toMatch(
+          new RegExp(`<polygon id="band-${leg.id}" points="[^"]+" fill="${TOKENS.fieldObstacleFill}" fill-opacity="1" stroke="${TOKENS.fieldObstacle}"`),
+        );
+        const drawn = polygonIn(svg, `band-${leg.id}`);
+        const shadow = obstacleShadowIn(leg, heightIn) ?? [];
+        expect(drawn).toHaveLength(shadow.length);
+        for (const [index, point] of drawn.entries()) {
+          expect(Math.abs(point.xIn - (shadow[index]?.xIn ?? NaN)), `${leg.id} at ${String(heightIn)}`).toBeLessThan(0.02);
+          expect(Math.abs(point.yIn - (shadow[index]?.yIn ?? NaN)), `${leg.id} at ${String(heightIn)}`).toBeLessThan(0.02);
+        }
+        // The whole leg, dashed, as structure the robot passes under.
+        expect(svg).toMatch(
+          new RegExp(`<polygon id="overhead-${leg.id}" points="[^"]+" fill="none" stroke="${TOKENS.fieldObstacle}" stroke-width="1" stroke-dasharray="3 3"/>`),
+        );
+      }
+    }
+    // The band grows with the robot.
+    const reach = (svg: string): number => Math.min(...polygonIn(svg, "band-frameLegNorthEast").map((point) => point.xIn));
+    expect(reach(pictureAt(18))).toBeLessThan(reach(pictureAt(6)));
+  });
 });

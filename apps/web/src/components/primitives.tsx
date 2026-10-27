@@ -3,13 +3,15 @@
  * provenance chip, a panel frame and an empty state. Each one implements the rule from
  * apps/web/UI_GUIDE.md named in its comment; none of them invents a colour or a size.
  */
-import type { ReactNode } from "react";
-import { ChevronDown, ChevronRight, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
+import { ChevronDown, ChevronRight, WifiOff, type LucideIcon } from "lucide-react";
 import type { Severity } from "@horizon36596/zenith-core";
 import { NO_PROVENANCE, PROVENANCE_LABELS, provenanceTier } from "@horizon36596/zenith-core";
 import { Tooltip } from "./Tooltip";
+import { PROVENANCE_MEANING, shortChipTipLabel, shortProvenanceLabel, splitProvenance } from "../lib/provenance";
 import { HelpTip } from "../help/HelpTip";
 import type { PanelHelpId } from "../help/content";
+import { focusForInput } from "./inputModality";
 import styles from "./primitives.module.css";
 
 /* ---- Buttons ------------------------------------------------------------ */
@@ -23,7 +25,11 @@ export interface ToolButtonProps {
   disabled?: boolean;
   /** An active tool takes the 2 px accent bar; an on toggle (snap, alliance) does not. */
   toggle?: boolean;
+  /** A button that does something each press (undo, redo) and has no on state, so no `aria-pressed`. */
+  momentary?: boolean;
   onClick: () => void;
+  /** A right-click on the button, for one with a menu of its own (Optimize path, issue #366). */
+  onContextMenu?: (event: MouseEvent<HTMLButtonElement>) => void;
   testId?: string;
   /** The `data-tour` anchor the tour points at. */
   tour?: string;
@@ -38,7 +44,9 @@ export function ToolButton({
   active = false,
   disabled = false,
   toggle = false,
+  momentary = false,
   onClick,
+  onContextMenu,
   testId,
   tour,
 }: ToolButtonProps) {
@@ -60,13 +68,14 @@ export function ToolButton({
         type="button"
         className={className}
         aria-label={label}
-        aria-pressed={active}
+        aria-pressed={momentary ? undefined : active}
         aria-disabled={disabled}
         data-testid={testId}
         data-tour={tour}
         onClick={() => {
           if (!disabled) onClick();
         }}
+        onContextMenu={onContextMenu}
       >
         <Icon size={16} strokeWidth={1.75} aria-hidden />
       </button>
@@ -77,30 +86,101 @@ export function ToolButton({
 export interface ButtonProps {
   children: ReactNode;
   onClick?: () => void;
+  /**
+   * Why the button cannot act now; null or absent when it can. A disabled button stays focusable
+   * (`aria-disabled`, never `disabled`) and its tooltip says "Unavailable: <why>" (UI_GUIDE 9.9).
+   */
+  whyDisabled?: string | null;
+  /** For a caller that has no reason to give yet; prefer `whyDisabled`. */
   disabled?: boolean;
-  kind?: "primary" | "ghost";
+  /**
+   * UI_GUIDE 9.9: `primary` is the one per screen or dialog, bottom-right; `secondary` is the
+   * alternative beside it (Cancel); `ghost` is a row or region action; `text` is an inline action.
+   */
+  kind?: "primary" | "secondary" | "ghost" | "text";
   type?: "button" | "submit";
   testId?: string;
+  /** The tooltip's first line, for a button whose words need one; disabled ones always get one. */
+  tooltip?: string;
+  /** The tooltip's second line while the button can act. */
+  hint?: string;
+  /**
+   * Takes focus once it is shown and enabled, again if it was disabled when the page was built. A
+   * dialog's frame moves focus to its first control after this mounts, so a plain `autoFocus` loses.
+   * Once the person has pressed Tab, focus is theirs: a late enable no longer takes it back.
+   */
+  takeFocus?: boolean;
 }
 
+const BUTTON_CLASS = {
+  primary: styles.primary,
+  secondary: styles.secondary,
+  ghost: styles.ghost,
+  text: styles.textButton,
+} as const;
+
+/** The plain words of a button's children, for the tooltip of one that is given no `tooltip`. */
+function wordsOf(children: ReactNode): string {
+  if (typeof children === "string" || typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map((child: ReactNode) => wordsOf(child)).join("");
+  return "";
+}
+
+/**
+ * The one labelled button (UI_GUIDE 9.9). Disabled is `aria-disabled`, as for `ToolButton` and
+ * `RowButton`, so the button keeps its place in the tab order and its tooltip can say why.
+ */
 export function Button({
   children,
   onClick,
-  disabled = false,
-  kind = "ghost",
+  whyDisabled,
+  disabled: disabledProp = false,
+  kind = "secondary",
   type = "button",
   testId,
+  tooltip,
+  hint,
+  takeFocus = false,
 }: ButtonProps) {
-  return (
+  const ref = useRef<HTMLButtonElement | null>(null);
+  const tabbed = useRef(false);
+  const disabled = disabledProp || (whyDisabled !== undefined && whyDisabled !== null);
+  useEffect(() => {
+    if (!takeFocus) return;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === "Tab") tabbed.current = true;
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [takeFocus]);
+  useEffect(() => {
+    if (takeFocus && !disabled && !tabbed.current) focusForInput(ref.current);
+  }, [takeFocus, disabled]);
+  const button = (
     <button
+      ref={ref}
       type={type}
-      className={kind === "primary" ? styles.primary : styles.ghost}
-      disabled={disabled}
+      className={BUTTON_CLASS[kind]}
+      aria-disabled={disabled ? true : undefined}
       data-testid={testId}
-      onClick={onClick}
+      onClick={(event) => {
+        // A disabled submit button must not submit its form either, from a click or from Enter.
+        if (disabled) {
+          event.preventDefault();
+          return;
+        }
+        onClick?.();
+      }}
     >
       {children}
     </button>
+  );
+  const why = disabled && whyDisabled !== undefined && whyDisabled !== null ? `Unavailable: ${whyDisabled}` : undefined;
+  if (tooltip === undefined && why === undefined) return button;
+  return (
+    <Tooltip label={tooltip ?? wordsOf(children)} hint={why ?? hint}>
+      {button}
+    </Tooltip>
   );
 }
 
@@ -117,15 +197,82 @@ export function RowButton({
   disabled = false,
   whyDisabled,
   testId,
+  onPointerDown,
+  expanded,
+  buttonRef,
+  keepFocus = false,
 }: {
   icon: LucideIcon;
   label: string;
   shortcut?: string;
   /** What the button does, when the label alone does not say. */
   hint?: string;
-  onClick: () => void;
+  /** Given the click, for a button that opens a menu where it is. */
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
   /** Why it is disabled; shown in place of `hint` while it is. */
+  whyDisabled?: string;
+  testId?: string;
+  onPointerDown?: () => void;
+  /** For a button that opens a menu: whether the menu is open. */
+  expanded?: boolean;
+  buttonRef?: (element: HTMLButtonElement | null) => void;
+  /**
+   * For a transport button: a press does not move focus to it, so the keys keep working where they
+   * were, and Space still plays and pauses after the button was clicked (issue #161). Tab still
+   * reaches it, and Enter and Space then press it, as for any button.
+   */
+  keepFocus?: boolean;
+}) {
+  return (
+    <Tooltip
+      label={label}
+      shortcut={shortcut}
+      hint={disabled && whyDisabled !== undefined ? `Unavailable: ${whyDisabled}` : hint}
+    >
+      <button
+        ref={buttonRef}
+        type="button"
+        className={styles.rowButton}
+        onMouseDown={keepFocus ? (event) => { event.preventDefault(); } : undefined}
+        aria-label={label}
+        aria-disabled={disabled}
+        aria-haspopup={expanded === undefined ? undefined : "menu"}
+        aria-expanded={expanded}
+        data-testid={testId}
+        onPointerDown={onPointerDown}
+        onClick={(event) => {
+          if (!disabled) onClick(event);
+        }}
+      >
+        <Icon size={16} strokeWidth={1.75} aria-hidden />
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * A quiet text button inside a row or at the end of a section, such as Set, Switch to Linear or
+ * Add marker (issue #241, UI_GUIDE section 9.5, the inline row action): accent words with no box
+ * until hovered, an optional icon before them, and a tooltip with what it does. Disabled is
+ * `aria-disabled`, as for `RowButton`, so the tooltip that says why stays reachable.
+ */
+export function TextButton({
+  icon: Icon,
+  label,
+  shortcut,
+  hint,
+  onClick,
+  disabled = false,
+  whyDisabled,
+  testId,
+}: {
+  icon?: LucideIcon;
+  label: string;
+  shortcut?: string;
+  hint?: string;
+  onClick: () => void;
+  disabled?: boolean;
   whyDisabled?: string;
   testId?: string;
 }) {
@@ -137,15 +284,15 @@ export function RowButton({
     >
       <button
         type="button"
-        className={styles.rowButton}
-        aria-label={label}
+        className={styles.textButton}
         aria-disabled={disabled}
         data-testid={testId}
         onClick={() => {
           if (!disabled) onClick();
         }}
       >
-        <Icon size={16} strokeWidth={1.5} aria-hidden />
+        {Icon === undefined ? null : <Icon size={12} strokeWidth={1.75} aria-hidden />}
+        {label}
       </button>
     </Tooltip>
   );
@@ -229,42 +376,96 @@ export function provenanceLabel(text: string): string {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
+/**
+ * The provenance chip. Without `onClick` it is a plain label, for a value that cannot be edited
+ * where it is shown. With one it is a button that opens a menu (`ProvenancePicker`), and `hint`
+ * replaces the default "Click to change it." with what changing it does.
+ */
 export function ProvenanceChip({
   provenance,
   onClick,
+  hint,
+  expanded,
+  testId,
+  short = false,
 }: {
   provenance: string | undefined;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+  hint?: string;
+  /** Whether the menu the chip opens is open, for `aria-expanded`. */
+  expanded?: boolean;
+  testId?: string;
+  /**
+   * The chip of a pose row (UI_GUIDE section 9.5): the label in its short form, at most 12
+   * characters, with the full label and what it means in the tooltip.
+   */
+  short?: boolean;
 }) {
   const text = provenance ?? NO_PROVENANCE;
   const tier = provenanceTier(provenance);
-  const shown = provenanceLabel(text);
-  const short = shown.length > 22 ? `${shown.slice(0, 21)}…` : shown;
+  const full = provenanceLabel(text);
+  const shown = short ? shortProvenanceLabel(text) : full.length > 22 ? `${full.slice(0, 21)}…` : full;
+  const { label: known } = splitProvenance(text);
+  // A short chip's tooltip names the whole label, its note and what the label means.
+  const tipLabel = short ? shortChipTipLabel(text, full) : text;
+  const meaning = short && known !== null ? `${PROVENANCE_MEANING[known]} ` : "";
+  // Needs measurement is drawn hollow, so it does not look like a placeholder (UI_GUIDE section 4.3; UX review, G4).
+  const needs = known === "NEEDS MEASUREMENT";
   const body = (
-    <span className={styles.chip} data-tier={tier}>
-      {short}
+    <span className={styles.chip} data-tier={tier} data-short={short ? "" : undefined} data-needs={needs ? "" : undefined}>
+      {shown}
     </span>
   );
   if (onClick === undefined) {
     return (
-      <Tooltip label={text} hint={PROVENANCE_HINT}>
-        <span className={styles.chipWrap} data-tour="provenance">
+      <Tooltip label={tipLabel} hint={`${meaning}${PROVENANCE_HINT}`}>
+        <span className={styles.chipWrap} data-tour="provenance" data-testid={testId}>
           {body}
         </span>
       </Tooltip>
     );
   }
   return (
-    <Tooltip label={text} hint={`${PROVENANCE_HINT} Click to change it.`}>
+    <Tooltip label={tipLabel} hint={`${meaning}${PROVENANCE_HINT} ${hint ?? "Click to change it."}`}>
       <button
         type="button"
         className={styles.chipButton}
         onClick={onClick}
-        aria-label={text}
+        aria-label={`${text}. Change the provenance`}
+        aria-haspopup="menu"
+        aria-expanded={expanded}
         data-tour="provenance"
+        data-testid={testId}
       >
         {body}
       </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * A quiet fact about the thing selected, such as Planner only or Stands still, or a warning about it,
+ * such as No time limit (issue #242). It is a state, never a description: it shows in both description
+ * modes, and its tooltip says what it means. The warning tone uses the same lemon as an unverified
+ * value, so it reads as something to look at without being an error.
+ */
+export function StatusChip({
+  children,
+  hint,
+  tone = "quiet",
+  testId,
+}: {
+  children: string;
+  /** What the chip means, in a sentence. */
+  hint?: string;
+  tone?: "quiet" | "warn";
+  testId?: string;
+}) {
+  return (
+    <Tooltip label={children} hint={hint}>
+      <span className={styles.statusChip} data-tone={tone} data-testid={testId} tabIndex={0}>
+        {children}
+      </span>
     </Tooltip>
   );
 }
@@ -311,9 +512,9 @@ export function Panel({
         onClick={onToggleFold}
       >
         {folded === true ? (
-          <ChevronRight size={14} strokeWidth={1.75} aria-hidden />
+          <ChevronRight size={16} strokeWidth={1.75} aria-hidden />
         ) : (
-          <ChevronDown size={14} strokeWidth={1.75} aria-hidden />
+          <ChevronDown size={16} strokeWidth={1.75} aria-hidden />
         )}
         <h2 className={styles.panelTitle}>{title}</h2>
       </button>
@@ -346,41 +547,100 @@ export function Panel({
 }
 
 /**
- * UI_GUIDE section 8.9: one glyph, one line naming what would be here, one action with its
- * shortcut. Left aligned inside the panel, never a centred hero.
+ * UI_GUIDE section 9.12: a 32 px glyph, a headline naming what would be here, one sentence saying
+ * what to do, and one action with its shortcut. Left aligned inside the region, never a centred
+ * hero. A small region leaves the headline out: the line and the action alone.
  */
 export function EmptyState({
   icon: Icon,
+  headline,
   line,
   hint,
   actionLabel,
   actionShortcut,
+  actionHint,
   onAction,
   testId,
 }: {
   icon: LucideIcon;
+  /** What would be here: "No autos in the library yet". */
+  headline?: string;
+  /** One sentence saying what to do. */
   line: string;
   /** A second, quieter line saying what to do instead. */
   hint?: string;
   actionLabel?: string;
   actionShortcut?: string;
+  /** What the action does, for its tooltip. */
+  actionHint?: string;
   onAction?: () => void;
   testId?: string;
 }) {
   return (
     <div className={styles.empty} data-testid={testId}>
-      <Icon size={20} strokeWidth={1.5} />
+      <Icon className={styles.emptyIcon} size={32} strokeWidth={1.75} aria-hidden />
+      {headline === undefined ? null : <p className={styles.emptyHeadline}>{headline}</p>}
       <p className={styles.emptyLine}>{line}</p>
       {hint === undefined ? null : <p className={styles.emptyHint}>{hint}</p>}
       {actionLabel === undefined ? null : (
-        <button type="button" className={styles.emptyAction} onClick={onAction}>
-          {actionLabel}
-          {actionShortcut === undefined ? null : (
-            <kbd className={styles.emptyShortcut}>{actionShortcut}</kbd>
-          )}
-        </button>
+        <Tooltip label={actionLabel} {...(actionShortcut === undefined ? {} : { shortcut: actionShortcut })} {...(actionHint === undefined ? {} : { hint: actionHint })}>
+          <button type="button" className={styles.emptyAction} onClick={onAction} data-testid={testId === undefined ? undefined : `${testId}-action`}>
+            {actionLabel}
+            {actionShortcut === undefined ? null : <kbd className={styles.emptyShortcut}>{actionShortcut}</kbd>}
+          </button>
+        </Tooltip>
       )}
     </div>
+  );
+}
+
+/**
+ * UI_GUIDE section 9.12: a region's loading line, which always turns into the data or into why it
+ * could not be read and Try again. `error` null means still reading; the caller shows the data once
+ * it has it.
+ */
+export function LoadingLine({
+  line,
+  error,
+  onRetry,
+  testId,
+}: {
+  /** What is being read, with the ellipsis: "Reading the library…". */
+  line: string;
+  /** Why the read failed, ending with what to do, or null while it is still under way. */
+  error: string | null;
+  onRetry: () => void;
+  testId?: string;
+}) {
+  if (error === null) {
+    return (
+      <p className={styles.loading} role="status" data-testid={testId}>
+        {line}
+      </p>
+    );
+  }
+  return (
+    <div className={styles.loadFailed} role="alert" data-testid={testId === undefined ? undefined : `${testId}-failed`}>
+      <p className={styles.loadFailedLine}>{error}</p>
+      <Tooltip label="Try again" hint="Read it again now.">
+        <button type="button" className={styles.emptyAction} onClick={onRetry} data-testid={testId === undefined ? undefined : `${testId}-retry`}>
+          Try again
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
+
+/**
+ * UI_GUIDE section 9.12: the line a sheet shows while this computer is offline, saying what still
+ * works and what waits for the connection. A state of the connection, so no severity hue.
+ */
+export function OfflineLine({ children, testId }: { children: ReactNode; testId?: string }) {
+  return (
+    <p className={styles.offlineLine} role="status" data-testid={testId}>
+      <WifiOff className={styles.offlineIcon} size={16} strokeWidth={1.75} aria-hidden />
+      <span>{children}</span>
+    </p>
   );
 }
 

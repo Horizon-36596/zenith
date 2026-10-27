@@ -1,0 +1,231 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`determinism > matches the golden results on three fixture autos 1`] = `
+[
+  {
+    "changes": [
+      "It is 0.05 s faster in the instant sim.",
+      "The step takes 2.71 s instead of 2.76 s in the instant sim.",
+      "The estimate has the step at 3.19 s instead of 3.44 s.",
+      "The route is now 3 paths: a line, then a cubic Bezier, then a line.",
+      "The heading is now Piecewise: Linear, then Tangent, then Linear, where it was Constant.",
+    ],
+    "evaluations": 150,
+    "fixture": "a post",
+    "inputKey": "89bb4f07f70fe4c4f5f882d74b49acd2800b2b473358fac4540bf976938ff573",
+    "status": "improved",
+    "step": {
+      "heading": {
+        "mode": "piecewise",
+        "ranges": [
+          {
+            "endT": 0.029,
+            "heading": {
+              "fromRad": 0,
+              "mode": "linear",
+              "toRad": 0.3434,
+            },
+            "startT": 0,
+          },
+          {
+            "endT": 0.971,
+            "heading": {
+              "mode": "tangent",
+            },
+            "startT": 0.029,
+          },
+          {
+            "endT": 1,
+            "heading": {
+              "fromRad": -0.5392,
+              "mode": "linear",
+              "toRad": 0,
+            },
+            "startT": 0.971,
+          },
+        ],
+      },
+      "id": "route",
+      "kind": "path",
+      "segments": [
+        {
+          "from": "current",
+          "kind": "line",
+          "to": {
+            "provenance": "SET FROM EDITOR: placed by Optimize path",
+            "xIn": 6.524,
+            "yIn": 19.493,
+          },
+        },
+        {
+          "control": [
+            {
+              "provenance": "SET FROM EDITOR: placed by Optimize path",
+              "xIn": 10.291,
+              "yIn": 20.84,
+            },
+            {
+              "provenance": "SET FROM EDITOR: placed by Optimize path",
+              "xIn": 16.597,
+              "yIn": 18.788,
+            },
+          ],
+          "from": "current",
+          "kind": "bezier",
+          "to": {
+            "provenance": "SET FROM EDITOR: placed by Optimize path",
+            "xIn": 35.476,
+            "yIn": 7.493,
+          },
+        },
+        {
+          "from": "current",
+          "kind": "line",
+          "to": {
+            "xIn": 48,
+            "yIn": 0,
+          },
+        },
+      ],
+    },
+    "t0": {
+      "after": {
+        "ownS": 3.19455286628164,
+        "windowEndS": 3.19455286628164,
+      },
+      "before": {
+        "ownS": 3.4356921308870976,
+        "windowEndS": 3.4356921308870976,
+      },
+    },
+    "t1": {
+      "after": {
+        "ownS": 2.71,
+        "windowEndS": 2.71,
+      },
+      "before": {
+        "ownS": 2.76,
+        "windowEndS": 2.76,
+      },
+    },
+  },
+  {
+    "changes": [
+      "It is 0.21 s faster in the instant sim.",
+      "The step takes 2.55 s instead of 2.76 s in the instant sim.",
+      "The estimate has the step at 3.12 s instead of 3.44 s.",
+      "The route is now 1 path: a quadratic Bezier.",
+      "The heading is now Linear, where it was Constant.",
+    ],
+    "evaluations": 150,
+    "fixture": "a keep-out",
+    "inputKey": "3b75f1457285269f8fa0bdefc1f78230f74caf2384864512e2f8c410756ae39e",
+    "status": "improved",
+    "step": {
+      "heading": {
+        "fromRad": 0,
+        "mode": "linear",
+        "toRad": 0,
+      },
+      "id": "route",
+      "kind": "path",
+      "segments": [
+        {
+          "control": [
+            {
+              "provenance": "SET FROM EDITOR: placed by Optimize path",
+              "xIn": 4.752,
+              "yIn": 41.435,
+            },
+          ],
+          "from": "current",
+          "kind": "bezier",
+          "to": {
+            "xIn": 48,
+            "yIn": 0,
+          },
+        },
+      ],
+    },
+    "t0": {
+      "after": {
+        "ownS": 3.1157644801040476,
+        "windowEndS": 3.1157644801040476,
+      },
+      "before": {
+        "ownS": 3.4356921308870976,
+        "windowEndS": 3.4356921308870976,
+      },
+    },
+    "t1": {
+      "after": {
+        "ownS": 2.55,
+        "windowEndS": 2.55,
+      },
+      "before": {
+        "ownS": 2.76,
+        "windowEndS": 2.76,
+      },
+    },
+  },
+  {
+    "changes": [
+      "It is 0.22 s faster in the instant sim.",
+      "The step takes 2.48 s instead of 2.70 s in the instant sim.",
+      "The estimate has the step at 2.98 s instead of 3.35 s.",
+      "The route is now 1 path: a quadratic Bezier.",
+      "The heading is now Linear, where it was Constant.",
+    ],
+    "evaluations": 150,
+    "fixture": "a start against the wall",
+    "inputKey": "a2b987892d1c0927c1c7d4e7ac7d9c5918f3cf0d8ce1f8a714107b39546f6050",
+    "status": "improved",
+    "step": {
+      "heading": {
+        "fromRad": 0,
+        "mode": "linear",
+        "toRad": 0,
+      },
+      "id": "route",
+      "kind": "path",
+      "segments": [
+        {
+          "control": [
+            {
+              "provenance": "SET FROM EDITOR: placed by Optimize path",
+              "xIn": -1.557,
+              "yIn": -25.404,
+            },
+          ],
+          "from": "current",
+          "kind": "bezier",
+          "to": {
+            "xIn": 48,
+            "yIn": -60,
+          },
+        },
+      ],
+    },
+    "t0": {
+      "after": {
+        "ownS": 2.9796328650407684,
+        "windowEndS": 2.9796328650407684,
+      },
+      "before": {
+        "ownS": 3.349916195904666,
+        "windowEndS": 3.349916195904666,
+      },
+    },
+    "t1": {
+      "after": {
+        "ownS": 2.48,
+        "windowEndS": 2.48,
+      },
+      "before": {
+        "ownS": 2.7,
+        "windowEndS": 2.7,
+      },
+    },
+  },
+]
+`;

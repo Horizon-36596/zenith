@@ -49,7 +49,8 @@ function baseRoutes() {
 }
 
 function buildProject(extraRoutes: Parameters<typeof createFetchStub>[0]) {
-  const stub = createFetchStub([...baseRoutes(), ...extraRoutes]);
+  // The stub answers with the first route that matches, so a test's own routes win over the defaults.
+  const stub = createFetchStub([...extraRoutes, ...baseRoutes()]);
   const client = new GitHubClient(new PatAuth("t"), { fetchImpl: stub.fetchImpl, sleep: noSleep().sleep });
   const project = new GitHubProject(client, { owner: "o", repo: "r", base: "main" });
   return { client, project, stub };
@@ -70,7 +71,12 @@ describe("propose", () => {
       base: "main",
     });
 
-    expect(result).toEqual({ url: "https://github.com/o/r/pull/7", number: 7, branch: "auto/first-auto/octocat" });
+    expect(result).toEqual({
+      url: "https://github.com/o/r/pull/7",
+      number: 7,
+      branch: "auto/first-auto/octocat",
+      shas: { "autos/first-auto.auto.json": "s1", "autos/.renders/first-auto.svg": "s2" },
+    });
     const createCall = stub.calls.find((c) => c.method === "POST" && c.url.pathname.endsWith("/pulls"));
     expect((createCall?.body as { body: string }).body).toBe(
       "see ![render](https://raw.githubusercontent.com/o/r/auto/first-auto/octocat/autos/.renders/first-auto.svg)",
@@ -94,6 +100,53 @@ describe("propose", () => {
     expect(result.number).toBe(7);
     expect(stub.calls.some((c) => c.method === "POST" && c.url.pathname.endsWith("/pulls"))).toBe(false);
     expect(stub.calls.some((c) => c.method === "PATCH" && c.url.pathname.endsWith("/pulls/7"))).toBe(true);
+  });
+
+  it("opens a new PR instead of reusing one from the same branch into another base (issue #407)", async () => {
+    const { client, project, stub } = buildProject([
+      {
+        method: "GET",
+        match: /\/pulls\?/,
+        handler: () => ({ status: 200, body: [{ ...rawPull, number: 3, base: { ref: "alpha", sha: "alphasha" } }] }),
+      },
+      { method: "POST", match: /\/pulls$/, handler: () => ({ status: 201, body: rawPull }) },
+    ]);
+
+    const result = await propose(client, project, {
+      autoName: "first-auto",
+      autoText: "{}",
+      renderSvg: "<svg/>",
+      body: "b",
+      base: "main",
+    });
+
+    expect(result.number).toBe(7);
+    expect(stub.calls.some((c) => c.method === "PATCH")).toBe(false);
+    const list = stub.calls.find((c) => c.method === "GET" && c.url.pathname.endsWith("/pulls"));
+    expect(list?.url.searchParams.get("base")).toBe("main");
+  });
+
+  it("refuses to write the editor's text over an auto that changed on the branch since it was opened (issue #407)", async () => {
+    const { client, project, stub } = buildProject([
+      // What the work branch has after the merge from base brought in someone else's change.
+      {
+        method: "GET",
+        match: contentsGetPattern("autos/first-auto.auto.json"),
+        handler: () => ({ status: 200, body: { type: "file", path: "autos/first-auto.auto.json", sha: "merged-sha", content: b64("{}"), encoding: "base64" } }),
+      },
+    ]);
+
+    await expect(
+      propose(client, project, {
+        autoName: "first-auto",
+        autoText: "{}",
+        renderSvg: "<svg/>",
+        body: "b",
+        base: "main",
+        expectedShas: { "autos/first-auto.auto.json": "opened-sha" },
+      }),
+    ).rejects.toThrow(/since you opened it/);
+    expect(stub.calls.some((c) => c.method === "PUT")).toBe(false);
   });
 
   it("requests reviewers after the PR exists", async () => {

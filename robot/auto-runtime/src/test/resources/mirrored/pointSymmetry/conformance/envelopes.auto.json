@@ -1,0 +1,149 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 4,
+  "name": "envelopes",
+  "title": "Envelopes and a rejoin pose, which the planner reads and the runtime ignores",
+  "alliance": "BLUE",
+  "start": {
+    "pose": {
+      "xIn": 48,
+      "yIn": 48,
+      "headingRad": 3.1416
+    }
+  },
+  "steps": [
+    {
+      "id": "sweep",
+      "kind": "path",
+      "segments": [
+        {
+          "kind": "line",
+          "from": {
+            "xIn": 48,
+            "yIn": 48,
+            "headingRad": 3.1416
+          },
+          "to": {
+            "xIn": 24,
+            "yIn": 48,
+            "headingRad": 3.1416
+          }
+        }
+      ],
+      "heading": {
+        "mode": "constant",
+        "headingRad": 3.1416
+      },
+      "envelope": {
+        "polygon": [
+          {
+            "xIn": 60,
+            "yIn": 60
+          },
+          {
+            "xIn": 12,
+            "yIn": 60
+          },
+          {
+            "xIn": 12,
+            "yIn": 36
+          },
+          {
+            "xIn": 60,
+            "yIn": 36
+          }
+        ],
+        "maxDurationS": 3,
+        "provenance": "SET BY HAND: conformance fixture, the box around the sweep"
+      }
+    },
+    {
+      "id": "collect",
+      "kind": "command",
+      "name": "take",
+      "args": {
+        "loops": 10
+      },
+      "envelope": {
+        "polygon": [
+          {
+            "xIn": 36,
+            "yIn": 60
+          },
+          {
+            "xIn": 12,
+            "yIn": 60
+          },
+          {
+            "xIn": 12,
+            "yIn": 36
+          },
+          {
+            "xIn": 36,
+            "yIn": 36
+          }
+        ],
+        "maxDurationS": 2,
+        "actualDurationS": 1.5,
+        "provenance": "SET BY HAND: conformance fixture, a collect that stays near b"
+      }
+    },
+    {
+      "id": "hold",
+      "kind": "wait",
+      "seconds": 0.1,
+      "envelope": {
+        "polygon": [
+          {
+            "xIn": 36,
+            "yIn": 60
+          },
+          {
+            "xIn": 12,
+            "yIn": 60
+          },
+          {
+            "xIn": 24,
+            "yIn": 36
+          }
+        ],
+        "maxDurationS": 0.5,
+        "provenance": "SET BY HAND: conformance fixture, a triangle"
+      }
+    },
+    {
+      "id": "rejoin",
+      "kind": "path",
+      "rejoinFrom": {
+        "xIn": 24,
+        "yIn": 48,
+        "headingRad": 3.1416,
+        "provenance": "SET BY HAND: conformance fixture, where the collect ends"
+      },
+      "segments": [
+        {
+          "kind": "line",
+          "from": "current",
+          "to": {
+            "xIn": 24,
+            "yIn": 24,
+            "headingRad": -1.5708
+          }
+        }
+      ],
+      "heading": {
+        "mode": "linear",
+        "fromRad": 3.1416,
+        "toRad": 4.7124
+      }
+    },
+    {
+      "id": "done",
+      "kind": "command",
+      "name": "instant",
+      "args": {
+        "tag": "done"
+      }
+    }
+  ]
+}

@@ -1,0 +1,351 @@
+/*
+ * The alliance view: the Partners panel, the partner lanes in the timeline and the Alliance group
+ * in the problems panel. Tokens only (UI_GUIDE section 1). Partner hues are field and alliance
+ * view only, and never the only channel: every swatch sits beside the partner's name.
+ */
+
+/* ---- Timeline lanes -------------------------------------------------------------------- */
+
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--space-1);
+}
+
+.laneRow {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.laneName {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.laneName:focus-visible {
+  box-shadow: var(--ring-shadow);
+}
+
+.lane {
+  position: relative;
+  height: var(--bar-h-timeline);
+  background: var(--bar-track);
+}
+
+.laneBlock {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  min-width: 2px;
+  border-radius: var(--radius-0);
+  opacity: 0.85;
+}
+
+.laneBlock[data-colour="0"] { background: var(--partner-1); }
+.laneBlock[data-colour="1"] { background: var(--partner-2); }
+.laneBlock[data-colour="2"] { background: var(--partner-3); }
+
+.laneBlock[data-kind="offset"] {
+  background: transparent;
+  background-image: var(--bar-unknown-hatch);
+  box-shadow: inset 0 0 0 1px var(--bar-estimated);
+  opacity: 1;
+}
+
+.laneBlock[data-kind="envelope"] {
+  top: 60%;
+  height: 40%;
+  background-image: var(--bar-unknown-hatch);
+  opacity: 1;
+}
+
+.laneBlock:hover {
+  opacity: 1;
+}
+
+.laneBlock:focus-visible {
+  box-shadow: var(--ring-shadow);
+  opacity: 1;
+}
+
+/* The user's own start offset at the front of their track. */
+.ownOffset {
+  position: relative;
+  height: 100%;
+  min-width: 2px;
+  border-radius: var(--radius-0);
+  background-image: var(--bar-unknown-hatch);
+  box-shadow: inset 0 0 0 1px var(--bar-estimated);
+}
+
+.ownOffset:focus-visible {
+  box-shadow: var(--ring-shadow);
+}
+
+/* ---- The Partners panel ----------------------------------------------------------------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--pad-row-x) var(--space-4);
+}
+
+.panel[data-drop="true"] {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+/* The empty state (UI_GUIDE section 9.12) sits in the panel's own padding, so it keeps its own
+   off: the Steps list above keeps as much height as it can. */
+.panel > .emptyState {
+  padding: var(--space-1) 0 0;
+}
+
+.loadRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.textButton {
+  font-size: var(--fs-sm);
+  color: var(--accent);
+}
+
+.textButton:hover {
+  color: var(--accent-hover);
+}
+
+.textButton:focus-visible {
+  box-shadow: var(--ring-shadow);
+}
+
+.textButton[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+/* "Make it a wait step", tucked under the start offset it turns into a step. */
+.offsetToWait {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: calc(-1 * var(--space-1));
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.partnerList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.partner {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.partnerHead {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-h);
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.swatch[data-colour="0"] { background: var(--partner-1); }
+.swatch[data-colour="1"] { background: var(--partner-2); }
+.swatch[data-colour="2"] { background: var(--partner-3); }
+
+.partner[data-visible="false"] .swatch {
+  background: transparent;
+}
+
+.partnerName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.partner[data-visible="false"] .partnerName {
+  color: var(--text-lo);
+}
+
+.alliancePill {
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 16px;
+}
+
+.alliancePill[data-alliance="RED"] {
+  color: var(--alliance-red-text);
+  background: var(--alliance-red-bg);
+}
+
+.alliancePill[data-alliance="BLUE"] {
+  color: var(--alliance-blue-text);
+  background: var(--alliance-blue-bg);
+}
+
+.partnerFile {
+  padding-left: calc(10px + var(--space-2));
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A partner from a received cloud share: when it changed, a newer version, the proposals sent. */
+.partnerShare {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: calc(10px + var(--space-2));
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.partnerShareLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.newer {
+  color: var(--sev-info);
+}
+
+.sentList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sentItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sentError {
+  color: var(--sev-error);
+}
+
+.statusChip {
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  line-height: 16px;
+  color: var(--text-mid);
+  background: var(--prov-derived-bg);
+}
+
+.statusChip[data-status="open"] {
+  color: var(--sev-info);
+  background: var(--sev-info-bg);
+}
+
+.statusChip[data-status="accepted"] {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.statusChip[data-status="rejected"] {
+  color: var(--sev-warn);
+  background: var(--sev-warn-bg);
+}
+
+.statusChip:focus-visible {
+  box-shadow: var(--ring-shadow);
+}
+
+.unavailable {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--sev-warn);
+}
+
+/* ---- The Alliance group in the problems panel -------------------------------------------- */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-height: var(--row-h);
+  padding: var(--space-1) var(--pad-row-x) 0;
+}
+
+.groupTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--fs-md);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-mid);
+}
+
+.groupNote {
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-variant-numeric: var(--numeric);
+  font-size: var(--fs-xs);
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+/* The time takes the Problems row's step column, level with the message's first line once selected. */
+.rowTime {
+  grid-area: 1 / 4;
+}
+
+[data-selected="true"] > .rowTime {
+  margin-top: 7px;
+}
+
+.fixAction[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}

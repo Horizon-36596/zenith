@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // Prints one version's section of CHANGELOG.md, without its heading, for the GitHub Release notes.
-// Fails when the section is missing or empty, so a release never goes out with no notes.
+// Fails when the section is missing or empty, so a release never goes out with no notes, and when it
+// is longer than GitHub takes for a release body, so a release never fails at its last step.
 //
 //   node scripts/changelog-section.mjs <version> [file]      (version with or without the leading v)
 import { readFileSync } from "node:fs";
+
+/** The most characters GitHub accepts in a release body. */
+const RELEASE_BODY_LIMIT = 125_000;
 
 const version = (process.argv[2] ?? "").replace(/^v/, "");
 if (version === "") {
@@ -28,4 +32,12 @@ if (body === "") {
   console.error(`changelog-section: the ${version} section of CHANGELOG.md is empty.`);
   process.exit(1);
 }
-process.stdout.write(`${body}\n`);
+const notes = `${body}\n`;
+if (notes.length > RELEASE_BODY_LIMIT) {
+  console.error(
+    `changelog-section: the ${version} section of CHANGELOG.md is ${notes.length.toLocaleString("en-US")} characters, ` +
+      `over GitHub's limit of ${RELEASE_BODY_LIMIT.toLocaleString("en-US")} for a release body. Shorten it before releasing.`,
+  );
+  process.exit(1);
+}
+process.stdout.write(notes);

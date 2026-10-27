@@ -1,7 +1,16 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { diff, estimate, hasErrors, ledger, loadAuto, render } from "@horizon36596/zenith-core";
+import {
+  diff,
+  estimate,
+  hasErrors,
+  ledger,
+  loadAuto,
+  render,
+  runOptimize,
+  type OptimizeOptions,
+} from "@horizon36596/zenith-core";
 import { resolveSeason } from "@horizon36596/zenith-seasons";
 import { z } from "zod";
 import { errorCount, loadAutoAndPlan } from "../findings.js";
@@ -19,7 +28,7 @@ const outField = z
  * same as any other tool argument, and `zenith.render` writes there without asking. */
 const resolveOut = (project: Project, out: string): string => confinePath(project.root, out);
 
-/** `zenith.estimate`, `zenith.render`, `zenith.diff`, `zenith.sim`. */
+/** `zenith.estimate`, `zenith.render`, `zenith.diff`, `zenith.sim`, `zenith.optimize`. */
 export function registerAnalysisTools(server: McpServer): void {
   server.registerTool(
     "zenith.estimate",
@@ -135,6 +144,101 @@ export function registerAnalysisTools(server: McpServer): void {
       } catch {
         return jsonResult({ stdout: result.stdout, stderr: result.stderr });
       }
+    }),
+  );
+
+  server.registerTool(
+    "zenith.optimize",
+    {
+      title: "Find a faster route for one path step",
+      description:
+        "Runs Optimize path on the path step stepId and returns the OptimizeResult. It never writes: " +
+        "the file is left as it was. It looks for a faster route between the step's own two ends, which it " +
+        "keeps exactly, and changes the geometry and the heading profile together; it keeps clear of the " +
+        "structures by marginIn (default: the robot's clearance, 1 in when robot.json gives none), and never " +
+        "touches a wall or a keep-out that applies in auto. When zenith.validate finds the step as written going through " +
+        "a structure, past the wall, into a keep-out or over the centre line (STRUCTURE, PERIMETER, KEEPOUT or " +
+        "OPPONENT_SIDE on it), originalBlocked says what it goes through and " +
+        "pick is the fastest clear route found even when it is slower (its gainS is then negative); with no clear " +
+        "route the status is infeasible, never noBetter. Any other step is improved or noBetter: a route must be faster " +
+        "and come no closer to anything than the step does. status is improved, noBetter, infeasible or " +
+        "stoppedEarly. pick (and step, the same route as a full path step) is the route it found, with the " +
+        "time before and after under the instant sim (t1) and the estimate (t0), the markers that move on the " +
+        "field, and the findings it adds and removes; alternatives are up to two other routes that passed " +
+        "the final check, which may be labelled \"Faster in the instant sim, slower in the estimate\" or \"Faster in the estimate, slower in the instant sim\" " +
+        "(never the pick); holdStartHeadingIn and holdEndHeadingIn keep the start heading over the first, and the end heading " +
+        "over the last, so many inches of the route, and when the step as written does not, originalBreaksHolds says so and pick is " +
+        "the fastest route found that does, even a slower one; " +
+        "changes and notes are plain sentences to show a person. To apply the pick, pass step.segments and " +
+        "step.heading to zenith.edit.setRoute. The search runs its whole budget, a count of evaluations " +
+        "and not a time, so the same inputs and options give the same result on one JavaScript engine.",
+      inputSchema: {
+        auto: autoRefField,
+        stepId: z.string().min(1).describe("The id of a path step, at any depth, as shown by zenith.auto.read or a Finding."),
+        marginIn: z
+          .number()
+          .min(0)
+          .max(6)
+          .optional()
+          .describe("The safety margin to structures for this run, in inches (0 to 6). Omit to use the robot's clearance. It is never saved."),
+        budget: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("How many candidates the search may score: a count, not a time. Omit for the default, set by the bench."),
+        scorer: z
+          .enum(["sim", "estimate"])
+          .optional()
+          .describe('"sim" (the default) scores with the instant sim; "estimate" scores with the estimate.'),
+        mode: z
+          .enum(["routeAndHeading", "headingOnly", "routeOnly"])
+          .optional()
+          .describe(
+            "routeAndHeading (the default) changes the geometry and the heading together; headingOnly keeps the segments as written; routeOnly keeps the heading as written.",
+          ),
+        allowSplit: z.boolean().optional().describe("False keeps the route to one path. Default true."),
+        allowRanges: z.boolean().optional().describe("False keeps the heading to one mode, never piecewise ranges. Default true."),
+        maxPaths: z.number().int().positive().optional().describe("The most paths a route may have. Default 4."),
+        holdStartHeadingIn: z
+          .number()
+          .min(0)
+          .optional()
+          .describe("Hold the heading the robot starts with over the first this many inches of the route. Default 0, off."),
+        holdEndHeadingIn: z
+          .number()
+          .min(0)
+          .optional()
+          .describe("Reach the step's end heading this many inches before its end and hold it there. Default 0, off."),
+        project: projectField,
+      },
+      annotations: { readOnlyHint: true },
+    },
+    guarded(({ auto, stepId, marginIn, budget, scorer, mode, allowSplit, allowRanges, maxPaths, holdStartHeadingIn, holdEndHeadingIn, project }) => {
+      const proj = resolveProject(project);
+      const parsed = loadAuto(readJsonFile(resolveAutoPath(proj, auto)));
+      const { robot, field, findings } = loadAutoAndPlan(parsed, proj);
+      // A broken robot or field override, or an invalid auto name, falls back to the project's file
+      // with a SCHEMA finding. Searching against the wrong robot would give a route for nothing the
+      // robot runs, so it stops here, saying why.
+      const schema = findings.find((finding) => finding.code === "SCHEMA" && finding.severity === "error");
+      if (schema !== undefined) throw new Error(`zenith.optimize cannot run: ${schema.message}`);
+      const options: OptimizeOptions = {
+        ...(marginIn === undefined ? {} : { marginIn }),
+        ...(budget === undefined ? {} : { budget }),
+        ...(scorer === undefined ? {} : { scorer }),
+        ...(mode === undefined ? {} : { mode }),
+        ...(allowSplit === undefined ? {} : { allowSplit }),
+        ...(allowRanges === undefined ? {} : { allowRanges }),
+        ...(maxPaths === undefined ? {} : { maxPaths }),
+        ...(holdStartHeadingIn === undefined || holdStartHeadingIn === 0 ? {} : { holdStartHeadingIn }),
+        ...(holdEndHeadingIn === undefined || holdEndHeadingIn === 0 ? {} : { holdEndHeadingIn }),
+      };
+      const result = runOptimize(
+        { auto: parsed, robot, field, waypoints: proj.waypoints, season: resolveSeason(field).rules, stepId },
+        options,
+      );
+      return jsonResult(result);
     }),
   );
 }

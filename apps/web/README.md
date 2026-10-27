@@ -15,21 +15,23 @@ pnpm --filter @horizon36596/zenith-web test:e2e # the Playwright smoke, after: p
 Open a folder with `zenith.json` at its root. Zenith reads the robot, field and waypoint files it
 names and lists the autos beside them; Save writes the canonical file back in place. Git stays
 yours, in your terminal. A browser without the File System Access API (Firefox, Safari) picks the
-files individually instead and Save downloads the canonical file. "Load example" opens the bundled
+files individually instead and Save downloads the canonical file, or the whole project as a zip. "Load example" opens the bundled
 `examples/starter` at its `collect-and-score` auto, and it is read only.
 
 ## GitHub mode
 
 Sign in, pick a repository, edit on a work branch, open a pull request, review someone else's.
-Everything happens in the browser: there is no server of ours, and the only host the app ever talks
+Everything happens in the browser: there is no server of ours. Apart from Sign in with GitHub's popup
+(Firebase Authentication and github.com), the only host the app ever talks
 to is `api.github.com`.
 
 ### Creating the token
 
-Zenith v1 signs in with a **fine-grained personal access token** you paste in
-(`site/docs/github.md`). There is no OAuth app to authorise and no device flow
-yet; `packages/github/README.md` has the long version of these steps and of where the seam for a
-later device flow is.
+The sign-in dialog opens on **Sign in with GitHub** (`src/github/oauthSignIn.ts`): Firebase's GitHub
+popup in a browser, GitHub's device flow in the desktop app, both with the `repo` scope, so there is
+no token to make. A pasted **fine-grained personal access token** stays as the way to give Zenith one
+repository only (`site/docs/github.md`); `packages/github/README.md` has the long version of these
+steps.
 
 1. On github.com: **Settings → Developer settings → Personal access tokens → Fine-grained tokens →
    Generate new token**.
@@ -73,8 +75,8 @@ These are enforced in code, in `packages/github` and again in the editor, not ju
 - **A merge conflict stops the proposal.** The files in conflict are listed and nothing is written,
   rather than leaving a half-merged branch behind.
 - **The token is held in one module** (`src/github/session.ts`) and in no other: not in the store,
-  not in a URL, not in a log line. "Remember for this tab" mirrors it to `sessionStorage`, which the
-  browser drops when the tab closes; it is never written to `localStorage`. Signing out clears both
+  not in a URL, not in a log line. "Remember the sign-in" mirrors it to `sessionStorage` until the
+  tab closes (the default), or, when the person picks it, to `localStorage` until they sign out. Signing out clears both
   the memory copy and the mirror.
 
 ### Review mode

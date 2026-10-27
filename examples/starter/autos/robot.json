@@ -92,7 +92,7 @@
   "commands": [
     {
       "name": "intakeOn",
-      "summary": "Runs the front intake inward and keeps it running. The state parameter has one value and a default, so an auto calls intakeOn with no arguments; it tells Zenith's intake checks that this command runs the intake.",
+      "summary": "Runs the front intake inward and keeps it running.",
       "params": {
         "state": {
           "type": "enum",
@@ -110,7 +110,7 @@
     },
     {
       "name": "intakeOff",
-      "summary": "Stops the front intake. Like intakeOn, it takes no arguments in an auto.",
+      "summary": "Stops the front intake.",
       "params": {
         "state": {
           "type": "enum",

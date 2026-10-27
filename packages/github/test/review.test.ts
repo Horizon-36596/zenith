@@ -95,8 +95,24 @@ const rawPull = {
   base: { ref: "main", sha: "basesha" },
 };
 
+const linkJson = {
+  $schema: "https://libraries.horizon36596.org/zenith/schema/v1/link.json",
+  formatVersion: 1,
+  autosDir: "autos",
+  robot: "autos/robot.json",
+  field: "autos/field.json",
+  waypoints: "autos/waypoints.json",
+};
+
 function buildProject(routes: Parameters<typeof createFetchStub>[0]) {
-  const stub = createFetchStub(routes);
+  const stub = createFetchStub([
+    {
+      method: "GET",
+      match: contentsGetPattern("zenith.json"),
+      handler: () => ({ status: 200, body: { type: "file", path: "zenith.json", sha: "z", content: b64(JSON.stringify(linkJson)), encoding: "base64" } }),
+    },
+    ...routes,
+  ]);
   const client = new GitHubClient(new PatAuth("t"), { fetchImpl: stub.fetchImpl, sleep: noSleep().sleep });
   const project = new GitHubProject(client, { owner: "o", repo: "r", base: "main" });
   return { client, project, stub };
@@ -126,6 +142,35 @@ describe("loadReview", () => {
     expect(review.base?.steps[0]?.id).toBe("driveOut");
     expect(review.files).toEqual(["autos/first-auto.auto.json"]);
     expect(review.prMeta.number).toBe(7);
+  });
+
+  it("loads the waypoints file at both sides when the PR changes it, and leaves it out when it does not (issue #407)", async () => {
+    const text = auto("driveOut");
+    const atRef = (path: string, ref: string, content: string) => ({
+      method: "GET" as const,
+      match: (url: URL) => url.pathname.endsWith(`/contents/${path}`) && url.searchParams.get("ref") === ref,
+      handler: () => ({ status: 200, body: { type: "file", path, sha: ref, content: b64(content), encoding: "base64" } }),
+    });
+    const files = (withWaypoints: boolean) => [
+      { filename: "autos/first-auto.auto.json", status: "modified", sha: "s" },
+      ...(withWaypoints ? [{ filename: "autos/waypoints.json", status: "modified", sha: "w" }] : []),
+    ];
+    const routes = (withWaypoints: boolean) => [
+      { method: "GET" as const, match: /\/pulls\/7$/, handler: () => ({ status: 200, body: rawPull }) },
+      { method: "GET" as const, match: /\/pulls\/7\/files/, handler: () => ({ status: 200, body: files(withWaypoints) }) },
+      atRef("autos/first-auto.auto.json", "headsha", text),
+      atRef("autos/first-auto.auto.json", "basesha", text),
+      atRef("autos/waypoints.json", "headsha", '{"side":"head"}'),
+      atRef("autos/waypoints.json", "basesha", '{"side":"base"}'),
+    ];
+
+    const changed = buildProject(routes(true));
+    const review = await loadReview(changed.client, changed.project, 7);
+    expect(review.waypoints).toEqual({ base: '{"side":"base"}', head: '{"side":"head"}' });
+
+    const unchanged = buildProject(routes(false));
+    expect((await loadReview(unchanged.client, unchanged.project, 7)).waypoints).toBeUndefined();
+    expect(unchanged.stub.calls.some((call) => call.url.pathname.endsWith("/contents/autos/waypoints.json"))).toBe(false);
   });
 
   it("accepts a bare PR number too", async () => {

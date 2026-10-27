@@ -18,7 +18,7 @@ import {
 } from "@horizon36596/zenith-core";
 import type { Auto, Field } from "@horizon36596/zenith-schema";
 import { describe, expect, it } from "vitest";
-import { biobuzzRules } from "./rules.js";
+import { biobuzzObstacleLabel, biobuzzRules } from "./rules.js";
 
 /**
  * The checks read a file's poses in the frame of the file's own `alliance`, the frame the robot
@@ -41,14 +41,32 @@ const point = (p: Vec2): string => `(${String(round(p.xIn))}, ${String(round(p.y
  */
 function counterparts(field: Field, mode: MirrorMode): Map<string, string> {
   const pairs = new Map<string, string>();
-  const boxes = [...(field.obstacles ?? []), ...(field.zones ?? [])].flatMap((box) =>
-    "minXIn" in box && typeof box.minXIn === "number" ? [box as unknown as { id: string; minXIn: number; maxXIn: number; minYIn: number; maxYIn: number }] : [],
-  );
-  const centre = (box: (typeof boxes)[number]): Vec2 => ({ xIn: (box.minXIn + box.maxXIn) / 2, yIn: (box.minYIn + box.maxYIn) / 2 });
-  for (const box of boxes) {
-    const there = mirrorVec(centre(box), mode);
-    const match = boxes.find((other) => Math.hypot(centre(other).xIn - there.xIn, centre(other).yIn - there.yIn) < 1e-6);
-    if (match !== undefined) pairs.set(box.id, match.id);
+  // Each box by its centre, and each strut (a hive frame leg) by the middle of its plan, so a
+  // CLEARANCE or STRUCTURE finding on a leg is paired with the mirrored leg (issue #289).
+  const places = [...(field.obstacles ?? []), ...(field.zones ?? [])].flatMap((place): { id: string; centre: Vec2 }[] => {
+    if ("minXIn" in place && typeof place.minXIn === "number") {
+      const box = place as unknown as { id: string; minXIn: number; maxXIn: number; minYIn: number; maxYIn: number };
+      return [{ id: box.id, centre: { xIn: (box.minXIn + box.maxXIn) / 2, yIn: (box.minYIn + box.maxYIn) / 2 } }];
+    }
+    if ("fromIn" in place && "toIn" in place) {
+      const { fromIn, toIn } = place;
+      return [{ id: place.id, centre: { xIn: (fromIn.xIn + toIn.xIn) / 2, yIn: (fromIn.yIn + toIn.yIn) / 2 } }];
+    }
+    return [];
+  });
+  for (const place of places) {
+    const there = mirrorVec(place.centre, mode);
+    const match = places.find((other) => Math.hypot(other.centre.xIn - there.xIn, other.centre.yIn - there.yIn) < 1e-6);
+    if (match !== undefined) pairs.set(place.id, match.id);
+  }
+  // A STRUCTURE message names its obstacle in words too (issue #152), and the counterpart's words
+  // differ: the foot of flower0 on the west wall is the foot of flower2 on the east wall for the other
+  // alliance. A pair of names that differ only in RED and BLUE is left to the colour swap below.
+  for (const [id, other] of [...pairs]) {
+    const name = biobuzzObstacleLabel(id, field);
+    const otherName = biobuzzObstacleLabel(other, field);
+    if (name === null || otherName === null || name === otherName || swapColours(name) === otherName) continue;
+    pairs.set(name, otherName);
   }
   // Longest first, so `hiveRedPivotBar` is swapped before `hiveRed` could match inside it.
   return new Map([...pairs].sort(([a], [b]) => b.length - a.length));
@@ -64,7 +82,11 @@ function swapIds(text: string, pairs: Map<string, string>): string {
   keys.forEach((id, index) => {
     out = out.split(`\u0000${String(index)}\u0000`).join(pairs.get(id) ?? id);
   });
-  return out.split("RED").join("\u0001").split("BLUE").join("RED").split("\u0001").join("BLUE");
+  return swapColours(out);
+}
+
+function swapColours(text: string): string {
+  return text.split("RED").join("\u0001").split("BLUE").join("RED").split("\u0001").join("BLUE");
 }
 
 /** One line per finding, with its places written out, so two lists compare as text. */

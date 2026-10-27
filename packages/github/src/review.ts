@@ -11,6 +11,12 @@ export interface ReviewData {
   /** Every path this PR changes, not only the auto file, so the app can flag unexpected files. */
   files: string[];
   prMeta: PullRequest;
+  /**
+   * The waypoints file's text on each side, when this PR changes it (issue #407), so each version
+   * is drawn against its own waypoints. Absent when the PR leaves the file alone; a side is `null`
+   * when the file does not exist there (added or removed by this PR).
+   */
+  waypoints?: { base: string | null; head: string | null };
 }
 
 function resolvePrNumber(input: string | number, owner: string, repo: string): number {
@@ -64,7 +70,28 @@ export async function loadReview(
     base = parseAuto(JSON.parse(baseText));
   }
 
-  return { base, head, files: changedFiles.map((changed) => changed.filename), prMeta };
+  // Propose commits a changed waypoints file with the auto, so a moved waypoint is part of the
+  // proposal and both versions must be drawn against the waypoints they were written for.
+  const link = await project.link();
+  const waypointsFile =
+    link.waypoints === undefined ? undefined : changedFiles.find((changed) => changed.filename === link.waypoints);
+  let waypoints: ReviewData["waypoints"];
+  if (waypointsFile !== undefined) {
+    const read = async (ref: string): Promise<string> =>
+      (await client.contents.get(project.owner, project.repo, waypointsFile.filename, ref)).text;
+    waypoints = {
+      base: waypointsFile.status === "added" ? null : await read(prMeta.base.sha),
+      head: waypointsFile.status === "removed" ? null : await read(prMeta.head.sha),
+    };
+  }
+
+  return {
+    base,
+    head,
+    files: changedFiles.map((changed) => changed.filename),
+    prMeta,
+    ...(waypoints === undefined ? {} : { waypoints }),
+  };
 }
 
 /** 1-based line number of the step with `stepId` in canonical `text`, or `null` if it is not there. */

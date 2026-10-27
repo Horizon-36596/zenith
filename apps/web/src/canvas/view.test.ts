@@ -1,7 +1,16 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { fieldBounds, loadAuto, loadField, loadRobot, plan, resolve } from "@horizon36596/zenith-core";
+import type { Auto } from "@horizon36596/zenith-schema";
 import { describe, expect, it } from "vitest";
+import { robotReachIn } from "./footprintBounds";
+import { buildScene, routinePoints } from "./scene";
 import {
   expandBounds,
+  fitBounds,
   fitView,
+  FIT_MARGIN_IN,
+  FIT_PADDING,
   headingToScreenAngle,
   layoutPane,
   orientationFor,
@@ -130,6 +139,23 @@ describe("fit, pan and zoom", () => {
     expect(after.yPx - before.yPx).toBeCloseTo(-15, 9);
   });
 
+  it("moves the field a screen delta divided by the zoom, so the grabbed point follows the pointer", () => {
+    // A middle drag or a Ctrl + right drag (issue #115) pans by the pointer's movement in pixels.
+    for (const at of ["bottom", "top", "left", "right"] as const) {
+      const view = zoomAbout(fitView(FIELD, 900, 600, 24, orientationFor(at)), { xPx: 400, yPx: 300 }, 2.5);
+      const grab = { xPx: 312, yPx: 188 };
+      const held = screenToWorld(view, grab);
+      const panned = panBy(view, 60, -40);
+      // The world point that was under the pointer is under it again where the pointer stopped.
+      const under = screenToWorld(panned, { xPx: grab.xPx + 60, yPx: grab.yPx - 40 });
+      expect(under.xIn).toBeCloseTo(held.xIn, 9);
+      expect(under.yIn).toBeCloseTo(held.yIn, 9);
+      // What is now under the unmoved pointer is the delta over the zoom away, in field inches.
+      const now = screenToWorld(panned, grab);
+      expect(Math.hypot(now.xIn - held.xIn, now.yIn - held.yIn)).toBeCloseTo(Math.hypot(60, 40) / view.pxPerIn, 9);
+    }
+  });
+
   it("picks a round scale bar that fits", () => {
     expect(scaleBarInches(4, 140)).toBe(24);
     expect(scaleBarInches(0.8, 140)).toBe(144);
@@ -176,6 +202,114 @@ describe("laying the view out for the pane", () => {
     const after = layoutPane(during, taller, false, false, fit);
     expect(after.view).toEqual(fit(taller));
     expect(after.laidOutAt).toEqual(taller);
+  });
+});
+
+describe("what a fit frames (issue #151)", () => {
+  const read = (relative: string): unknown =>
+    JSON.parse(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8")) as unknown;
+  const field = loadField(read("../../../../examples/starter/autos/field/biobuzz.field.json"));
+  const robot = loadRobot(read("../../../../examples/starter/autos/robot.json"));
+  const example = (): Auto => loadAuto(read("../../../../examples/starter/autos/collect-and-score.auto.json"));
+  const sceneOf = (auto: Auto) => buildScene({ plan: plan(resolve(auto, undefined, robot), robot, field), findings: [], estimate: null });
+  /** The starter robot is an 18 in square turning about its middle, and its intake stays inside that square's circle. */
+  const HALF_DIAGONAL_IN = Math.hypot(18, 18) / 2;
+
+  /** The example with toOtherSide's three curve controls pulled north to y = 130 in, far past the north wall. */
+  function controlsAt130(): Auto {
+    const auto = example();
+    const step = auto.steps.find((candidate) => candidate.id === "toOtherSide");
+    const segment = step?.kind === "path" ? step.segments[0] : undefined;
+    if (segment?.kind !== "bezier") throw new Error("toOtherSide is no longer a curve");
+    for (const control of segment.control) control.yIn = 130;
+    return auto;
+  }
+
+  it("reaches as far as the starter robot's half-diagonal", () => {
+    expect(robotReachIn(robot)).toBeCloseTo(HALF_DIAGONAL_IN, 9);
+  });
+
+  it("takes in toOtherSide's controls at y = 130, with the robot's half-diagonal beyond them", () => {
+    const scene = sceneOf(controlsAt130());
+    const box = fitBounds(fieldBounds(field), routinePoints(scene, "none"), robotReachIn(robot));
+    expect(box.maxYIn).toBeGreaterThanOrEqual(130 + HALF_DIAGONAL_IN - 1e-9);
+    expect(box.maxYIn).toBeCloseTo(130 + HALF_DIAGONAL_IN, 9);
+    // The rest is still the field and its margin: nothing else of the routine leaves the field.
+    const margin = expandBounds(fieldBounds(field), FIT_MARGIN_IN);
+    expect({ ...box, maxYIn: margin.maxYIn }).toEqual(margin);
+  });
+
+  it("frames the board alone, not a start against the wall with its robot's reach (issue #412)", () => {
+    // The starter's start is at (-13, -63), 9 in from the south wall, so its reach crosses the wall.
+    const box = fitBounds(fieldBounds(field), routinePoints(sceneOf(example()), "none"), robotReachIn(robot));
+    expect(box).toEqual(fieldBounds(field));
+  });
+
+  it("is the field and its margin when the whole routine stays on the field", () => {
+    const box = fitBounds(fieldBounds(field), routinePoints(sceneOf(example()), "none"), robotReachIn(robot));
+    expect(box).toEqual(expandBounds(fieldBounds(field), FIT_MARGIN_IN));
+  });
+
+  it("frames the routine where it is drawn when the other alliance is viewed", () => {
+    // BIOBUZZ mirrors by point symmetry, so the controls are drawn at y = -130 for BLUE.
+    const box = fitBounds(fieldBounds(field), routinePoints(sceneOf(controlsAt130()), "pointSymmetry"), robotReachIn(robot));
+    expect(box.minYIn).toBeCloseTo(-130 - HALF_DIAGONAL_IN, 9);
+    expect(box.maxYIn).toBe(72 + FIT_MARGIN_IN);
+  });
+
+  it("shows the whole box it frames, controls and robot included, in the pane", () => {
+    const box = fitBounds(fieldBounds(field), routinePoints(sceneOf(controlsAt130()), "none"), robotReachIn(robot));
+    const view = fitView(box, 900, 600, FIT_PADDING, bottom);
+    const top = worldToScreen(view, { xIn: -12, yIn: 130 + HALF_DIAGONAL_IN });
+    expect(top.yPx).toBeGreaterThanOrEqual(FIT_PADDING.topPx - 1e-6);
+    const wall = worldToScreen(view, { xIn: 0, yIn: -72 - FIT_MARGIN_IN });
+    expect(wall.yPx).toBeLessThanOrEqual(600 - FIT_PADDING.bottomPx + 1e-6);
+  });
+});
+
+describe("the fit's padding (issue #151)", () => {
+  /** The corner readout's top, up from the canvas's bottom: 8 px of pad and its 22 px row (`liveLayer.ts`). */
+  const READOUT_TOP_PX = 8 + 22;
+
+  it("keeps a padded box inside the padding on every side, and centres it in what is left", () => {
+    const padding = { topPx: 48, rightPx: 16, bottomPx: 16, leftPx: 16 };
+    const view = fitView(FIELD, 900, 600, padding, bottom);
+    const northWest = worldToScreen(view, { xIn: -72, yIn: 72 });
+    const southEast = worldToScreen(view, { xIn: 72, yIn: -72 });
+    expect(northWest.yPx).toBeCloseTo(48, 6);
+    expect(southEast.yPx).toBeCloseTo(584, 6);
+    expect((northWest.xPx + southEast.xPx) / 2).toBeCloseTo(450, 6);
+  });
+
+  it("is the same on every side when it is one number", () => {
+    expect(fitView(FIELD, 900, 600, 24, bottom)).toEqual(
+      fitView(FIELD, 900, 600, { topPx: 24, rightPx: 24, bottomPx: 24, leftPx: 24 }, bottom),
+    );
+  });
+
+  it("keeps the wall on the well and the board above the corner readout, from a narrow pane to a wide one", () => {
+    // At 700 x 500 the steps and inspector panels leave the canvas about 198 x 219 px.
+    for (const [widthPx, heightPx] of [
+      [198, 219],
+      [260, 240],
+      [420, 300],
+      [660, 460],
+      [900, 600],
+    ] as const) {
+      const view = fitView(expandBounds(FIELD, FIT_MARGIN_IN), widthPx, heightPx, FIT_PADDING, bottom);
+      const northWest = worldToScreen(view, { xIn: -72, yIn: 72 });
+      const southEast = worldToScreen(view, { xIn: 72, yIn: -72 });
+      // The wall is a band up to 5 px wide just outside the field's edge (`staticLayer.ts` drawWall).
+      expect(northWest.yPx - 5).toBeGreaterThanOrEqual(0);
+      expect(northWest.xPx - 5).toBeGreaterThanOrEqual(0);
+      expect(southEast.yPx).toBeLessThanOrEqual(heightPx - READOUT_TOP_PX + 1e-6);
+    }
+  });
+
+  it("makes the board at least 90% of the 1280 x 720 well's shorter side (issue #412)", () => {
+    // At 1280 x 720 the field well is about 660 x 460 px.
+    const view = fitView(expandBounds(FIELD, FIT_MARGIN_IN), 660, 460, FIT_PADDING, bottom);
+    expect(view.pxPerIn * 144).toBeGreaterThanOrEqual(0.9 * 460);
   });
 });
 

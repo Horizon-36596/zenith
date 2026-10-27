@@ -37,8 +37,18 @@ export type {
 } from "./types.js";
 export { assertPathAllowed, autoPath, isPathAllowed, renderPath } from "./allowlist.js";
 export { GitHubProject } from "./project.js";
-export type { AutoListing, GitHubProjectOptions, OpenedProject } from "./project.js";
-export { propose, RENDER_URL_PLACEHOLDER } from "./propose.js";
-export type { ProposeInput, ProposeResult } from "./propose.js";
+export type { AutoListing, GitHubProjectOptions, OpenedProject, SaveOptions } from "./project.js";
+export { fillRenderUrl, openOrUpdatePull, propose, rawFileUrl, RENDER_URL_PLACEHOLDER } from "./propose.js";
+export type { ProposeInput, ProposeResult, PullInput } from "./propose.js";
+export { findSignIn, NoSignInError, parseGitHubRemote, rejectedTokenNext, remoteHost } from "./signIn.js";
+export type {
+  CommandOptions,
+  CommandResult,
+  CommandRunner,
+  GitHubRemote,
+  SignIn,
+  SignInLookup,
+  TokenSource,
+} from "./signIn.js";
 export { diffAnchor, diffFileHash, lineAnchor, loadReview } from "./review.js";
 export type { ReviewData } from "./review.js";

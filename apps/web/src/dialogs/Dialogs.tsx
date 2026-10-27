@@ -1,57 +1,112 @@
 /**
- * The shell's dialogs: open a project, run the sim, the robot settings panel and the auto's
- * metadata, plus GitHub mode's own, which live in `apps/web/src/github/` beside the rest of it
+ * The shell's dialogs: open a project, run the sim, the auto's
+ * metadata, Report a bug (`report/ReportBugDialog.tsx`), the non-modal notice an import leaves, plus GitHub mode's own, which live in `apps/web/src/github/` beside the rest of it
  * (site/docs/github.md).
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { setMeta } from "@horizon36596/zenith-core";
+import { firstHold, setFirstHold, startHoldKind } from "./startHolds";
 import { loadExample, openFolder, openPickedFiles, simCommand, tracePath } from "../app/projectActions";
 import { tryEdit } from "../app/edits";
+import { pickImportFile } from "../app/importActions";
+import { createAuto } from "../app/newAuto";
 import { Button } from "../components/primitives";
-import { NumberField, Section, TextAreaField, TextField } from "../components/fields";
-import { ProvenanceChip } from "../components/primitives";
+import { NumberField, TextAreaField, TextField } from "../components/fields";
+import { Tooltip } from "../components/Tooltip";
+import { useFeature } from "../state/features";
 import { supportsDirectoryPicker } from "../project/types";
 import { isDesktop } from "../project/desktop";
 import { runHighFidelitySim } from "../project/desktopActions";
 import { openAutoNamed, loadTraceFile } from "../app/projectActions";
+import { clearReturnToGitHub, returnsToGitHub, useCloneOrigin } from "../github/cloneOffer";
 import { CommitDialog } from "../github/CommitDialog";
 import { GitHubTab } from "../github/OpenFromGitHub";
 import { ProposeDialog } from "../github/ProposeDialog";
 import { SignInDialog } from "../github/SignInDialog";
-import { setDialog, setStatus, useEditor } from "../state/store";
+import { setDialog, useEditor } from "../state/store";
 import { TraceSummary } from "../panels/TraceSummary";
+import { HostAutosDialog } from "../project/hostPanel";
+import { hostRunBlockedReason, isHostMode, runInHost } from "../project/hostSession";
+import { ReportBugDialog } from "../report/ReportBugDialog";
+import { useCopy } from "../app/copyText";
 import { Modal } from "./Modal";
 import { UnsavedDialog } from "./UnsavedDialog";
+import { DeleteHiddenDialog } from "./DeleteHiddenDialog";
+import { LoneAutoDialog, SaveChoiceDialog, WaypointCheckDialog } from "./SaveChoiceDialog";
+import { SetupDialog } from "./SetupDialog";
+import { WaypointDialog } from "./WaypointDialog";
+import { ImportNotice } from "./ImportNotice";
+import { ImportCommandsDialog } from "./ImportCommandsDialog";
 import styles from "./Dialogs.module.css";
 
 export function Dialogs() {
   return (
     <>
       <CurrentDialog />
+      <SetupDialog />
       <UnsavedDialog />
+      <DeleteHiddenDialog />
+      <SaveChoiceDialog />
+      <WaypointCheckDialog />
+      <LoneAutoDialog />
+      <WaypointDialog />
+      <ImportNotice />
     </>
   );
 }
 
 function CurrentDialog() {
   const { dialog } = useEditor();
-  if (dialog === "open") return <OpenProjectDialog />;
-  if (dialog === "simulate") return <SimulateDialog />;
-  if (dialog === "robot") return <RobotDialog />;
+  const fullSim = useFeature("fullSim");
+  // In host mode the project is the host's, so "open" picks among its autos (site/docs/host-protocol.md).
+  if (dialog === "open") return isHostMode() ? <HostAutosDialog /> : <OpenProjectDialog />;
+  // Outside host mode Simulate offers only the full sim, which the Full sim switch hides (issue #207).
+  if (dialog === "simulate") return isHostMode() ? <HostSimulateDialog /> : fullSim ? <SimulateDialog /> : null;
   if (dialog === "meta") return <MetaDialog />;
   if (dialog === "signIn") return <SignInDialog />;
   if (dialog === "commit") return <CommitDialog />;
   if (dialog === "propose") return <ProposeDialog />;
+  if (dialog === "importCommands") return <ImportCommandsDialog />;
+  if (dialog === "reportBug") return <ReportBugDialog />;
   return null;
 }
 
 /* ---- Open project -------------------------------------------------------- */
 
+/**
+ * Open project, which with a project open is also the auto switcher (the title bar's auto name and
+ * Ctrl+O come here). With one open, what the person came for is first: the project's autos and New
+ * auto, the primary button. The other ways to open a project, a folder, GitHub, the example, wait under
+ * "Open another project" (issue #414). With none open it is the dialog it always was.
+ */
 function OpenProjectDialog() {
   const { project, busy } = useEditor();
-  const [tab, setTab] = useState<"local" | "github">("local");
+  // Back on the GitHub tab after signing in from it; on the local folder otherwise.
+  const [tab, setTab] = useState<"local" | "github">(() => (returnsToGitHub() ? "github" : "local"));
+  // With a project open the other ways to open one are folded away, unless the person was mid-way
+  // through one, such as signing in for GitHub.
+  const [other, setOther] = useState(() => project === null || returnsToGitHub());
+  useEffect(() => {
+    clearReturnToGitHub();
+  }, []);
+  const origin = useCloneOrigin();
   const files = useRef<HTMLInputElement | null>(null);
   const canPick = supportsDirectoryPicker();
+  const hasProject = project !== null;
+
+  const openFolderButton = (
+    <Button
+      kind={hasProject ? "secondary" : "primary"}
+      whyDisabled={busy ? "Opening a project now." : canPick ? null : "This browser has no folder picker. Pick the files instead."}
+      testId="open-project-primary"
+      onClick={() => {
+        void openFolder();
+      }}
+    >
+      {hasProject ? "Open another folder…" : "Open project"}
+    </Button>
+  );
 
   return (
     <Modal
@@ -69,113 +124,165 @@ function OpenProjectDialog() {
           >
             Cancel
           </Button>
-          {tab === "local" ? (
+          {hasProject ? (
             <Button
-              kind="primary"
-              disabled={busy || !canPick}
-              testId="open-project-primary"
+              kind={other && tab === "github" ? "secondary" : "primary"}
+              testId="open-project-new-auto"
               onClick={() => {
-                void openFolder();
+                setDialog(null);
+                void createAuto();
               }}
             >
-              Open project
+              New auto
             </Button>
+          ) : tab === "local" ? (
+            openFolderButton
           ) : null}
         </>
       }
     >
-      <div className={styles.tabs} role="tablist" aria-label="Where the project lives">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "local"}
-          className={styles.tab}
-          onClick={() => {
-            setTab("local");
-          }}
-        >
-          Local folder
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "github"}
-          className={styles.tab}
-          onClick={() => {
-            setTab("github");
-          }}
-        >
-          GitHub
-        </button>
-      </div>
-
-      {tab === "local" ? (
+      {project === null ? null : (
         <>
-          <p className={styles.prose}>
-            Pick the robot repository folder, the one with <code className="mono">zenith.json</code>{" "}
-            at its root. Zenith reads the robot, field and waypoint files it names and lists the
-            autos beside them. Saving writes the canonical file back in place;{" "}
-            {isDesktop()
-              ? "commit, push and pull request are in the Robot menu."
-              : "committing stays yours, in your terminal."}
-          </p>
-          {canPick ? null : (
-            <p className={styles.warn}>
-              This browser has no folder picker. Pick the files individually below, or open the app
-              in a Chromium browser; saving then downloads the canonical file instead of writing it.
-            </p>
-          )}
-          <div className={styles.row}>
-            <input
-              ref={files}
-              type="file"
-              multiple
-              className={styles.file}
-              data-testid="open-project-files"
-              onChange={(event) => {
-                const picked = [...(event.target.files ?? [])];
-                if (picked.length > 0) void openPickedFiles(picked);
-              }}
-            />
+          <div className={styles.recent}>
+            <p className={styles.recentTitle}>{project.autoFiles.length === 0 ? `No autos in ${project.name} yet` : `Autos in ${project.name}`}</p>
+            {project.autoFiles.map((fileName) => (
+              <button
+                key={fileName}
+                type="button"
+                className={styles.recentRow}
+                data-testid={`open-auto-${fileName}`}
+                onClick={() => {
+                  void openAutoNamed(fileName);
+                  setDialog(null);
+                }}
+              >
+                <span className={styles.recentName}>{fileName}</span>
+                <span className={styles.recentPath}>
+                  {project.link.autosDir}/{fileName}
+                </span>
+              </button>
+            ))}
           </div>
           <div className={styles.row}>
             <Button
-              testId="load-example"
+              testId="open-project-import"
               onClick={() => {
-                void loadExample();
+                setDialog(null);
+                pickImportFile();
               }}
             >
-              Load example
+              Import from another planner…
             </Button>
-            <span className={styles.hint}>
-              examples/starter, bundled into the app. Read only: Save downloads the file.
-            </span>
           </div>
-          {project === null ? null : (
-            <div className={styles.recent}>
-              <p className={styles.recentTitle}>Autos in {project.name}</p>
-              {project.autoFiles.map((fileName) => (
-                <button
-                  key={fileName}
-                  type="button"
-                  className={styles.recentRow}
-                  data-testid={`open-auto-${fileName}`}
+          {origin === null ? null : (
+            <div className={styles.row}>
+              <Tooltip
+                label="Open this repository in GitHub mode"
+                hint={`GitHub mode reads it from GitHub at ${origin.base} and opens pull requests for you.`}
+              >
+                <Button
+                  testId="open-project-clone-offer"
                   onClick={() => {
-                    void openAutoNamed(fileName);
-                    setDialog(null);
+                    setTab("github");
+                    setOther(true);
                   }}
                 >
-                  <span className={styles.recentName}>{fileName}</span>
-                  <span className={styles.recentPath}>
-                    {project.link.autosDir}/{fileName}
-                  </span>
-                </button>
-              ))}
+                  Open this repository in GitHub mode
+                </Button>
+              </Tooltip>
+              <span className={styles.hint}>
+                {project.name} is a clone of {origin.owner}/{origin.repo}.
+              </span>
             </div>
           )}
+          <button
+            type="button"
+            className={styles.disclosure}
+            aria-expanded={other}
+            data-testid="open-project-other"
+            onClick={() => {
+              setOther(!other);
+            }}
+          >
+            {other ? <ChevronDown size={16} strokeWidth={1.75} aria-hidden /> : <ChevronRight size={16} strokeWidth={1.75} aria-hidden />}
+            Open another project
+          </button>
         </>
-      ) : (
-        <GitHubTab />
+      )}
+
+      {!other ? null : (
+        <>
+          <div className={styles.tabs} role="tablist" aria-label="Where the project lives">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "local"}
+              className={styles.tab}
+              onClick={() => {
+                setTab("local");
+              }}
+            >
+              Local folder
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "github"}
+              className={styles.tab}
+              onClick={() => {
+                setTab("github");
+              }}
+            >
+              GitHub
+            </button>
+          </div>
+
+          {tab === "local" ? (
+            <>
+              <p className={styles.prose}>
+                Pick the folder with <code className="mono">zenith.json</code> at its root.
+              </p>
+              {canPick ? null : (
+                <p className={styles.warn}>
+                  This browser has no folder picker. Pick the files below, or use a Chromium browser; saving then
+                  downloads the file instead of writing it.
+                </p>
+              )}
+              {hasProject ? <div className={styles.row}>{openFolderButton}</div> : null}
+              {canPick ? null : (
+                <div className={styles.row}>
+                  <label className={styles.fileLabel}>
+                    Or pick single files (opens one auto)
+                    <input
+                      ref={files}
+                      type="file"
+                      multiple
+                      className={styles.file}
+                      data-testid="open-project-files"
+                      onChange={(event) => {
+                        const picked = [...(event.target.files ?? [])];
+                        if (picked.length > 0) void openPickedFiles(picked);
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+              <div className={styles.row}>
+                <Button
+                  testId="load-example"
+                  onClick={() => {
+                    void loadExample();
+                  }}
+                >
+                  Open the example
+                </Button>
+                <span className={styles.hint}>Read only: Save asks where to put your copy.</span>
+              </div>
+            </>
+          ) : (
+            <GitHubTab />
+          )}
+        </>
       )}
     </Modal>
   );
@@ -184,10 +291,14 @@ function OpenProjectDialog() {
 /* ---- Simulate ------------------------------------------------------------ */
 
 function SimulateDialog() {
-  const { project } = useEditor();
+  const { project, repo } = useEditor();
   const command = simCommand();
   const trace = tracePath();
-  const [copied, setCopied] = useState(false);
+  const { copy, label } = useCopy();
+  const commandBox = useRef<HTMLPreElement | null>(null);
+  // A project from GitHub is named; the example and a folder say "your robot repository", since the
+  // command runs in the team's own code either way (0.1.2 UX sweep, W1-4).
+  const where = repo === null ? "your robot repository" : `${repo.owner}/${repo.repo}`;
 
   return (
     <Modal
@@ -198,37 +309,35 @@ function SimulateDialog() {
         setDialog(null);
       }}
       footer={
-        <Button
-          kind="primary"
-          onClick={() => {
-            setDialog(null);
-          }}
-        >
-          Done
-        </Button>
-      }
-    >
-      <p className={styles.prose}>
-        The timeline plays one of three levels: Ideal, Instant sim or Full sim. Full sim is the robot
-        repository&apos;s headless sim, the closest match to the robot:{" "}
-        {isDesktop()
-          ? "run it from here, or run the command below in that repository and load the trace it writes."
-          : "run the command below in that repository, then load the trace it writes."}
-      </p>
-      {isDesktop() && command !== null ? (
-        <div className={styles.row}>
+        <>
           <Button
-            kind="primary"
-            testId="run-high-fidelity-sim"
+            kind={isDesktop() && command !== null ? "secondary" : "primary"}
             onClick={() => {
               setDialog(null);
-              void runHighFidelitySim();
             }}
           >
-            Run high-fidelity sim
+            Done
           </Button>
-        </div>
-      ) : null}
+          {isDesktop() && command !== null ? (
+            <Button
+              kind="primary"
+              testId="run-high-fidelity-sim"
+              onClick={() => {
+                setDialog(null);
+                void runHighFidelitySim();
+              }}
+            >
+              Run high-fidelity sim
+            </Button>
+          ) : null}
+        </>
+      }
+    >
+      {isDesktop() ? null : (
+        <p className={styles.prose} data-testid="simulate-where">
+          Run the command below in {where}, then load the trace it writes.
+        </p>
+      )}
       {command === null ? (
         <p className={styles.warn}>
           {project === null
@@ -237,179 +346,140 @@ function SimulateDialog() {
         </p>
       ) : (
         <>
-          <pre className={styles.code} data-testid="sim-command">
+          <pre ref={commandBox} className={styles.code} data-testid="sim-command">
             {command}
           </pre>
           <div className={styles.row}>
             <Button
               testId="copy-sim-command"
               onClick={() => {
-                void navigator.clipboard.writeText(command).then(
-                  () => {
-                    setCopied(true);
-                  },
-                  () => {
-                    setStatus("error", "The browser refused access to the clipboard.");
-                  },
-                );
+                void copy("the sim command", command, { select: commandBox.current });
               }}
             >
-              {copied ? "Copied" : "Copy command"}
+              {label("Copy command")}
             </Button>
             {trace === null ? null : <span className={styles.hint}>It writes {trace}</span>}
           </div>
         </>
       )}
       <TraceSummary />
-      <label className={styles.fileLabel}>
-        Load trace
-        <input
-          type="file"
-          accept=".json"
-          className={styles.file}
-          data-testid="load-trace"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file !== undefined) void loadTraceFile(file);
-          }}
-        />
-      </label>
+      <LoadTrace />
     </Modal>
   );
 }
 
-/* ---- Robot settings ------------------------------------------------------ */
+/**
+ * The Load trace button, shown only while the Full sim switch is on (issue #207). It opens the
+ * file picker of a hidden input, so the dialog shows no native "No file chosen" text. A trace that
+ * does not load is said here, beside the button, because the dialog covers the status line.
+ */
+function LoadTrace() {
+  const fullSim = useFeature("fullSim");
+  const input = useRef<HTMLInputElement>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  if (!fullSim) return null;
+  return (
+    <>
+      <div className={styles.row}>
+        <Button
+          testId="load-trace-button"
+          onClick={() => {
+            input.current?.click();
+          }}
+        >
+          Load trace…
+        </Button>
+        <input
+          ref={input}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          data-testid="load-trace"
+          aria-label="Trace file"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file !== undefined) void loadTraceFile(file).then(setProblem);
+          }}
+        />
+      </div>
+      {problem === null ? null : (
+        <p className={styles.error} role="alert" data-testid="load-trace-error">
+          {problem}
+        </p>
+      )}
+    </>
+  );
+}
 
-function RobotDialog() {
-  const { project } = useEditor();
-  const robot = project?.robot;
+/**
+ * Simulate in host mode: the high-fidelity option is the host's own simulator, which answers with a
+ * trace, instead of a sim command to copy into a robot repository this project does not have.
+ */
+function HostSimulateDialog() {
+  const { host } = useEditor();
+  const name = host?.name ?? "the host";
+  const offered = host?.simulate === true;
+  const blocked = hostRunBlockedReason();
+  const fullSim = useFeature("fullSim");
 
   return (
     <Modal
-      title="Robot settings"
-      width={560}
-      testId="robot-settings"
+      title="Simulate"
+      width={640}
+      testId="simulate"
       onClose={() => {
         setDialog(null);
       }}
       footer={
-        <Button
-          kind="primary"
-          onClick={() => {
-            setDialog(null);
-          }}
-        >
-          Done
-        </Button>
+        <>
+          <Button
+            kind={offered ? "secondary" : "primary"}
+            onClick={() => {
+              setDialog(null);
+            }}
+          >
+            Done
+          </Button>
+          {offered ? (
+            <Button
+              kind="primary"
+              testId="run-host-sim"
+              whyDisabled={blocked}
+              onClick={() => {
+                setDialog(null);
+                runInHost();
+              }}
+            >
+              {host?.running === null ? `Simulate in ${name}` : `Simulating in ${name}…`}
+            </Button>
+          ) : null}
+        </>
       }
     >
-      {robot === undefined ? (
-        <p className={styles.prose}>No project is open.</p>
-      ) : (
-        <>
-          <p className={styles.prose}>
-            These are <code className="mono">{project?.link.robot}</code>&apos;s numbers, shown with
-            the provenance each one carries. The editor reads them; the robot repository owns them,
-            so change them there and reopen the project.
-          </p>
-          <Section title="Footprint">
-            <ReadRow
-              label="Start length"
-              value={robot.footprint.startIn.lengthIn}
-              unit="in"
-              provenance={robot.footprint.startIn.provenance}
-            />
-            <ReadRow
-              label="Start width"
-              value={robot.footprint.startIn.widthIn}
-              unit="in"
-              provenance={robot.footprint.startIn.provenance}
-            />
-            <ReadRow
-              label="Expanded length"
-              value={robot.footprint.expandedIn.lengthIn}
-              unit="in"
-              provenance={robot.footprint.expandedIn.provenance}
-            />
-            <ReadRow
-              label="Expanded width"
-              value={robot.footprint.expandedIn.widthIn}
-              unit="in"
-              provenance={robot.footprint.expandedIn.provenance}
-            />
-            <ReadRow
-              label="Centre of rotation x"
-              value={robot.footprint.centreOfRotationIn.xIn}
-              unit="in"
-            />
-            <ReadRow
-              label="Centre of rotation y"
-              value={robot.footprint.centreOfRotationIn.yIn}
-              unit="in"
-            />
-          </Section>
-          <Section title="Kinematics">
-            <ReadRow
-              label="Max forward"
-              value={robot.kinematics.maxForwardVelInPerS.value}
-              unit="in/s"
-              provenance={robot.kinematics.maxForwardVelInPerS.provenance}
-            />
-            <ReadRow
-              label="Max strafe"
-              value={robot.kinematics.maxStrafeVelInPerS.value}
-              unit="in/s"
-              provenance={robot.kinematics.maxStrafeVelInPerS.provenance}
-            />
-            <ReadRow
-              label="Accel"
-              value={robot.kinematics.accelInPerS2.value}
-              unit="in/s²"
-              provenance={robot.kinematics.accelInPerS2.provenance}
-            />
-            <ReadRow
-              label="Default speed fraction"
-              value={robot.kinematics.defaultPathSpeedFraction.value}
-              provenance={robot.kinematics.defaultPathSpeedFraction.provenance}
-            />
-          </Section>
-        </>
+      {offered ? null : (
+        // With Full sim switched off (issue #207) there is no trace to load, so the note stops at the host.
+        <p className={styles.prose}>
+          {fullSim ? `${name} did not offer to simulate from here, so load a trace it wrote instead.` : `${name} did not offer to simulate from here.`}
+        </p>
       )}
+      {offered && blocked !== null && host?.running === null ? <p className={styles.hint}>{blocked}</p> : null}
+      <TraceSummary />
+      <LoadTrace />
     </Modal>
   );
 }
 
-function ReadRow({
-  label,
-  value,
-  unit,
-  provenance,
-}: {
-  label: string;
-  value: number;
-  unit?: string;
-  provenance?: string;
-}) {
-  return (
-    <div className={styles.readRow}>
-      <span className={styles.readLabel}>{label}</span>
-      <span className={styles.readValue}>
-        {value.toFixed(3)}
-        {unit === undefined ? null : <span className="unit">{unit}</span>}
-      </span>
-      <ProvenanceChip provenance={provenance} />
-    </div>
-  );
-}
-
-/* ---- Auto metadata ------------------------------------------------------- */
+/* ---- Auto details -------------------------------------------------------- */
 
 function MetaDialog() {
-  const { auto } = useEditor();
+  const { auto, autoField, project } = useEditor();
+  const ledger = useFeature("ledger");
+  const holdKind = auto === null ? null : startHoldKind(auto, autoField ?? project?.field ?? null);
 
   return (
     <Modal
-      title="Auto metadata"
+      title="Auto details"
       testId="auto-meta"
       onClose={() => {
         setDialog(null);
@@ -432,6 +502,7 @@ function MetaDialog() {
           <TextField label="Name" value={auto.name} disabled onChange={() => undefined} />
           <TextField
             label="Title"
+            wide
             value={auto.title ?? ""}
             testId="meta-title"
             mono={false}
@@ -448,6 +519,10 @@ function MetaDialog() {
           />
           <TextField
             label="Authors"
+            wide
+            mono={false}
+            placeholder="Names, with commas between them"
+            testId="meta-authors"
             value={(auto.authors ?? []).join(", ")}
             onChange={(value) => {
               const authors = value
@@ -457,22 +532,28 @@ function MetaDialog() {
               tryEdit((current) => setMeta(current, { authors: authors.length === 0 ? undefined : authors }));
             }}
           />
-          <NumberField
-            label="Holds at start"
-            value={Object.values(auto.start.holds ?? {})[0] ?? null}
-            step={1}
-            digits={0}
-            min={0}
-            hint="What the robot is preloaded with, by the element kind the field file names."
-            onChange={(count) => {
-              const kind = Object.keys(auto.start.holds ?? {})[0];
-              if (kind === undefined) return;
-              tryEdit((current) => ({
-                ...current,
-                start: { ...current.start, holds: { [kind]: count } },
-              }));
-            }}
-          />
+          {ledger ? (
+            <NumberField<number | null>
+              label="Holds at start"
+              value={firstHold(auto)}
+              step={1}
+              digits={0}
+              min={0}
+              emptyStart={0}
+              unit={holdKind ?? undefined}
+              disabled={holdKind === null}
+              testId="meta-holds"
+              hint={
+                holdKind === null
+                  ? "Read only: the field file names no single kind of game piece, so there is nothing to count."
+                  : `How many ${holdKind} the robot is preloaded with.`
+              }
+              onChange={(count) => {
+                // An auto that preloads nothing yet gets the kind the field file places (issue #502).
+                if (count !== null) tryEdit((current) => setFirstHold(current, count, holdKind));
+              }}
+            />
+          ) : null}
         </>
       )}
     </Modal>

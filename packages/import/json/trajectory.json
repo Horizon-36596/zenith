@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://libraries.horizon36596.org/zenith/schema/v1/trajectory.json",
+  "title": "Zenith interchange trajectory file, formatVersion 1",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://libraries.horizon36596.org/zenith/schema/v1/trajectory.json"
+    },
+    "formatVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "kind": {
+      "type": "string",
+      "const": "trajectory"
+    },
+    "season": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "alliance": {
+      "type": "string",
+      "enum": [
+        "RED",
+        "BLUE"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "planner": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "exporter": {
+          "type": "string",
+          "maxLength": 200
+        }
+      },
+      "additionalProperties": false
+    },
+    "frame": {
+      "type": "object",
+      "properties": {
+        "preset": {
+          "type": "string",
+          "enum": [
+            "zenith",
+            "pedro",
+            "roadrunner"
+          ]
+        },
+        "originIn": {
+          "type": "object",
+          "properties": {
+            "xIn": {
+              "type": "number"
+            },
+            "yIn": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "xIn",
+            "yIn"
+          ],
+          "additionalProperties": false
+        },
+        "xAxis": {
+          "type": "string",
+          "enum": [
+            "+x",
+            "-x",
+            "+y",
+            "-y"
+          ]
+        },
+        "yAxis": {
+          "type": "string",
+          "enum": [
+            "+x",
+            "-x",
+            "+y",
+            "-y"
+          ]
+        },
+        "units": {
+          "type": "string",
+          "enum": [
+            "in",
+            "mm",
+            "cm",
+            "m"
+          ]
+        },
+        "headingUnit": {
+          "type": "string",
+          "enum": [
+            "rad",
+            "deg"
+          ]
+        },
+        "headingZero": {
+          "type": "string",
+          "enum": [
+            "+x",
+            "+y"
+          ]
+        },
+        "headingPositive": {
+          "type": "string",
+          "enum": [
+            "ccw",
+            "cw"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "The planner's frame: a preset (zenith, pedro or roadrunner), optionally with some of its keys overridden, or every key given explicitly. Axis directions are field-frame directions."
+    },
+    "rateHz": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1000
+    },
+    "poses": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        },
+        "minItems": 3,
+        "maxItems": 3
+      },
+      "minItems": 1,
+      "maxItems": 300000
+    },
+    "boundingBox": {
+      "type": "object",
+      "properties": {
+        "lengthIn": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "widthIn": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "centreOffsetIn": {
+          "type": "object",
+          "properties": {
+            "xIn": {
+              "type": "number"
+            },
+            "yIn": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "xIn",
+            "yIn"
+          ],
+          "additionalProperties": false
+        },
+        "provenance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "lengthIn",
+        "widthIn"
+      ],
+      "additionalProperties": false
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "endS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "label": {
+            "type": "string",
+            "enum": [
+              "drive",
+              "score",
+              "collect",
+              "wait",
+              "park",
+              "other"
+            ]
+          }
+        },
+        "required": [
+          "startS",
+          "endS",
+          "label"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "elementId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "take",
+              "score"
+            ]
+          },
+          "atS": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "elementId",
+          "action",
+          "atS"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    },
+    "envelopes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "endS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "polygon": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 3,
+            "maxItems": 200
+          }
+        },
+        "required": [
+          "startS",
+          "endS",
+          "polygon"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    }
+  },
+  "required": [
+    "formatVersion",
+    "kind",
+    "season",
+    "alliance",
+    "frame",
+    "rateHz",
+    "poses",
+    "boundingBox"
+  ],
+  "additionalProperties": false
+}

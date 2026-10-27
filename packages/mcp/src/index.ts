@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { pathToFileURL } from "node:url";
+import { isEntryPoint } from "@horizon36596/zenith-cli/lib";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer, SERVER_NAME, SERVER_VERSION } from "./server.js";
 
@@ -17,7 +17,8 @@ export async function main(): Promise<void> {
   await server.connect(transport);
 }
 
-const entry = process.argv[1];
-if (entry !== undefined && import.meta.url === pathToFileURL(entry).href) {
+// Through symlinks: `npx @horizon36596/zenith-mcp` on Linux and macOS starts this file from a
+// `node_modules/.bin` link, which a plain URL comparison would not match, so the server never started.
+if (isEntryPoint(process.argv[1], import.meta.url)) {
   await main();
 }

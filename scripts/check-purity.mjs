@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Determinism grep. `packages/core` and `packages/schema` are pure: no DOM, no clock, no
+// Determinism grep. `packages/core`, `packages/schema` and `packages/import` are pure: no DOM, no clock, no
 // randomness, no Node APIs. This script fails the build on any hit, per CLAUDE.md rule 1.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const roots = ["packages/core/src", "packages/schema/src"];
+const roots = ["packages/core/src", "packages/schema/src", "packages/import/src"];
 
 // Two shapes: bare identifiers, which need a word boundary on both sides, and member accesses,
 // which end in a dot and so must not carry a trailing boundary.
@@ -57,7 +57,7 @@ for (const root of roots) {
 }
 
 if (hits.length > 0) {
-  console.error("Purity check failed. packages/core and packages/schema must stay pure:");
+  console.error("Purity check failed. packages/core, packages/schema and packages/import must stay pure:");
   for (const hit of hits) console.error(`  ${hit}`);
   console.error("\nNo DOM, no clock, no randomness, no Node APIs there (CLAUDE.md rule 1).");
   process.exit(1);

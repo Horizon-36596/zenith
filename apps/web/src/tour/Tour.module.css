@@ -160,36 +160,13 @@
   flex: 1;
 }
 
-.ghost,
-.primary {
-  display: inline-flex;
-  align-items: center;
-  height: var(--ctl-h-lg);
-  padding-inline: var(--space-3);
-  border-radius: var(--radius-xs);
-  font-family: var(--font-display);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-}
-
+/* The buttons are UI_GUIDE 9.9's one recipe, composed from the shared primitives. */
 .ghost {
-  color: var(--text-mid);
-}
-
-.ghost:hover {
-  background: var(--bg-hover);
-  color: var(--text-hi);
+  composes: ghost from "../components/primitives.module.css";
 }
 
 .primary {
-  padding-inline: var(--space-4);
-  background: var(--brand-gradient-button);
-  color: var(--brand-ink);
-  box-shadow: var(--shadow-ember);
-}
-
-.primary:hover {
-  background: var(--brand-gradient-button-hover);
+  composes: primary from "../components/primitives.module.css";
 }
 
 .choiceTitle {
@@ -250,4 +227,62 @@
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
   color: var(--text-mid);
+}
+
+/*
+ * UI_GUIDE section 10.4: the first run's preset card. It is the choice card with three choices, so it
+ * is wider, and at phone width the choices and the buttons stack, one to a row.
+ */
+.presetCard {
+  width: var(--tour-preset-w);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.presetOptions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.recommended {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  color: var(--text-mid);
+  vertical-align: middle;
+}
+
+/* Two lines are kept for it whether it holds a reason or not, so a refused file moves nothing. */
+.presetProblem {
+  margin: 0;
+  min-height: calc(2 * var(--lh-sm));
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--sev-error);
+}
+
+.buttonIcon {
+  margin-right: var(--space-2);
+}
+
+@media (max-width: 640px) {
+  .presetOptions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .presetButtons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .presetButtons .spacer {
+    display: none;
+  }
+
+  .presetButtons .ghost {
+    justify-content: center;
+  }
 }

@@ -5,6 +5,8 @@
  */
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import { turnOnFeatures } from "./features";
+import { chooseJustThisAuto, saveExampleAuto, withoutFolderPicker } from "./saveExample";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -15,6 +17,7 @@ test.beforeEach(async ({ page }) => {
       );
     }
   });
+  await turnOnFeatures(page);
 });
 
 async function loadExample(page: Page): Promise<void> {
@@ -36,8 +39,7 @@ interface SavedStep {
 }
 
 async function saveAndRead(page: Page): Promise<{ steps: SavedStep[] }> {
-  const download = page.waitForEvent("download");
-  await page.keyboard.press("Control+s");
+  const download = saveExampleAuto(page);
   const path = await (await download).path();
   return JSON.parse(readFileSync(path, "utf8")) as { steps: SavedStep[] };
 }
@@ -59,7 +61,7 @@ test("a path inserted after a step in the middle continues from that step", asyn
   expect(after.length).toBe(before.length + 1);
   const inserted = after[at + 1] ?? "";
   expect(before).not.toContain(inserted);
-  await expect(page.getByTestId("inspector")).toContainText(inserted);
+  await expect(page.getByTestId("inspector-title")).toHaveText(inserted);
 
   // In the file its first segment starts wherever driveOut left the robot.
   const saved = await saveAndRead(page);
@@ -131,8 +133,8 @@ test("right-clicking a step opens its menu, and wrap puts it in a sequence", asy
 
   await menu.getByTestId("menu-edit.wrapSequence").click();
   await expect(page.getByTestId("step-menu")).toHaveCount(0);
-  await expect(page.getByTestId("inspector")).toContainText("Sequence");
-  await expect(page.getByTestId("inspector-sequence-count")).toHaveText("1");
+  await expect(page.getByTestId("inspector-kind-icon")).toHaveAttribute("aria-label", "Sequence");
+  await expect(page.getByTestId("inspector-members").locator('button[data-testid^="inspector-member-"]')).toHaveCount(1);
 
   // Unwrap, from the group's own row, takes it back out. Core names a new sequence "sequence".
   await page.getByTestId("step-row-sequence").click({ button: "right" });
@@ -159,6 +161,9 @@ test("? opens every shortcut and canvas gesture, and each panel explains itself"
   const overlay = page.getByTestId("shortcuts-overlay");
   await expect(overlay).toBeVisible();
   await expect(overlay).toContainText("Ctrl K");
+  // The gestures are on the second tab, Mouse (issue #414).
+  await expect(overlay.getByTestId("shortcuts-canvas")).toHaveCount(0);
+  await overlay.getByTestId("shortcuts-tab-mouse").click();
   await expect(overlay.getByTestId("shortcuts-canvas")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(overlay).toHaveCount(0);
@@ -199,12 +204,37 @@ test("the status bar overlays the window: nothing moves when it shows or clears"
   expect(await boxes()).toEqual(shown);
 });
 
+/**
+ * The first status line after opening the example once lay over the Partners header at the foot of
+ * the steps column for its 6 seconds (sweep item A23). The bar starts at that column's right edge.
+ */
+test("the status bar leaves the steps column and its Ledger and Partners headers clear", async ({ page }) => {
+  await loadExample(page);
+  const status = page.getByTestId("status");
+  await expect(status).toBeVisible();
+  const bar = await status.boundingBox();
+  const partners = await page.getByTestId("partners-panel").boundingBox();
+  const ledger = await page.getByTestId("ledger-panel").boundingBox();
+  const steps = await page.getByLabel("Steps and ledger").boundingBox();
+  if (bar === null || partners === null || ledger === null || steps === null) throw new Error("missing a box");
+  expect(bar.x).toBeGreaterThanOrEqual(steps.x + steps.width - 1);
+  expect(bar.x).toBeGreaterThanOrEqual(partners.x + partners.width - 1);
+  expect(bar.x).toBeGreaterThanOrEqual(ledger.x + ledger.width - 1);
+  // It still reaches the window's right edge.
+  const viewport = page.viewportSize();
+  expect(Math.round(bar.x + bar.width)).toBe(viewport?.width);
+});
+
 test("the problems panel explains a finding's code", async ({ page }) => {
   await loadExample(page);
-  // collect-and-score, the auto the example opens, raises one finding: TIME_BUDGET on its total.
+  // collect-and-score, the auto the example opens, raises only TIME_BUDGET's info note, which the
+  // panel does not list (issue #413). Running sweepGarden at 0.8 adds SWEEP_SPEED, a listed warning.
+  await page.evaluate(
+    `import("/src/state/store.ts").then((m) => { const s = m.getState(); m.commit({ ...s.auto, steps: s.auto.steps.map((x) => x.id !== "sweepGarden" ? x : { ...x, speedFraction: 0.8 }) }); })`,
+  );
   const code = page.getByTestId("finding-code").first();
   await code.hover();
-  await expect(page.getByRole("tooltip")).toContainText("How to fix");
+  await expect(page.getByRole("tooltip")).toContainText("To fix: ");
 });
 
 test("right-clicking the field opens the canvas menu, built from the action table", async ({ page }) => {
@@ -221,8 +251,11 @@ test("right-clicking the field opens the canvas menu, built from the action tabl
   });
   const menu = page.getByTestId("canvas-context-menu");
   await expect(menu).toBeVisible();
-  await expect(menu.locator('[data-action="tool.addPath"]')).toBeVisible();
-  await expect(menu.locator('[data-action="view.snap"]')).toBeVisible();
+  await expect(menu.locator('[data-action="field.addPathHere"]')).toBeVisible();
+  await expect(menu.locator('[data-action="pins.all"]')).toBeVisible();
+  // The tools and Snap are the toolbar's, with their keys, so the menu leaves them out (issue #412).
+  await expect(menu.locator('[data-action="tool.addPath"]')).toHaveCount(0);
+  await expect(menu.locator('[data-action="view.snap"]')).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
 });
@@ -279,11 +312,12 @@ test("switching autos with unsaved edits asks Save, Discard or Cancel first", as
   await expect(dialog).toHaveCount(0);
   await expect(unsaved).toHaveCount(1);
 
-  // Save writes the edit (a download, on the read-only example) and then switches.
+  // Save writes the edit (Save just this auto, a download on the read-only example) and then switches.
+  await withoutFolderPicker(page);
   const download = page.waitForEvent("download");
   await switchTo("first-auto.auto.json");
   await page.getByTestId("unsaved-save").click();
-  const saved = JSON.parse(readFileSync(await (await download).path(), "utf8")) as { steps: Array<{ id: string }> };
+  const saved = JSON.parse(readFileSync(await (await chooseJustThisAuto(page, download)).path(), "utf8")) as { steps: Array<{ id: string }> };
   expect(saved.steps.map((step) => step.id)).not.toContain("driveOut");
   await expect(name).toContainText("first-auto.auto.json");
 

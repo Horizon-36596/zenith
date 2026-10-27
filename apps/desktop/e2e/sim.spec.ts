@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { seedFirstRunDone } from "./firstRunDone";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const pkg = join(here, "..");
@@ -38,9 +39,7 @@ test.beforeAll(async () => {
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
-  await page.evaluate(() => {
-    localStorage.setItem("zenith.ui", JSON.stringify({ tour: { seen: true, coreDone: true, fullDone: false } }));
-  });
+  await seedFirstRunDone(page);
   await page.reload();
   await page.waitForLoadState("domcontentloaded");
 });

@@ -9,6 +9,7 @@ import {
   MissingToolError,
   SimRunner,
   buildSimPlan,
+  cannotStart,
   explainFailure,
   findJava,
   resolveLauncher,
@@ -167,17 +168,25 @@ class FakeChild extends EventEmitter {
   kill = vi.fn();
 }
 
-function runnerHarness(options: { trace?: { text: string; mtimeMs: number } | null; now?: number } = {}) {
+type TraceRead = { text: string; mtimeMs: number } | null;
+
+/** `before` is what the trace path holds when the run starts (nothing, by default); `trace` what it holds after. */
+function runnerHarness(options: { trace?: TraceRead; before?: TraceRead; now?: number } = {}) {
   const events: DesktopSimEvent[] = [];
   const child = new FakeChild();
   const spawnImpl = vi.fn(() => child as unknown as ChildProcess);
   const killTree = vi.fn();
   let clock = options.now ?? 1_000_000;
+  let reads = 0;
   const runner = new SimRunner((event) => events.push(event), {
     spawnImpl: spawnImpl as never,
     killTree,
     now: () => clock,
-    readTrace: () => (options.trace === undefined ? { text: JSON.stringify(traceJson()), mtimeMs: clock } : options.trace),
+    readTrace: () => {
+      reads += 1;
+      if (reads === 1) return options.before ?? null;
+      return options.trace === undefined ? { text: JSON.stringify(traceJson()), mtimeMs: clock } : options.trace;
+    },
   });
   const plan: SimPlan = {
     root,
@@ -264,10 +273,27 @@ describe("SimRunner", () => {
   });
 
   it("refuses to overlay a trace older than the run", () => {
-    const h = runnerHarness({ trace: { text: JSON.stringify(traceJson()), mtimeMs: 1 } });
+    const old = { text: JSON.stringify(traceJson()), mtimeMs: 1 };
+    const h = runnerHarness({ before: old, trace: old });
     h.runner.start(h.plan);
     h.child.emit("close", 0);
     expect(h.events.at(-1)).toMatchObject({ kind: "failed", message: expect.stringMatching(/earlier run/) });
+  });
+
+  it("refuses the previous run's trace even when it was written a moment before this run started (issue #407)", () => {
+    const justWritten = { text: JSON.stringify(traceJson()), mtimeMs: 1_000_000 - 500 };
+    const h = runnerHarness({ before: justWritten, trace: justWritten });
+    h.runner.start(h.plan);
+    h.child.emit("close", 0);
+    expect(h.events.at(-1)).toMatchObject({ kind: "failed", message: expect.stringMatching(/earlier run/) });
+  });
+
+  it("takes a trace the run rewrote, even with the same text", () => {
+    const text = JSON.stringify(traceJson());
+    const h = runnerHarness({ before: { text, mtimeMs: 900_000 }, trace: { text, mtimeMs: 1_000_100 } });
+    h.runner.start(h.plan);
+    h.child.emit("close", 0);
+    expect(h.events.at(-1)).toMatchObject({ kind: "done" });
   });
 
   it("reports a missing trace and a malformed one", () => {
@@ -286,7 +312,25 @@ describe("SimRunner", () => {
     const h = runnerHarness();
     h.runner.start(h.plan);
     h.child.emit("error", Object.assign(new Error("spawn java.exe ENOENT"), { code: "ENOENT" }));
-    expect(h.events.at(-1)).toMatchObject({ kind: "failed", message: expect.stringMatching(/not installed or not on the PATH/) });
+    expect(h.events.at(-1)).toMatchObject({ kind: "failed", message: expect.stringMatching(/^Could not start Java .*JAVA_HOME/) });
+  });
+
+  it("words a missing program, a missing file and a missing Java apart", () => {
+    expect(cannotStart("gradle")).toBe("Could not start gradle: it is not installed or not on the PATH.");
+    expect(cannotStart("C:\\repo\\gradlew.bat")).toBe(
+      "Could not find gradlew.bat, so the sim did not run. Check that it is in the robot repository, or fix the command in zenith.json.",
+    );
+    expect(cannotStart("/repo/gradlew")).toMatch(/^Could not find gradlew, so the sim did not run/);
+    expect(cannotStart("C:\\jdk\\bin\\java.exe")).toMatch(/^Could not start Java \(C:\\jdk\\bin\\java\.exe\)/);
+  });
+
+  it("puts a failed command's exit code in its output, not in the sentence", () => {
+    const h = runnerHarness();
+    h.runner.start(h.plan);
+    h.child.emit("close", 3);
+    expect(h.events.at(-1)).toMatchObject({ kind: "failed", message: "The sim command failed. Show the sim's output to see what it printed." });
+    expect(h.events.at(-1)).toMatchObject({ tail: expect.arrayContaining(["The sim command exited with code 3."]) as unknown });
+    expect(h.events).toContainEqual(expect.objectContaining({ kind: "line", text: "The sim command exited with code 3." }));
   });
 });
 
@@ -295,7 +339,7 @@ describe("explainFailure", () => {
     expect(explainFailure(1, ["Unsupported class file major version 67"])).toMatch(/different Java version/);
   });
 
-  it("falls back to the exit code", () => {
-    expect(explainFailure(3, ["something else"])).toMatch(/exit code 3/);
+  it("falls back to one sentence that points at the output", () => {
+    expect(explainFailure(3, ["something else"])).toBe("The sim command failed. Show the sim's output to see what it printed.");
   });
 });

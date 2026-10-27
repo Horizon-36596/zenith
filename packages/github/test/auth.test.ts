@@ -111,6 +111,26 @@ describe("BrowserTokenStore", () => {
     expect(store.load()).toBe("already-there");
   });
 
+  it("still builds, memory-only, when the sessionStorage getter itself throws (issue #407)", () => {
+    // What a browser with site data blocked does: merely reading window.sessionStorage throws.
+    Object.defineProperty(globalThis, "sessionStorage", {
+      configurable: true,
+      get: () => {
+        throw new Error("SecurityError: The operation is insecure.");
+      },
+    });
+    try {
+      for (const persist of [true, false]) {
+        const store = new BrowserTokenStore({ persist });
+        store.save("abc");
+        expect(store.load()).toBe("abc");
+        expect(() => store.clear()).not.toThrow();
+      }
+    } finally {
+      Reflect.deleteProperty(globalThis, "sessionStorage");
+    }
+  });
+
   it("falls back to memory-only if storage throws", () => {
     const throwing: Storage = {
       getItem: () => {

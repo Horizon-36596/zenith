@@ -10,6 +10,8 @@ export interface RepoSummary {
 
 export interface Repo extends RepoSummary {
   htmlUrl: string;
+  /** Whether the signed-in account can push, when GitHub says (it does for an authenticated request). */
+  canPush?: boolean;
 }
 
 export interface Branch {

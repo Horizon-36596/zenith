@@ -1,0 +1,23 @@
+{
+  "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
+  "formatVersion": 3,
+  "name": "slow",
+  "title": "Slow Auto",
+  "alliance": "RED",
+  "start": { "pose": { "xIn": 0, "yIn": 0, "headingRad": 0 } },
+  "steps": [
+    {
+      "id": "creep",
+      "kind": "path",
+      "segments": [{ "kind": "line", "from": { "xIn": 0, "yIn": 0, "headingRad": 0 }, "to": { "xIn": 24, "yIn": 0, "headingRad": 0 } }],
+      "heading": { "mode": "tangent" },
+      "speedFraction": 0.3
+    },
+    {
+      "id": "cruise",
+      "kind": "path",
+      "segments": [{ "kind": "line", "from": { "xIn": 24, "yIn": 0, "headingRad": 0 }, "to": { "xIn": 48, "yIn": 0, "headingRad": 0 } }],
+      "heading": { "mode": "tangent" }
+    }
+  ]
+}

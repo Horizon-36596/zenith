@@ -1,13 +1,14 @@
 # Step kinds
 
 An auto is a list of steps in `steps[]`. The robot runs them one after another, and the routine ends
-when the last one does. There are six kinds of step:
+when the last one does. There are seven kinds of step:
 
 | kind | what it does | fields | runs on the robot as |
 |---|---|---|---|
-| `path` | drives a path | `segments[]`, `heading`, `speedFraction`, `markers[]`, `endCondition?`, `timeoutS?`, `notes?` | `FollowPath`, with markers and an optional interrupt |
-| `command` | runs one named robot command | `name`, `args`, `timeoutS?` | `NamedCommands.build(name, args)` |
-| `wait` | waits for a time or a condition | `seconds` or `until`, `timeoutS?` | `WaitRobotTime` / `WaitUntilCommand` |
+| `path` | drives a path | `segments[]`, `heading`, `speedFraction`, `markers[]`, `endCondition?`, `timeoutS?`, `rejoinFrom?`, `expect?`, `envelope?`, `notes?` | `FollowPath`, with markers and an optional interrupt |
+| `command` | runs one named robot command | `name`, `args`, `timeoutS?`, `expect?`, `envelope?` | `NamedCommands.build(name, args)` |
+| `wait` | waits for a time or a condition | `seconds` or `until`, `timeoutS?`, `envelope?` | `WaitRobotTime` / `WaitUntilCommand` |
+| `transfer` | tells the planner pieces move between two places; planner only | `from`, `to`, `expectedCount`, `actualCount?`, `notes?` | a wait of zero seconds |
 | `sequence` | runs a list of steps one after another | `steps[]` (at least one), `notes?` | `SequentialCommandGroup` |
 | `parallel` | runs steps at the same time | `mode` (`all`, `race` or `deadline`), `deadline?`, `steps[]` | the runtime's `Parallel.all` / `Parallel.race` / `Parallel.deadline` |
 | `branch` | picks one of two lists by a condition | `condition`, `then[]`, `else[]` | `ConditionalCommand` |
@@ -19,7 +20,8 @@ make it a `deadline` group whose deadline is a `wait`.
 
 Every step may also carry an `id`. The editor always gives a new step one. Ids are how findings,
 the timeline, traces and a `parallel` group's `deadline` point at a step, so keep them short and
-descriptive: `driveOut`, `scorePreload`, `park`.
+descriptive: `driveOut`, `scorePreload`, `park`. An id starts with a letter and holds only letters,
+digits, `_` and `-`, the rule a waypoint's name follows; see [Step ids](file-format.md#step-ids).
 
 A step without an `id` is addressed by position: `step3` is the third top-level step,
 `returnToScore.2` is the second child of the group `returnToScore`, and `checkPollen.1.1` /
@@ -79,7 +81,8 @@ What the fields do:
 
 `speedFraction`
 :   The fraction of top speed to drive at, above 0 and at most 1. Left out, the robot's
-    `defaultPathSpeedFraction` applies.
+    `defaultPathSpeedFraction` applies. The editor times the path at it, but the robot drives at it
+    only if your `ZenithRobot` implements `atSpeed`; see [What your robot code provides](robot-runtime.md#what-your-robot-code-provides).
 
 `markers`
 :   Commands that fire part way along the path without stopping it. `at` is `{ "t": 0.5 }` (a
@@ -97,22 +100,43 @@ What the fields do:
 
 A path with a marker that turns the intake on as the path starts, and an end condition that ends
 the path once the robot is full. This is `sweepGarden` from `collect-and-score.auto.json`: a slow
-drive onto the RED garden row, holding the intake toward the south wall.
+drive west along the south wall over the RED garden line, with the intake leading.
 
 ```json
 {
   "id": "sweepGarden",
   "kind": "path",
   "segments": [
-    { "kind": "line", "from": "current", "to": { "ref": "gardenPickup" } }
+    { "kind": "line", "from": "current", "to": { "ref": "gardenSweepEnd" } }
   ],
-  "heading": { "mode": "constant", "headingRad": -1.5708 },
+  "heading": { "mode": "constant", "headingRad": 3.1416 },
   "speedFraction": 0.3,
   "markers": [
     { "at": { "t": 0 }, "command": { "name": "intakeOn" } }
   ],
   "endCondition": { "condition": "hopperFull" },
   "expect": { "collectFrom": "gardenRed", "count": 4 }
+}
+```
+
+A path step with no length is a **turn on the spot**: a line from `"current"` to the point the
+robot is already at, as **Insert step > Turn on the spot** writes it. The robot runtime does not
+hand it to Pedro. It holds the step's end point at the step's end heading (Linear's `toRad`,
+Constant's angle) until the heading is within two degrees and the robot within 0.5 in of the
+point, or until the robot has stayed still for a quarter of a second within ten degrees and 2 in of
+it, so the robot turns from whichever way it arrives facing, the short way round, and Linear's
+`fromRad` has no effect. The runtime does the same with any path step of 2 in or less, measured on
+the path as it builds it, so such a short drive also ends only once the robot is there. The planner times a turn
+on the spot at the robot's `maxAngularVelRadPerS`, and PERIMETER and STRUCTURE sweep its corners
+through the turn. The editor writes a new turn with a `timeoutS`, the estimate of a half turn plus
+1.5 s, so a hold that never settles cannot stop the routine.
+
+```json
+{
+  "id": "turn",
+  "kind": "path",
+  "segments": [{ "kind": "line", "from": "current", "to": { "ref": "scoreSouth" } }],
+  "heading": { "mode": "linear", "fromRad": 1.5708, "toRad": 3.1416 }
 }
 ```
 
@@ -145,7 +169,17 @@ intake.
 name or a bad argument is a [`SCHEMA`](checks-and-findings.md#schema) error.
 
 The timeline takes the command's time from its `estimateS` in `robot.json`. A command whose estimate
-is `"unknown"` draws as a hatched block, and the routine's total becomes a lower bound.
+is `"unknown"` draws as a hatched block, and the routine's total becomes a lower bound. Give it an
+[`envelope`](file-format.md#envelope) and it is timed by the envelope's `maxDurationS` instead, or by
+its what-if `actualDurationS` when you set one.
+
+A command marked `movesRobot` drives the robot somewhere nobody can predict. When the path after it
+starts from `"current"` and carries a [`rejoinFrom`](file-format.md#rejoinfrom) pose, the planner
+takes that pose as where the command ends: the Ideal playback and the Instant sim move the robot from
+where the command starts to the rejoin pose within the command's own time, eased so it starts and
+stops at rest, and the path after it starts there with no transition. While the command runs, the
+editor draws the robot as a ghost labelled "position unknown". Without a rejoin pose the robot stays
+where the command started.
 
 ## `wait`
 
@@ -161,7 +195,24 @@ Pauses the routine. Give it either `seconds` or `until`, never both.
 
 Use `seconds` to let a mechanism finish when it has no sensor to say so. Use `until` with a
 condition from `robot.json` when there is one, and give it a `timeoutS` so a sensor that never
-fires does not stall the auto.
+fires does not stall the auto. A wait until a condition with no timeout raises
+[`WAIT_NO_TIMEOUT`](checks-and-findings.md#wait_no_timeout), unless a `race` or `deadline` group
+ends it.
+
+## `transfer`
+
+Tells the planner's ledger that game pieces move from one place to another here, when this robot
+does not move them: the partner scores into your hive, the human player enters pieces through the
+loading zone.
+
+```json
+{ "id": "partnerScores", "kind": "transfer", "from": "partner", "to": "hiveRedUpCell", "expectedCount": 4 }
+```
+
+`expectedCount` is what the routine is written for. Add `actualCount` to preview an edge case: with
+`"actualCount": 0` the ledger acts as if the partner scored nothing, the hive does not tip, and a
+branch on a condition that reads the hive's tips takes its `else` side in the preview. The robot
+does nothing here either way; see [Transfers](file-format.md#transfers) for the places it can name.
 
 ## `sequence`
 
@@ -210,7 +261,7 @@ should drive; two paths in one group would fight over the drivetrain.
 ### `all`: start the intake while driving
 
 Curve over to the garden and start the intake on the way. The group ends when both have finished,
-so the robot is at `gardenApproach` with the intake running.
+so the robot is at `gardenSweepStart` with the intake running.
 
 ```json
 {
@@ -226,10 +277,10 @@ so the robot is at `gardenApproach` with the intake running.
           "kind": "bezier",
           "from": "current",
           "control": [
-            { "xIn": -12, "yIn": -28, "provenance": "PLACEHOLDER: starter example, a curve control point" },
-            { "xIn": -61, "yIn": -24, "provenance": "PLACEHOLDER: starter example, a curve control point" }
+            { "xIn": -20, "yIn": -52, "provenance": "PLACEHOLDER: starter example, a curve control point that turns the robot south-west, away from the hive" },
+            { "xIn": -24, "yIn": -60, "provenance": "PLACEHOLDER: starter example, a curve control point that lines the robot up along the south wall, heading west" }
           ],
-          "to": { "ref": "gardenApproach" }
+          "to": { "ref": "gardenSweepStart" }
         }
       ],
       "heading": { "mode": "tangent" },
@@ -242,7 +293,7 @@ so the robot is at `gardenApproach` with the intake running.
 
 ### `race`: stop when the drive ends or the robot is full
 
-Sweep the garden row, but stop as soon as the robot reports full, and give up waiting after 3 s.
+Sweep the garden line, but stop as soon as the robot reports full, and give up waiting after 3 s.
 Whichever member finishes first ends the group.
 
 ```json
@@ -255,9 +306,9 @@ Whichever member finishes first ends the group.
       "id": "sweep",
       "kind": "path",
       "segments": [
-        { "kind": "line", "from": "current", "to": { "ref": "gardenPickup" } }
+        { "kind": "line", "from": "current", "to": { "ref": "gardenSweepEnd" } }
       ],
-      "heading": { "mode": "constant", "headingRad": -1.5708 },
+      "heading": { "mode": "tangent" },
       "speedFraction": 0.3,
       "expect": { "collectFrom": "gardenRed", "count": 4 }
     },
@@ -273,10 +324,13 @@ Whichever member finishes first ends the group.
 
 ### `deadline`: spin up on the way back
 
-Drive back from the garden to the scoring spot while a sequence waits half a second, to clear the
-garden, and then spins the launcher up. The drive is the deadline: when it arrives, the group ends
+Drive back from the garden to the scoring spot north of the hive, where the up cell is after the
+first tip, while a sequence waits half a second, to clear the garden, and then spins the launcher up. The drive is the deadline: when it arrives, the group ends
 and the sequence is stopped wherever it is. This is `returnToScore` from
-`collect-and-score.auto.json`.
+`collect-and-score.auto.json`. `driveBack` goes north around the west of the hive frame, east along
+its north side and down to the scoring spot. Its heading ranges do the turn west of x = -13, and the
+last stretch is a straight drive south, so that no part of the robot crosses the centre line into the
+other alliance's side (G402).
 
 ```json
 {
@@ -293,13 +347,23 @@ and the sequence is stopped wherever it is. This is `returnToScore` from
           "kind": "bezier",
           "from": "current",
           "control": [
-            { "xIn": -61, "yIn": -24, "provenance": "PLACEHOLDER: starter example, a curve control point" },
-            { "xIn": -12, "yIn": -28, "provenance": "PLACEHOLDER: starter example, a curve control point" }
+            { "xIn": -40, "yIn": -62, "provenance": "PLACEHOLDER: starter example, a curve control point that takes the robot around the west of the hive frame, clear of its west bar and legs, so the whole footprint stays on RED's side of the centre line" },
+            { "xIn": -58, "yIn": 62, "provenance": "PLACEHOLDER: starter example, a curve control point that takes the robot around the west of the hive frame, clear of its west bar and legs, so the whole footprint stays on RED's side of the centre line" },
+            { "xIn": -13, "yIn": 56, "provenance": "SET BY HAND: starter example, a curve control point on x = -13, the scoring spots' line, that takes the robot around the west of the hive frame, clear of its west bar and legs, so the whole footprint stays on RED's side of the centre line" }
           ],
-          "to": { "ref": "scoreSouth" }
+          "to": { "ref": "scoreNorth" }
         }
       ],
-      "heading": { "mode": "tangentReversed" }
+      "heading": {
+        "mode": "piecewise",
+        "ranges": [
+          { "startT": 0, "endT": 0.0586, "heading": { "mode": "constant", "headingRad": 3.1416 } },
+          { "startT": 0.0586, "endT": 0.1612, "heading": { "mode": "linear", "fromRad": -3.1416, "toRad": -1.7852 } },
+          { "startT": 0.1612, "endT": 0.707, "heading": { "mode": "tangentReversed" } },
+          { "startT": 0.707, "endT": 0.8242, "heading": { "mode": "linear", "fromRad": -2.0008, "toRad": -1.5708 } },
+          { "startT": 0.8242, "endT": 1, "heading": { "mode": "constant", "headingRad": -1.5708 } }
+        ]
+      }
     },
     {
       "id": "clearThenSpinUp",
@@ -314,7 +378,7 @@ and the sequence is stopped wherever it is. This is `returnToScore` from
 ```
 
 `deadline` must name one of the group's own direct members. A missing or wrong name is a
-[`SCHEMA`](checks-and-findings.md#schema) error. The deadline may be a sequence.
+[`SCHEMA`](checks-and-findings.md#schema) error. The deadline may be a sequence. In the editor, switching a group to `deadline` picks the first member that drives, and dragging the picked member out of the group, or deleting it, picks again the same way.
 
 The intake checks look across the group: an `intakeOn` in one member counts as running for the
 path in another, so [`MOUTH_LEADING`](checks-and-findings.md#mouth_leading) and
@@ -350,10 +414,19 @@ up, and park if it did not.
               "kind": "bezier",
               "from": "current",
               "control": [
-                { "xIn": -61, "yIn": -24, "provenance": "PLACEHOLDER: starter example, a curve control point" },
-                { "xIn": -12, "yIn": -28, "provenance": "PLACEHOLDER: starter example, a curve control point" }
+                { "xIn": -30, "yIn": -62, "provenance": "SET FROM EDITOR: starter example, a curve control point that backs the robot east along the south wall" },
+                { "xIn": -40, "yIn": -50, "provenance": "SET FROM EDITOR: starter example, a curve control point that turns the robot north, west of the hive frame" }
               ],
-              "to": { "ref": "scoreSouth" }
+              "to": { "xIn": -40, "yIn": 0, "provenance": "SET FROM EDITOR: starter example, where the two paths meet beside the hive frame, the robot backing north" }
+            },
+            {
+              "kind": "bezier",
+              "from": { "xIn": -40, "yIn": 0, "provenance": "SET FROM EDITOR: starter example, where the two paths meet beside the hive frame, the robot backing north" },
+              "control": [
+                { "xIn": -40, "yIn": 40, "provenance": "SET FROM EDITOR: starter example, a curve control point that keeps the robot west of the hive frame until it is past it" },
+                { "xIn": -13, "yIn": 30, "provenance": "SET FROM EDITOR: starter example, a curve control point that brings the robot in to the scoring spot from the south, clear of the hive frame" }
+              ],
+              "to": { "ref": "scoreNorth" }
             }
           ],
           "heading": { "mode": "tangentReversed" }
@@ -396,8 +469,9 @@ did a pickup work. The first step of each side starts from the pose the branch s
 
 Nobody can know which way a condition goes while planning, so the estimate charges the longer of
 the two sides. The [instant preview sim](simulation.md#instant-preview-sim) answers `hopperFull` and
-`hopperEmpty` (and any condition marked with a `ledger` in `robot.json`) from what the robot holds.
-A condition it cannot read takes the `then` side.
+`hopperEmpty`, and any condition `robot.json` gives a `ledger` test (such as "our hive has tipped"),
+from the ledger at the moment the branch starts, and draws that side. A condition it cannot read
+takes the `then` side. The inspector names the side the preview takes.
 
 !!! warning "The two sides end in different places"
     After a branch, the robot may be in either side's end pose. Start the next path with

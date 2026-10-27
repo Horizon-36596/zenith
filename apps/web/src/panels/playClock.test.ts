@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advancePlayhead, MAX_FRAME_GAP_S, type PlayClock } from "./playClock";
+import { advancePlayhead, MAX_FRAME_GAP_S, playFrame, type PlayClock } from "./playClock";
 
 /** Plays through frames at the given timestamps and returns the playhead. */
 function play(framesMs: readonly number[]): number {
@@ -32,5 +32,22 @@ describe("the playback clock", () => {
 
   it("never runs backwards on an out-of-order timestamp", () => {
     expect(play([100, 90, 190])).toBeCloseTo(0.1, 9);
+  });
+});
+
+describe("a frame of playback", () => {
+  it("plays on before the end, and stops at the end of a finished run", () => {
+    expect(playFrame(3, 10, false)).toEqual({ playheadS: 3, playing: true });
+    expect(playFrame(10.02, 10, false)).toEqual({ playheadS: 10, playing: false });
+  });
+
+  it("waits at the last time received while the run is still streaming, then goes on", () => {
+    expect(playFrame(4.5, 4.48, true)).toEqual({ playheadS: 4.48, playing: true });
+    expect(playFrame(4.5, 6, true)).toEqual({ playheadS: 4.5, playing: true });
+  });
+
+  it("leaves the playhead alone with no run, and waits only for one on its way", () => {
+    expect(playFrame(1, null, false)).toEqual({ playheadS: null, playing: false });
+    expect(playFrame(1, 0, true)).toEqual({ playheadS: null, playing: true });
   });
 });

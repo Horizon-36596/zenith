@@ -8,10 +8,10 @@
  * Zenith). The token never crosses the bridge: the renderer only ever learns the login it belongs
  * to, and it is only ever sent to api.github.com.
  */
-import { execFile } from "node:child_process";
-import { GitHubClient, PatAuth, validateToken } from "@horizon36596/zenith-github";
-import type { DesktopGitHubStatus, DesktopPullRequestResult } from "../../../web/src/project/desktopBridge.js";
+import { AuthError, GitHubClient, GitHubError, openOrUpdatePull, PatAuth, validateToken } from "@horizon36596/zenith-github";
+import type { DesktopGhCliStatus, DesktopGitHubStatus, DesktopPullRequestResult } from "../../../web/src/project/desktopBridge.js";
 import { BridgeError } from "./confine.js";
+import { execGh, readGhCli, type GhRunner } from "./ghCli.js";
 
 /** The subset of Electron's `safeStorage` this module uses, so tests can supply a fake. */
 export interface SecretBox {
@@ -33,15 +33,25 @@ export interface GitHubAuthDeps {
   ghToken?: () => Promise<string | null>;
   /** Resolves the login a token belongs to; throws when GitHub refuses it. */
   whoAmI?: (token: string) => Promise<string>;
+  /** Whether the GitHub CLI is installed and signed in, so the git panel can say which (ghCli.ts). */
+  ghStatus?: () => Promise<DesktopGhCliStatus>;
 }
 
-export const readGhToken = (): Promise<string | null> =>
-  new Promise((resolve) => {
-    execFile("gh", ["auth", "token"], { windowsHide: true, timeout: 10_000 }, (error, stdout) => {
-      const token = String(stdout).trim();
-      resolve(error === null && token !== "" ? token : null);
-    });
-  });
+/** The line for a call to GitHub that never got an answer: no network, no DNS, a firewall. */
+export const UNREACHABLE_GITHUB = "Could not reach GitHub. Check the connection and try again.";
+
+/**
+ * A failed call to api.github.com, worded for the person. GitHub's own answers keep their message;
+ * anything else (fetch's "fetch failed", a DNS error) means GitHub was never reached.
+ */
+export function githubFailure(error: unknown): BridgeError {
+  if (error instanceof BridgeError) return error;
+  if (error instanceof GitHubError) return new BridgeError(error.message);
+  return new BridgeError(UNREACHABLE_GITHUB);
+}
+
+/** `gh auth token` for github.com, read the same way the sign-in dialog reads it (ghCli.ts). */
+export const readGhToken = async (run: GhRunner = execGh): Promise<string | null> => (await readGhCli(run)).token;
 
 const defaultWhoAmI = async (token: string): Promise<string> => (await validateToken(new PatAuth(token))).login;
 
@@ -50,6 +60,7 @@ export class GitHubAuth {
   private readonly slot: SecretSlot;
   private readonly ghToken: () => Promise<string | null>;
   private readonly whoAmI: (token: string) => Promise<string>;
+  private readonly ghStatus: (() => Promise<DesktopGhCliStatus>) | null;
   /** A pasted token kept for this run only, when the OS offers no encryption to store it with. */
   #session: string | null = null;
   #login: { token: string; login: string } | null = null;
@@ -57,8 +68,9 @@ export class GitHubAuth {
   constructor(deps: GitHubAuthDeps) {
     this.box = deps.box;
     this.slot = deps.slot;
-    this.ghToken = deps.ghToken ?? readGhToken;
+    this.ghToken = deps.ghToken ?? (() => readGhToken());
     this.whoAmI = deps.whoAmI ?? defaultWhoAmI;
+    this.ghStatus = deps.ghStatus ?? null;
   }
 
   private stored(): string | null {
@@ -86,7 +98,7 @@ export class GitHubAuth {
     const current = await this.current();
     if (current === null) {
       throw new BridgeError(
-        "Zenith needs a GitHub token to open the pull request. Paste a personal access token with the repo scope, or sign in with the GitHub CLI (gh auth login).",
+        "Sign in to GitHub first: Zenith needs it to open the pull request.",
       );
     }
     return current.token;
@@ -108,15 +120,21 @@ export class GitHubAuth {
 
   async status(): Promise<DesktopGitHubStatus> {
     const current = await this.current();
+    // With no token, the panel says whether the GitHub CLI could give one: not installed, or not signed in.
+    const cli = current === null && this.ghStatus !== null ? (await this.ghStatus().catch(() => null))?.state : undefined;
     return {
       source: current?.source ?? null,
       login: current === null ? null : await this.login(),
       canStore: this.box.isEncryptionAvailable(),
+      ...(cli === undefined ? {} : { cli }),
     };
   }
 
-  /** Checks a pasted token against GitHub, then keeps it encrypted (or for this run only). */
-  async setToken(token: unknown): Promise<DesktopGitHubStatus> {
+  /**
+   * Checks a pasted token against GitHub, then keeps it encrypted, or for this run only when the OS
+   * offers no encryption or `remember` is false (the sign-in dialog's "remember" box).
+   */
+  async setToken(token: unknown, remember: unknown = true): Promise<DesktopGitHubStatus> {
     if (typeof token !== "string" || token.trim() === "" || token.length > 1000) {
       throw new BridgeError("Paste a GitHub personal access token.");
     }
@@ -124,12 +142,19 @@ export class GitHubAuth {
     let login: string;
     try {
       login = await this.whoAmI(trimmed);
-    } catch {
-      throw new BridgeError("GitHub did not accept that token. Check that it is complete and has not expired.");
+    } catch (error) {
+      // Only GitHub's own refusal means the token is bad; a call that never reached GitHub says so.
+      if (error instanceof AuthError && (error.status === 401 || error.status === 403)) {
+        throw new BridgeError("GitHub did not accept that token. Check that it is complete and has not expired.");
+      }
+      throw githubFailure(error);
     }
-    if (this.box.isEncryptionAvailable()) {
+    if (remember !== false && this.box.isEncryptionAvailable()) {
       this.slot.set(this.box.encryptString(trimmed).toString("base64"));
       this.#session = null;
+    } else if (remember === false) {
+      this.slot.set(null);
+      this.#session = trimmed;
     } else {
       this.#session = trimmed;
     }
@@ -145,7 +170,10 @@ export class GitHubAuth {
   }
 }
 
-/** Opens the pull request from `head` into `base`, or updates the body of the one already open. */
+/**
+ * Opens the pull request from `head` into `base`, or updates the body of the one already open into
+ * that base; one from the same branch into another base is left alone (issue #407).
+ */
 export async function openOrUpdatePullRequest(input: {
   token: string;
   owner: string;
@@ -156,17 +184,18 @@ export async function openOrUpdatePullRequest(input: {
   body: string;
 }): Promise<DesktopPullRequestResult> {
   const client = new GitHubClient(new PatAuth(input.token));
-  const existing = await client.pulls.listForBranch(input.owner, input.repo, input.head, "open");
-  const open = existing[0];
-  if (open !== undefined) {
-    const updated = await client.pulls.update(input.owner, input.repo, open.number, { body: input.body });
-    return { url: updated.htmlUrl, number: updated.number, created: false };
+  try {
+    // The package's own helper, which `zenith propose` and the web app use too.
+    const { pull, created } = await openOrUpdatePull(client, {
+      owner: input.owner,
+      repo: input.repo,
+      branch: input.head,
+      base: input.base,
+      title: input.title,
+      body: input.body,
+    });
+    return { url: pull.htmlUrl, number: pull.number, created };
+  } catch (error) {
+    throw githubFailure(error);
   }
-  const created = await client.pulls.create(input.owner, input.repo, {
-    title: input.title,
-    head: input.head,
-    base: input.base,
-    body: input.body,
-  });
-  return { url: created.htmlUrl, number: created.number, created: true };
 }

@@ -6,7 +6,7 @@
  * HEADING warning. The timing budget itself is `apps/web/src/state/sim.qa.test.ts`.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { editor, fixture, loadExample, openProjectWith, shot, skipTour, withCore } from "./helpers";
+import { editor, findingRows, fixture, loadExample, openProjectWith, shot, skipTour, withCore } from "./helpers";
 
 interface Span {
   id: string;
@@ -17,7 +17,7 @@ interface Span {
 const coreSpans = (page: Page): Promise<Span[]> =>
   withCore<Span[]>(
     page,
-    `(() => { const d = m.currentDerived(); const t = c.simulate(d.plan, d.plan.robot, d.plan.field); return t.steps.filter((x) => x.parentId === null).map((x) => ({ id: x.id, durationS: x.endS - x.startS })); })()`,
+    `(() => { const d = m.currentDerived(); const t = c.simulate(d.plan, d.plan.robot, d.plan.field, { ledger: d.ledgerRun ?? undefined, season: d.season }); return t.steps.filter((x) => x.parentId === null).map((x) => ({ id: x.id, durationS: x.endS - x.startS })); })()`,
   );
 
 /** Each preview bar's flex-grow, which is its share of the track. */
@@ -36,7 +36,7 @@ test.describe("on the bundled example", () => {
   test.beforeEach(async ({ page }) => {
     // The preview bars are the Instant sim level's; Ideal, the default, shows the estimate's.
     await skipTour(page, { playbackLevel: "instant" });
-    // collect-and-score, the auto the example opens, has eight top-level steps to compare.
+    // collect-and-score, the auto the example opens, has thirteen top-level steps to compare.
     await loadExample(page);
     await expect(page.getByTestId("timeline-preview-track")).toBeVisible();
   });
@@ -65,7 +65,8 @@ test.describe("on the bundled example", () => {
     const readout = page.getByTestId("timeline-level-total");
     await expect(readout).toBeVisible();
     await expect(readout).toHaveAttribute("data-level", "instant");
-    await expect(readout).toContainText("instant sim");
+    // The level is named on the switch alone (issue #411); the total is a number of seconds.
+    await expect(readout).toHaveText(/^\d+\.\d\d\s*s$/);
     const label = (await readout.textContent()) ?? "";
     expect(Number(/([0-9]+(?:\.[0-9]+)?)/.exec(label)?.[1] ?? Number.NaN)).toBeGreaterThanOrEqual(total - 0.2);
   });
@@ -76,7 +77,8 @@ test.describe("on the bundled example", () => {
     await page.getByTestId("timeline-preview-toGarden").hover();
     const tip = page.getByRole("tooltip");
     await expect(tip).toContainText("in the sim");
-    await expect(tip).toContainText((toGarden?.durationS ?? 0).toFixed(1));
+    // The tooltip gives seconds to two places, as everywhere else in the timeline.
+    await expect(tip).toContainText(`${(toGarden?.durationS ?? 0).toFixed(2)} s in the sim`);
     await shot(page, "10-timeline-preview-tooltip");
   });
 
@@ -122,7 +124,7 @@ test.describe("a linear heading asked for more than half a turn", () => {
     expect(Math.sin(mid), `plan heading halfway is ${mid.toFixed(3)} rad`).toBeLessThan(0);
     const simMid = await withCore<number>(
       page,
-      `(() => { const d = m.currentDerived(); const t = c.simulate(d.plan, d.plan.robot, d.plan.field); const x = t.steps.find((y) => y.id === "turn"); return c.simPoseAt(t, (x.startS + x.endS) / 2).headingRad; })()`,
+      `(() => { const d = m.currentDerived(); const t = c.simulate(d.plan, d.plan.robot, d.plan.field, { ledger: d.ledgerRun ?? undefined, season: d.season }); const x = t.steps.find((y) => y.id === "turn"); return c.simPoseAt(t, (x.startS + x.endS) / 2).headingRad; })()`,
     );
     expect(Math.sin(simMid), `sim heading halfway is ${simMid.toFixed(3)} rad`).toBeLessThan(0);
   });
@@ -136,7 +138,9 @@ test.describe("a linear heading asked for more than half a turn", () => {
     expect(heading.length).toBe(1);
     expect(heading[0]?.severity).toBe("warning");
     expect(heading[0]?.stepId).toBe("turn");
-    const row = page.getByTestId("finding-row").filter({ hasText: "HEADING" });
+    // By the row's code: the step's STRAFE_FRACTION row offers "Find a faster heading", which a
+    // text match on HEADING would count as a second row.
+    const row = findingRows(page, "HEADING");
     await expect(row).toHaveCount(1);
     await expect(row).toContainText(/short way/i);
     await expect(row).toHaveAttribute("data-severity", "warning");
@@ -150,6 +154,6 @@ test.describe("a linear heading asked for more than half a turn", () => {
     await page.evaluate(
       `import("/src/state/store.ts").then((m) => m.commit({ ...m.getState().auto, steps: ${JSON.stringify(steps)} }))`,
     );
-    await expect(page.getByTestId("finding-row").filter({ hasText: "HEADING" })).toHaveCount(0);
+    await expect(findingRows(page, "HEADING")).toHaveCount(0);
   });
 });

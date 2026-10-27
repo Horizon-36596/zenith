@@ -1,0 +1,12 @@
+{
+  "$comment": "The cloud every public build of Zenith talks to: the Firebase web config of the production project and its App Check site key. Neither is a secret: both end up in every page the web app serves. scripts/release-cloud.mjs builds releases with them (the Pages site, the desktop installers) and fails a release build that lacks them. A build from source without that script, such as `pnpm build` or the dev server, has the cloud off. cloud/README.md, \"Public builds\", says how to change a value.",
+  "firebase": {
+    "apiKey": "AIzaSyBilp82ZuCYycdLE5_azYymib7AP5hS7Wk",
+    "authDomain": "zenith-36596.firebaseapp.com",
+    "projectId": "zenith-36596",
+    "storageBucket": "zenith-36596.firebasestorage.app",
+    "messagingSenderId": "1076313541263",
+    "appId": "1:1076313541263:web:dea55d217736e369657efa"
+  },
+  "appCheckSiteKey": ""
+}

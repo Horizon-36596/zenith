@@ -1,0 +1,459 @@
+/* The verification UI (spec 13 section 4.4) on the tokens of apps/web/UI_GUIDE.md, like the sharing
+   sheets: no new colours, sizes or durations. Every value below is a token. */
+
+/* ---- The review page: docked at the right, not modal (spec 11 section 1) --------------------- */
+
+.page {
+  position: fixed;
+  top: calc(var(--titlebar-h) + var(--toolbar-h) + var(--space-2));
+  right: var(--space-3);
+  width: calc(var(--space-16) * 12);
+  max-width: calc(100vw - var(--space-6));
+  max-height: calc(100vh - var(--titlebar-h) - var(--toolbar-h) - var(--space-2) - var(--space-3));
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  color: var(--text-hi);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  z-index: var(--z-popover);
+}
+
+.pageHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  padding: var(--space-4) var(--space-4) var(--space-2) var(--pad-modal);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pageTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-tight);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.pageBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+}
+
+.queue {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-3) var(--space-3) var(--space-4) var(--pad-modal);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.detail {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-3) var(--pad-modal) var(--space-4) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.notice {
+  padding: var(--space-4) var(--pad-modal);
+}
+
+/* ---- Sections, text and lists ------------------------------------------------------------ */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-mid);
+}
+
+.prose {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+}
+
+.sentence {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-hi);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--sev-error);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+.listItem:first-child {
+  border-top: none;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+/* A pasted evidence address: selectable text, never a link, with its Copy button. */
+.address {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.address .textButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.addressText {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* ---- The status badge: a word and an icon, never colour alone ----------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  letter-spacing: normal;
+}
+
+.badge[data-status="verified"] {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.badge[data-status="unverified"] {
+  background: var(--bg-inset);
+  color: var(--text-mid);
+}
+
+.badge[data-status="contested"] {
+  background: var(--sev-warn-bg);
+  color: var(--sev-warn);
+}
+
+/* ---- Queue rows --------------------------------------------------------------------------- */
+
+.queueRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  text-align: left;
+  color: var(--text-hi);
+  background: transparent;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+.queueRow:hover {
+  background: var(--bg-hover);
+}
+
+.queueRow[aria-pressed="true"] {
+  background: var(--bg-selected);
+}
+
+/* ---- Two sides of a dispute --------------------------------------------------------------- */
+
+.sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.sideName {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-hi);
+}
+
+/* ---- Controls ----------------------------------------------------------------------------- */
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.evidenceRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: start;
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.evidenceRow:first-child {
+  border-top: none;
+}
+
+.evidenceFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-mid);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding-inline: var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  color: var(--text-hi);
+}
+
+.input {
+  height: var(--ctl-h-md);
+}
+
+.input[data-mono="true"] {
+  font-family: var(--font-mono);
+}
+
+.textarea {
+  min-height: calc(var(--ctl-h-md) * 2);
+  padding-block: var(--space-1);
+  resize: vertical;
+}
+
+/* The buttons are UI_GUIDE 9.9's one recipe, composed from the shared primitives. */
+.button {
+  composes: secondary from "../components/primitives.module.css";
+}
+
+.primary {
+  composes: primary from "../components/primitives.module.css";
+}
+
+.textButton {
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  background: transparent;
+}
+
+.textButton[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+/* ---- All shares (spec 13 section 13): the list and the opened share take half the page each --- */
+
+.pageBody[data-view="shares"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.shareRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-hi);
+}
+
+.shareRow:first-child {
+  border-top: none;
+}
+
+/* Ends, Created and Updated: a word, then the calendar time, in two aligned columns. */
+.times {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.shareHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* A share's state: live reads as the verified badge does; every other state is neutral, because a
+   share's state is not a finding (UI_GUIDE section 12). The icon and the word carry the meaning. */
+.badge[data-share-status="live"] {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.badge[data-share-status="expired"],
+.badge[data-share-status="revoked"],
+.badge[data-share-status="team-deleted"] {
+  background: var(--bg-inset);
+  color: var(--text-mid);
+}
+
+/* ---- Bug reports (BugReports.tsx) --------------------------------------------------------- */
+
+/* A report's state: new waits for an admin, so it takes the information colour; triaged and closed
+   are neutral. The icon and the word carry the meaning, never the colour alone. */
+.badge[data-report-status="new"] {
+  background: var(--sev-info-bg);
+  color: var(--sev-info);
+}
+
+.badge[data-report-status="triaged"],
+.badge[data-report-status="closed"] {
+  background: var(--bg-inset);
+  color: var(--text-mid);
+}
+
+/* What the reporter wrote, with their line breaks. */
+.reportText {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--text-hi);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.setupList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+
+.setupRow {
+  display: grid;
+  grid-template-columns: calc(var(--space-16) * 2.5) minmax(0, 1fr);
+  column-gap: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-lo);
+}
+
+.setupRow dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  color: var(--text-hi);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.autoFile {
+  margin: 0;
+  max-height: calc(var(--space-16) * 4);
+  overflow: auto;
+  padding: var(--space-2);
+  background: var(--bg-inset);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-hi);
+}

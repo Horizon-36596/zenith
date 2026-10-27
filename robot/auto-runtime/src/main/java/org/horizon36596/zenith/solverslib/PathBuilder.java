@@ -58,17 +58,25 @@ public final class PathBuilder {
 
     /** A built path and the measurements {@link PathMarkers} needs to place markers on it. */
     public static final class Built {
-        /** The whole step as one followable Pedro path. */
+        /** The whole step as one followable Pedro path, or {@code null} for a turn on the spot. */
         public final Path path;
         /** Arc length of each segment, inches, in order. */
         public final double[] segmentLengthsIn;
         /** Arc length of the whole step, inches. */
         public final double totalLengthIn;
+        /** The pose a turn on the spot holds, {@link PedroPaths.Built#turn}; {@code null} for a path. */
+        public final Pose turn;
 
         Built(PedroPaths.Built built) {
             this.path = built.path;
             this.segmentLengthsIn = built.segmentLengthsIn;
             this.totalLengthIn = built.totalLengthIn;
+            this.turn = built.turn;
+        }
+
+        /** @return true when this step is a turn on the spot, held rather than followed */
+        public boolean isTurn() {
+            return turn != null;
         }
     }
 

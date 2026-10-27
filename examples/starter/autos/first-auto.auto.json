@@ -1,6 +1,6 @@
 {
   "$schema": "https://libraries.horizon36596.org/zenith/schema/v1/auto.json",
-  "formatVersion": 3,
+  "formatVersion": 4,
   "name": "first-auto",
   "title": "First auto",
   "description": "The smallest useful auto: drive out from the start tile, score the four preloaded pollen, and park. Three steps: a path, a command and another path. The getting-started guide walks through it.",

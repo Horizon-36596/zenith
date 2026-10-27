@@ -1,12 +1,14 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalize } from "@horizon36596/zenith-core";
 import { parseAuto, parseRobot, SCHEMA_ID } from "@horizon36596/zenith-schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runDeploy } from "./commands/deploy.js";
 import { runInit } from "./commands/init.js";
 import { runNew } from "./commands/new.js";
 import { runValidate } from "./commands/validate.js";
+import { main } from "./index.js";
 import { loadProject, ProjectError } from "./project.js";
 
 /** A field with nothing in it, so a test project does not depend on the season package. */
@@ -98,6 +100,112 @@ describe("zenith init", () => {
     runInit({ cwd: root, force: true });
     expect(readFileSync(join(root, "autos/robot.json"), "utf8")).not.toBe("{}");
   });
+
+  it("writes a codegen section, so zenith deploy writes the OpModes (issue #156)", () => {
+    expect(runInit({ cwd: root, commandLibrary: "solverslib" })).toBe(0);
+    expect(loadProject(root).link.codegen).toEqual({
+      package: "org.firstinspires.ftc.teamcode.zenith",
+      dir: "TeamCode/src/main/java",
+    });
+  });
+
+  it("writes the robot class --robot-class names, and refuses one that is not a Java class name", () => {
+    expect(runInit({ cwd: root, commandLibrary: "ivy", robotClass: "org.firstinspires.ftc.teamcode.MyRobot" })).toBe(0);
+    expect(loadProject(root).link.deploy?.robotClass).toBe("org.firstinspires.ftc.teamcode.MyRobot");
+    expect(out.join("")).not.toContain("deploy.robotClass");
+    expect(() => runInit({ cwd: root, force: true, robotClass: "my robot" })).toThrow(
+      /--robot-class must be a fully qualified Java class name/,
+    );
+  });
+
+  it("ends with a line saying to set deploy.robotClass when no robot class is given", () => {
+    expect(runInit({ cwd: root, commandLibrary: "solverslib" })).toBe(0);
+    expect(loadProject(root).link.deploy?.robotClass).toBeUndefined();
+    const lines = out.join("").trimEnd().split("\n");
+    expect(lines.at(-1)).toMatch(/"deploy\.robotClass".*--robot-class/);
+  });
+
+  it("prints a class that implements ZenithRobot as a suggestion, and never writes it", () => {
+    const java = join(root, "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/robot");
+    mkdirSync(java, { recursive: true });
+    writeFileSync(
+      join(java, "HiveBot.java"),
+      [
+        "package org.firstinspires.ftc.teamcode.robot;",
+        "",
+        "import org.horizon36596.zenith.solverslib.ZenithRobot;",
+        "",
+        "/** Not public class Fake implements ZenithRobot, which a comment can say. */",
+        "public final class HiveBot implements ZenithRobot {",
+        "}",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    // Neither of these can be constructed by a generated OpMode, so neither is suggested.
+    writeFileSync(
+      join(java, "BaseBot.java"),
+      "package org.firstinspires.ftc.teamcode.robot;\n\npublic abstract class BaseBot implements ZenithRobot {\n}\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(java, "Helpers.java"),
+      "package org.firstinspires.ftc.teamcode.robot;\n\nclass Helpers implements ZenithRobot {\n}\n",
+      "utf8",
+    );
+
+    expect(runInit({ cwd: root, commandLibrary: "solverslib" })).toBe(0);
+    const text = out.join("");
+    expect(text).toContain("found: org.firstinspires.ftc.teamcode.robot.HiveBot implements ZenithRobot");
+    expect(text).toContain('add "robotClass": "org.firstinspires.ftc.teamcode.robot.HiveBot" to its "deploy" section');
+    expect(text).not.toContain("BaseBot");
+    expect(text).not.toContain("Helpers");
+    expect(text).not.toContain("Fake");
+    expect(loadProject(root).link.deploy?.robotClass).toBeUndefined();
+    expect(readFileSync(join(root, "zenith.json"), "utf8")).not.toContain("HiveBot");
+
+    out = [];
+    expect(runInit({ cwd: root, force: true, json: true })).toBe(0);
+    const json = JSON.parse(out.join("")) as { robotClass: unknown; robotClassSuggestions: unknown };
+    expect(json.robotClass).toBeNull();
+    expect(json.robotClassSuggestions).toEqual(["org.firstinspires.ftc.teamcode.robot.HiveBot"]);
+  });
+});
+
+describe("zenith init, then zenith deploy (issue #156)", () => {
+  let err: string[] = [];
+
+  beforeEach(() => {
+    err = [];
+    vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+      err.push(String(chunk));
+      return true;
+    });
+  });
+
+  afterEach(() => {
+    process.exitCode = undefined;
+  });
+
+  it("refuses with the robotClass message, exit 2, until a robot class is set, then writes one OpMode per auto", async () => {
+    expect(runInit({ cwd: root, commandLibrary: "solverslib" })).toBe(0);
+    expect(runNew("demo", { cwd: root })).toBe(0);
+    expect(await main(["node", "zenith", "deploy", "--project", root])).toBe(2);
+    expect(err.join("")).toMatch(/has "codegen" but no "deploy\.robotClass"/);
+    expect(existsSync(join(root, "TeamCode/src/main/assets/autos"))).toBe(false);
+
+    expect(
+      runInit({ cwd: root, force: true, commandLibrary: "solverslib", robotClass: "org.firstinspires.ftc.teamcode.zenith.MyRobot" }),
+    ).toBe(0);
+    out = [];
+    expect(runDeploy({ cwd: root })).toBe(0);
+    const stub = readFileSync(
+      join(root, "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/zenith/generated/DemoAuto.java"),
+      "utf8",
+    );
+    expect(stub).toContain("return new org.firstinspires.ftc.teamcode.zenith.MyRobot();");
+    expect(out.join("")).not.toContain("no OpMode was written");
+  });
 });
 
 describe("zenith new", () => {
@@ -171,6 +279,30 @@ describe("zenith validate", () => {
     expect(parsed.files[0]?.path).toBe("autos/demo.auto.json");
   });
 
+  it("loads a step id written before the step id rule and warns about it, with the rename", () => {
+    runInit({ cwd: root });
+    field();
+    runNew("demo", { cwd: root });
+    const auto = JSON.parse(readFileSync(join(root, "autos/demo.auto.json"), "utf8")) as { steps: { id?: string }[] };
+    (auto.steps[0] as { id?: string }).id = "drive out";
+    writeFileSync(join(root, "autos/demo.auto.json"), JSON.stringify(auto), "utf8");
+    out = [];
+
+    // A warning, so the file still validates.
+    expect(runValidate(["autos/demo.auto.json"], { cwd: root, json: true })).toBe(0);
+    const parsed = JSON.parse(out.join("")) as {
+      files: { findings: { code: string; severity: string; message: string; fixes?: { kind: string; params: unknown }[] }[] }[];
+    };
+    const stepId = parsed.files[0]?.findings.filter((finding) => finding.code === "STEP_ID");
+    expect(stepId).toEqual([
+      expect.objectContaining({
+        severity: "warning",
+        message: 'Step id "drive out" has a space. Ids start with a letter and hold only letters, digits, _ and -.',
+        fixes: [expect.objectContaining({ kind: "renameStep", params: { newId: "driveOut" } })],
+      }),
+    ]);
+  });
+
   it("reports a schema error as a SCHEMA finding rather than crashing", () => {
     runInit({ cwd: root });
     field();
@@ -181,5 +313,34 @@ describe("zenith validate", () => {
 
   it("explains itself when there is no project", () => {
     expect(() => runValidate(["nothing.auto.json"], { cwd: root })).toThrow(/zenith init/);
+  });
+});
+
+describe("usage errors", () => {
+  let err: string[];
+  beforeEach(() => {
+    err = [];
+    vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+      err.push(String(chunk));
+      return true;
+    });
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.exitCode = undefined;
+  });
+
+  it("exits 2 for an unknown option, a bad flag value and a missing argument, with commander's message", async () => {
+    expect(await main(["node", "zenith", "validate", "--bogus"])).toBe(2);
+    expect(err.join("")).toMatch(/unknown option '--bogus'/);
+    expect(await main(["node", "zenith", "optimize", "a.auto.json", "--budget", "x"])).toBe(2);
+    expect(await main(["node", "zenith", "new"])).toBe(2);
+    expect(err.join("")).not.toMatch(/^zenith: /m);
+  });
+
+  it("exits 0 for --help and --version", async () => {
+    expect(await main(["node", "zenith", "--version"])).toBe(0);
+    expect(await main(["node", "zenith", "validate", "--help"])).toBe(0);
   });
 });

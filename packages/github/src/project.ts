@@ -2,13 +2,22 @@ import type { Link } from "@horizon36596/zenith-schema";
 import { parseLink } from "@horizon36596/zenith-schema";
 import { assertPathAllowed } from "./allowlist.js";
 import type { GitHubClient } from "./client.js";
-import { BaseBranchWriteError, NotFoundError } from "./errors.js";
+import { BaseBranchWriteError, ConflictError, NotFoundError } from "./errors.js";
 import type { PutResult } from "./types.js";
 
 export interface GitHubProjectOptions {
   owner: string;
   repo: string;
   base: string;
+}
+
+export interface SaveOptions {
+  /**
+   * The blob sha of the copy the caller's text was edited from. When `branch` has a copy with a
+   * different sha, someone committed to it since, and the save refuses with a `ConflictError`
+   * instead of writing over that commit. Left out, the save overwrites whatever is there.
+   */
+  expectedSha?: string;
 }
 
 export interface AutoListing {
@@ -96,21 +105,39 @@ export class GitHubProject {
    * Commits `text` (already canonical — `GitHubProject` does not canonicalize) to `path` on
    * `branch`, with message `auto(<autoName>): <summary or "edit">` (06 §1). Refuses a path outside
    * the allowlist (`PathNotAllowedError`) and refuses `branch === base` (`BaseBranchWriteError`),
-   * both before any network call.
+   * both before any network call. With `options.expectedSha`, refuses with a `ConflictError` when
+   * the branch's copy is no longer the one the text was edited from (issue #407).
    */
-  async save(branch: string, autoName: string, path: string, text: string, summary?: string): Promise<PutResult> {
+  async save(
+    branch: string,
+    autoName: string,
+    path: string,
+    text: string,
+    summary?: string,
+    options: SaveOptions = {},
+  ): Promise<PutResult> {
     if (branch === this.base) throw new BaseBranchWriteError(branch);
     const link = await this.getLink();
     assertPathAllowed(link, path);
     const message = `auto(${autoName}): ${summary && summary.trim().length > 0 ? summary : "edit"}`;
     const sha = await this.currentSha(path, branch);
+    const { expectedSha } = options;
+    // A branch with no copy yet is fine: the save creates it. A copy that changed is not, since
+    // writing over it would quietly undo someone's commit.
+    if (expectedSha !== undefined && sha !== undefined && sha !== expectedSha) throw staleError(path, branch);
     // The checks above are a fast, network-free refusal; the guard passed here makes the same two
     // checks live inside GitHubClient.contents.put itself too, so they hold even for a caller that
     // reaches the client directly instead of through this method (finding 12).
-    return this.client.contents.put(this.owner, this.repo, path, text, message, branch, sha, {
-      base: this.base,
-      link,
-    });
+    try {
+      return await this.client.contents.put(this.owner, this.repo, path, text, message, branch, sha, {
+        base: this.base,
+        link,
+      });
+    } catch (error) {
+      // The sha sent is the one checked above, so GitHub refusing it means a commit landed between.
+      if (expectedSha !== undefined && error instanceof ConflictError) throw staleError(path, branch);
+      throw error;
+    }
   }
 
   private async getLink(): Promise<Link> {
@@ -130,4 +157,12 @@ export class GitHubProject {
       throw error;
     }
   }
+}
+
+/** The refusal a save gets when the branch's copy is not the one the editor opened. */
+function staleError(path: string, branch: string): ConflictError {
+  return new ConflictError(
+    `${path} changed on ${branch} since you opened it. Open it again to get that version, then make your edit again.`,
+    409,
+  );
 }

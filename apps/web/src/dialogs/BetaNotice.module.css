@@ -1,0 +1,24 @@
+/* The beta notice (BetaNotice.tsx), in the modal frame of UI_GUIDE section 9.14. */
+
+/* The issue tracker, inside a sentence. */
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:hover,
+.changelog:hover {
+  color: var(--accent-hover);
+}
+
+/* What changed: a quiet link at the footer's left end, so Got it stays the one primary button. */
+.changelog {
+  margin-right: auto;
+  align-self: center;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-mid);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
