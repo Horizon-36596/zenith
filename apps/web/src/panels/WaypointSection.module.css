@@ -21,14 +21,17 @@
 }
 
 /* A row's numbers have 1 px of padding, which with the border leaves "-76.0" and "-179.9" their whole
-   width in the 38 px and 44 px boxes (JetBrains Mono at 11 px is 6.6 px a digit). The heading's box is
-   the one followed by its degree sign. */
+   width: five and six characters, plus 4 px. A character is the font's own width rounded up to a whole
+   pixel, since Linux draws each one on a whole pixel (JetBrains Mono at 11 px is 6.6 px a digit, drawn
+   7 px wide there). The heading's box is the one followed by its degree sign. */
 .row input {
+  --digit: round(up, 1ch, 1px);
+  width: calc(5 * var(--digit) + 4px);
   padding-inline: 1px;
 }
 
 .row input:has(+ :global(.unit)) {
-  width: 44px;
+  width: calc(6 * var(--digit) + 4px);
 }
 
 /* A heading's degree sign sits right against its number, pulling back over the row's gap and the
