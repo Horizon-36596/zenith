@@ -79,6 +79,20 @@ function makeDispatcher(deps: ServerDeps = {}): SimDispatcher {
 const lines = (name: string): string[] =>
   existsSync(join(root, name)) ? readFileSync(join(root, name), "utf8").split(/\r?\n/).filter((line) => line !== "") : [];
 
+/** Whether a process is still running. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The pids of the fake servers started so far, oldest first, from their `started <pid>` lines. */
+const serverPids = (): number[] =>
+  lines("server.log").filter((line) => line.startsWith("started ")).map((line) => Number(line.split(" ")[1]));
+
 async function until<T>(read: () => T | undefined | null | false, what: string, timeoutMs = 20_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -568,7 +582,10 @@ describe("watched changes, zenith.json edits and a server that will not work", {
     expect(await until(ended(changed), "the run on the new server")).toMatchObject({ kind: "done", streamed: true });
     expect(lines("prepare.log")).toHaveLength(2);
     expect(started()).toHaveLength(2);
-    await until(() => lines("server.log").includes("shutdown"), "the old server to stop");
+    // Closing the old host asks its server to go and kills it at once. On Windows taskkill is slow
+    // enough that the server logs its shutdown first; elsewhere SIGTERM is not, so check the process.
+    const [oldPid, newPid] = serverPids() as [number, number];
+    await until(() => !alive(oldPid), "the old server to stop");
     patchLink(root, (link) => {
       delete (link["sim"] as Record<string, unknown>)["server"];
     });
@@ -576,7 +593,7 @@ describe("watched changes, zenith.json edits and a server that will not work", {
     expect(await until(ended(basic), "the Basic run")).toMatchObject({ kind: "done" });
     expect(of(basic)[0]).toMatchObject({ kind: "started", command: "node fake-sim.cjs first-auto" });
     expect(sim.current).toBeNull();
-    await until(() => lines("server.log").filter((line) => line === "shutdown").length === 2, "the second server to stop");
+    await until(() => !alive(newPid), "the second server to stop");
   });
 
   it("keeps the same server when zenith.json was saved with the same sim.server", async () => {
