@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Prints one version's section of CHANGELOG.md, without its heading, for the GitHub Release notes.
-// Fails when the section is missing or empty, so a release never goes out with no notes, and when it
-// is longer than GitHub takes for a release body, so a release never fails at its last step.
+// A section longer than GitHub takes for a release body is printed as a summary instead: its headings
+// and each entry's lead (its bold title, or its first sentence), then a link to the whole section.
+// Fails when the section is missing or empty, so a release never goes out with no notes, and when even
+// the summary is too long, so a release never fails at its last step.
 //
 //   node scripts/changelog-section.mjs <version> [file]      (version with or without the leading v)
 import { readFileSync } from "node:fs";
@@ -33,11 +35,46 @@ if (body === "") {
   process.exit(1);
 }
 const notes = `${body}\n`;
-if (notes.length > RELEASE_BODY_LIMIT) {
+const result = notes.length <= RELEASE_BODY_LIMIT ? notes : summary(body);
+if (result.length > RELEASE_BODY_LIMIT) {
   console.error(
     `changelog-section: the ${version} section of CHANGELOG.md is ${notes.length.toLocaleString("en-US")} characters, ` +
-      `over GitHub's limit of ${RELEASE_BODY_LIMIT.toLocaleString("en-US")} for a release body. Shorten it before releasing.`,
+      `and its summary ${result.length.toLocaleString("en-US")}, over GitHub's limit of ` +
+      `${RELEASE_BODY_LIMIT.toLocaleString("en-US")} for a release body. Shorten it before releasing.`,
   );
   process.exit(1);
 }
-process.stdout.write(notes);
+process.stdout.write(result);
+
+/**
+ * The section cut to its headings and one line per top-level entry: the entry's bold title when it
+ * opens with one, otherwise its first sentence. Nested entries and paragraphs are left to the link.
+ */
+function summary(text) {
+  const out = [];
+  let entry = null;
+  const flush = () => {
+    if (entry === null) return;
+    const bold = /^\*\*.+?\*\*/.exec(entry);
+    const sentence = /^.+?[.!?](?=\s|$)/.exec(entry);
+    out.push(`- ${bold?.[0] ?? sentence?.[0] ?? entry}`);
+    entry = null;
+  };
+  for (const line of text.split("\n")) {
+    if (/^#{3,} /.test(line)) {
+      flush();
+      out.push("", line, "");
+    } else if (line.startsWith("- ")) {
+      flush();
+      entry = line.slice(2).trim();
+    } else if (entry !== null && /^ {2}\S/.test(line)) {
+      entry += ` ${line.trim()}`;
+    } else {
+      flush();
+    }
+  }
+  flush();
+  const repository = process.env["GITHUB_REPOSITORY"] ?? "Horizon-36596/zenith";
+  const link = `https://github.com/${repository}/blob/v${version}/CHANGELOG.md`;
+  return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n\nEvery change in full: [CHANGELOG.md](${link})\n`;
+}

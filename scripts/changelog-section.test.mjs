@@ -47,10 +47,32 @@ test("takes a section of exactly GitHub's release body limit", () => {
   assert.equal(run.stdout.length, 125_000);
 });
 
-test("fails with the size when the section is over GitHub's release body limit", () => {
+test("prints a summary with a link when the section is over GitHub's release body limit", () => {
+  const long = "a".repeat(70_000);
+  const body = [
+    "### Added",
+    "",
+    `- **A thing.** ${long}`,
+    "  More about it.",
+    "  - A nested detail.",
+    "",
+    "#### Editor",
+    "",
+    `- Plain entry first. ${long}`,
+  ].join("\n");
+  const run = section("1.2.3", changelog(body));
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(
+    run.stdout,
+    "### Added\n\n- **A thing.**\n\n#### Editor\n\n- Plain entry first.\n\n" +
+      "Every change in full: [CHANGELOG.md](https://github.com/Horizon-36596/zenith/blob/v1.2.3/CHANGELOG.md)\n",
+  );
+});
+
+test("fails with the size when even the summary is over GitHub's release body limit", () => {
   const body = `- ${"a".repeat(125_000)}`;
   const run = section("1.2.3", changelog(body));
   assert.equal(run.status, 1);
   assert.equal(run.stdout, "");
-  assert.match(run.stderr, /is 125,003 characters, over GitHub's limit of 125,000 for a release body/);
+  assert.match(run.stderr, /is 125,003 characters, and its summary [\d,]+, over GitHub's limit of 125,000 for a release body/);
 });
