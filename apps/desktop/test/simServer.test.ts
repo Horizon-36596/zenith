@@ -568,7 +568,7 @@ describe("watched changes, zenith.json edits and a server that will not work", {
     expect(await until(ended(changed), "the run on the new server")).toMatchObject({ kind: "done", streamed: true });
     expect(lines("prepare.log")).toHaveLength(2);
     expect(started()).toHaveLength(2);
-    expect(lines("server.log")).toContain("shutdown");
+    await until(() => lines("server.log").includes("shutdown"), "the old server to stop");
     patchLink(root, (link) => {
       delete (link["sim"] as Record<string, unknown>)["server"];
     });

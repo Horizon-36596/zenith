@@ -10,7 +10,7 @@
  */
 import { spawn as spawnProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join, resolve as resolvePath } from "node:path";
+import { join, resolve as resolvePath, win32 } from "node:path";
 import { AUTO_NAME_PATTERN } from "./autoLoad.js";
 import { loadProject } from "./project.js";
 
@@ -43,7 +43,8 @@ const NOT_INSTALLED =
 /**
  * Where the desktop app's executable is: `ZENITH_DESKTOP` when it is set, else the folders the
  * Windows installer offers (just for this user, the default, or for everyone). Null when none has it.
- * The app is built for Windows only, so elsewhere only `ZENITH_DESKTOP` can name one.
+ * The app is built for Windows only, so elsewhere only `ZENITH_DESKTOP` can name one. The install
+ * folders are Windows paths whatever the host, so they are joined with `win32` rules.
  */
 export function findDesktopApp(host: DesktopAppEnv = hostEnv()): string | null {
   const named = host.env["ZENITH_DESKTOP"];
@@ -53,9 +54,9 @@ export function findDesktopApp(host: DesktopAppEnv = hostEnv()): string | null {
   }
   if (host.platform !== "win32") return null;
   const candidates = [
-    host.env["LOCALAPPDATA"] === undefined ? null : join(host.env["LOCALAPPDATA"], "Programs", "Zenith", "Zenith.exe"),
-    host.env["ProgramFiles"] === undefined ? null : join(host.env["ProgramFiles"], "Zenith", "Zenith.exe"),
-    host.env["ProgramFiles(x86)"] === undefined ? null : join(host.env["ProgramFiles(x86)"], "Zenith", "Zenith.exe"),
+    host.env["LOCALAPPDATA"] === undefined ? null : win32.join(host.env["LOCALAPPDATA"], "Programs", "Zenith", "Zenith.exe"),
+    host.env["ProgramFiles"] === undefined ? null : win32.join(host.env["ProgramFiles"], "Zenith", "Zenith.exe"),
+    host.env["ProgramFiles(x86)"] === undefined ? null : win32.join(host.env["ProgramFiles(x86)"], "Zenith", "Zenith.exe"),
   ];
   return candidates.find((path): path is string => path !== null && host.exists(path)) ?? null;
 }
